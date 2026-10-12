@@ -6,9 +6,9 @@ var rot_speed   : float = 5.0
 var hop_speed   : float = 7.0
 var hop_height  : float = 0.5
 var time_offset : float = 0.0
-var start_y     : float = 0.6
+var start_y     : float = 0.5
 
-@onready var sprite: Sprite3D = $Sprite3D
+var model_3d    : Node3D
 
 func _ready() -> void:
 	time_offset = randf_range(0.0, 10.0)
@@ -17,12 +17,9 @@ func _ready() -> void:
 	hop_height = randf_range(0.3, 0.7)
 	start_y = global_position.y
 
-	sprite.texture = TextureGen.make_tumbleweed()
-	sprite.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
-	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	sprite.pixel_size = 0.035
-	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	sprite.alpha_cut = Sprite3D.ALPHA_CUT_DISCARD
+	# Инстанцируем объемную 3D модель перекати-поле
+	model_3d = DesertScenery3D.create_tumbleweed_3d()
+	add_child(model_3d)
 
 func _process(delta: float) -> void:
 	# Движение по ветру
@@ -30,10 +27,12 @@ func _process(delta: float) -> void:
 
 	# Подпрыгивания на кочках песка
 	var t: float = Time.get_ticks_msec() / 1000.0 + time_offset
-	global_position.y = start_y + abs(sin(t * hop_speed)) * hop_height
+	global_position.y = start_y + absf(sin(t * hop_speed)) * hop_height
 
-	# Вращение клубка
-	sprite.rotation.z += rot_speed * delta
+	# Реалистичное 3D вращение клубка при качении по земле
+	if model_3d != null:
+		model_3d.rotate_x(rot_speed * delta * 0.8)
+		model_3d.rotate_z(-rot_speed * delta)
 
 	# Циклический респавн при улете далеко
 	if global_position.x > 180.0 or global_position.z > 180.0:

@@ -644,7 +644,8 @@ func _animate_death(delta: float) -> void:
 	death_progress = minf(1.0, death_progress + delta * 2.8)
 	var t : float = death_progress
 
-	root_node.position.y = lerpf(root_node.position.y, -0.65, t)
+	# Труп валится навзничь на землю, оставаясь лежать сверху на песке (y = 0.15)
+	root_node.position.y = lerpf(root_node.position.y, 0.15, t)
 	root_node.rotation.x = lerp_angle(root_node.rotation.x, deg_to_rad(-85.0), t)
 	l_knee.rotation.x = lerp_angle(l_knee.rotation.x, deg_to_rad(45.0), t)
 	r_knee.rotation.x = lerp_angle(r_knee.rotation.x, deg_to_rad(30.0), t)

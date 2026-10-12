@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://brf401i8wiim"
+path="res://.godot/imported/Desert Bloodbath.mp3-981f288f0311fd1c3289b5e136b8f14f.mp3str"
+
+[deps]
+
+source_file="res://assets/audio/music/Desert Bloodbath.mp3"
+dest_files=["res://.godot/imported/Desert Bloodbath.mp3-981f288f0311fd1c3289b5e136b8f14f.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

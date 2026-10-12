@@ -1,19 +1,20 @@
-[gd_scene load_steps=2 format=3 uid="uid://hud001"]
+[gd_scene format=3 uid="uid://hud001"]
 
-[ext_resource type="Script" path="res://scripts/hud.gd" id="1"]
+[ext_resource type="Script" uid="uid://yixg8151lo7x" path="res://scripts/hud.gd" id="1"]
 
-[node name="HUD" type="Control"]
+[node name="HUD" type="Control" unique_id=1636120408]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("1")
 
-; ===== ПРИЦЕЛ =====
-
-[node name="Crosshair" type="Control" parent="."]
+[node name="Crosshair" type="Control" parent="." unique_id=961042071]
 layout_mode = 1
+anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
@@ -24,38 +25,43 @@ offset_right = 10.0
 offset_bottom = 10.0
 mouse_filter = 2
 
-[node name="CrossH" type="ColorRect" parent="Crosshair"]
-anchor_left = 0.0
+[node name="CrossH" type="ColorRect" parent="Crosshair" unique_id=227846653]
+layout_mode = 0
 anchor_top = 0.5
 anchor_right = 1.0
 anchor_bottom = 0.5
 offset_top = -1.0
 offset_bottom = 1.0
-color = Color(1, 1, 1, 0.85)
 mouse_filter = 2
+color = Color(1, 1, 1, 0.85)
 
-[node name="CrossV" type="ColorRect" parent="Crosshair"]
+[node name="CrossV" type="ColorRect" parent="Crosshair" unique_id=2081059844]
+layout_mode = 0
 anchor_left = 0.5
-anchor_top = 0.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -1.0
 offset_right = 1.0
-color = Color(1, 1, 1, 0.85)
 mouse_filter = 2
+color = Color(1, 1, 1, 0.85)
 
-; ===== КРАСНАЯ ВСПЫШКА УРОНА =====
-[node name="HitFlash" type="ColorRect" parent="."]
+[node name="HitFlash" type="ColorRect" parent="." unique_id=1618466494]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.8, 0.0, 0.0, 0.0)
+offset_left = -22.0
+offset_top = -76.0
+offset_right = -22.0
+offset_bottom = -76.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
+color = Color(0.8, 0, 0, 0)
 
-; ===== НИЖНЯЯ ПАНЕЛЬ =====
-[node name="BottomBar" type="PanelContainer" parent="."]
+[node name="BottomBar" type="PanelContainer" parent="." unique_id=2004926165]
 layout_mode = 1
+anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -63,86 +69,91 @@ offset_top = -70.0
 grow_vertical = 0
 mouse_filter = 2
 
-[node name="HBox" type="HBoxContainer" parent="BottomBar"]
+[node name="HBox" type="HBoxContainer" parent="BottomBar" unique_id=586192093]
+layout_mode = 2
+mouse_filter = 2
 alignment = 1
-mouse_filter = 2
 
-[node name="HealthIcon" type="Label" parent="BottomBar/HBox"]
-text = "❤"
-theme_override_font_sizes/font_size = 28
+[node name="HealthIcon" type="Label" parent="BottomBar/HBox" unique_id=1642272354]
+layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.2, 0.2, 1)
-mouse_filter = 2
+theme_override_font_sizes/font_size = 28
+text = "❤"
 
-[node name="HealthLabel" type="Label" parent="BottomBar/HBox"]
-text = "HP: 100"
-theme_override_font_sizes/font_size = 22
+[node name="HealthLabel" type="Label" parent="BottomBar/HBox" unique_id=2031844322]
+layout_mode = 2
 theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
-mouse_filter = 2
+theme_override_font_sizes/font_size = 22
+text = "HP: 100"
 
-[node name="HealthBar" type="ProgressBar" parent="BottomBar/HBox"]
+[node name="HealthBar" type="ProgressBar" parent="BottomBar/HBox" unique_id=648053184]
 custom_minimum_size = Vector2(180, 20)
-value = 100.0
-max_value = 100.0
-theme_override_colors/font_color = Color(0, 0, 0, 1)
+layout_mode = 2
 mouse_filter = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+value = 100.0
 
-[node name="Spacer" type="Control" parent="BottomBar/HBox"]
+[node name="Spacer" type="Control" parent="BottomBar/HBox" unique_id=1945456216]
 custom_minimum_size = Vector2(30, 0)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="WeaponNameLabel" type="Label" parent="BottomBar/HBox"]
-text = "РЕВОЛЬВЕР"
+[node name="WeaponNameLabel" type="Label" parent="BottomBar/HBox" unique_id=216952057]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.35, 1)
 theme_override_font_sizes/font_size = 20
-theme_override_colors/font_color = Color(1.0, 0.85, 0.35, 1)
-mouse_filter = 2
+text = "РЕВОЛЬВЕР"
 
-[node name="Spacer2" type="Control" parent="BottomBar/HBox"]
+[node name="Spacer2" type="Control" parent="BottomBar/HBox" unique_id=232933736]
 custom_minimum_size = Vector2(20, 0)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="AmmoIcon" type="Label" parent="BottomBar/HBox"]
-text = "🔫"
+[node name="AmmoIcon" type="Label" parent="BottomBar/HBox" unique_id=566228180]
+layout_mode = 2
 theme_override_font_sizes/font_size = 24
-mouse_filter = 2
+text = "🔫"
 
-[node name="AmmoLabel" type="Label" parent="BottomBar/HBox"]
-text = "6 / 120"
-theme_override_font_sizes/font_size = 22
+[node name="AmmoLabel" type="Label" parent="BottomBar/HBox" unique_id=304313667]
+layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
-mouse_filter = 2
+theme_override_font_sizes/font_size = 22
+text = "6 / 120"
 
-[node name="Spacer3" type="Control" parent="BottomBar/HBox"]
+[node name="Spacer3" type="Control" parent="BottomBar/HBox" unique_id=291887415]
 custom_minimum_size = Vector2(25, 0)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="SlotHintLabel" type="Label" parent="BottomBar/HBox"]
-text = "[1: Рев | 2: Двустволка | 3: Автомат | 4: РПГ]"
-theme_override_font_sizes/font_size = 13
+[node name="SlotHintLabel" type="Label" parent="BottomBar/HBox" unique_id=700289501]
+layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.65, 0.55, 1)
-mouse_filter = 2
+theme_override_font_sizes/font_size = 13
+text = "[1: Рев | 2: Двустволка | 3: Автомат | 4: РПГ]"
 
-; ===== ЭКРАН СМЕРТИ =====
-[node name="DeathScreen" type="Control" parent="."]
+[node name="DeathScreen" type="Control" parent="." unique_id=1865330536]
 visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 
-[node name="Bg" type="ColorRect" parent="DeathScreen"]
+[node name="Bg" type="ColorRect" parent="DeathScreen" unique_id=2072155071]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.4, 0.0, 0.0, 0.7)
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
+color = Color(0.4, 0, 0, 0.7)
 
-[node name="DeathLabel" type="Label" parent="DeathScreen"]
+[node name="DeathLabel" type="Label" parent="DeathScreen" unique_id=130774427]
 layout_mode = 1
+anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
@@ -151,9 +162,8 @@ offset_left = -200.0
 offset_top = -50.0
 offset_right = 200.0
 offset_bottom = 50.0
-text = "ВЫ ПОГИБЛИ"
-theme_override_font_sizes/font_size = 64
 theme_override_colors/font_color = Color(1, 0.1, 0.1, 1)
+theme_override_font_sizes/font_size = 64
+text = "ВЫ ПОГИБЛИ"
 horizontal_alignment = 1
 vertical_alignment = 1
-mouse_filter = 2

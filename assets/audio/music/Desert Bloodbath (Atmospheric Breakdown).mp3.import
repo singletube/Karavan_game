@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://cs6ibqxc8whq7"
+path="res://.godot/imported/Desert Bloodbath (Atmospheric Breakdown).mp3-d535d39b5d434edfa5e4290c9bc9af5b.mp3str"
+
+[deps]
+
+source_file="res://assets/audio/music/Desert Bloodbath (Atmospheric Breakdown).mp3"
+dest_files=["res://.godot/imported/Desert Bloodbath (Atmospheric Breakdown).mp3-d535d39b5d434edfa5e4290c9bc9af5b.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

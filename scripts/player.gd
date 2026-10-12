@@ -21,6 +21,7 @@ const CROUCH_EYE_Y   := 0.25
 @onready var weapon_rig    : Node3D              = $Head/Camera3D/WeaponRig
 @onready var muzzle_flash  : OmniLight3D         = $Head/Camera3D/MuzzleFlash
 @onready var body_sprite   : Sprite3D            = $BodySprite
+@onready var model_3d      : PlayerModel3D       = $Model3D
 @onready var shoot_sound   : AudioStreamPlayer3D = $ShootSound
 @onready var step_sound    : AudioStreamPlayer3D = $StepSound
 
@@ -60,6 +61,8 @@ func _ready() -> void:
 	if is_local():
 		camera.current = true
 		body_sprite.visible = false
+		if model_3d:
+			model_3d.visible = false
 		if weapon_rig:
 			weapon_rig.show()
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -69,13 +72,9 @@ func _ready() -> void:
 		camera.current = false
 		if weapon_rig:
 			weapon_rig.hide()
-		body_sprite.visible = true
-		body_sprite.texture = TextureGen.make_player()
-		body_sprite.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
-		body_sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-		body_sprite.pixel_size = 0.04
-		body_sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		body_sprite.alpha_cut = Sprite3D.ALPHA_CUT_DISCARD
+		body_sprite.visible = false
+		if model_3d:
+			model_3d.visible = true
 
 # --- Аудио ресурсы (Настоящие звуки выстрелов и взрывов) ---
 var snd_revolver : AudioStream = preload("res://assets/audio/shoot_revolver.mp3")
@@ -228,8 +227,12 @@ func switch_weapon(idx: int) -> void:
 
 func _physics_process(delta: float) -> void:
 	if not is_local():
+		var prev_pos: Vector3 = global_position
 		global_position = global_position.lerp(target_pos, delta * 18.0)
 		rotation.y = lerp_angle(rotation.y, target_rot_y, delta * 18.0)
+		if model_3d:
+			var speed_val: float = (global_position - prev_pos).length() / maxf(delta, 0.001)
+			model_3d.update_animation(delta, speed_val > 0.5, speed_val)
 		return
 
 	if is_dead:
@@ -282,10 +285,13 @@ func _set_crouch_shape(crouching: bool) -> void:
 	var cap: CapsuleShape3D = shape.shape as CapsuleShape3D
 	if cap:
 		cap.height = CROUCH_HEIGHT if crouching else STAND_HEIGHT
+	# Сохраняем нижнюю точку коллизии на уровне пола (y = 0.0)
+	shape.position.y = (CROUCH_HEIGHT * 0.5) if crouching else (STAND_HEIGHT * 0.5)
 
 func _can_stand_up() -> bool:
 	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
-	var from: Vector3  = global_position
+	# Стартуем луч чуть выше головы в приседе, чтобы не пересекать пол под ногами
+	var from: Vector3  = global_position + Vector3.UP * (CROUCH_HEIGHT + 0.05)
 	var to: Vector3    = global_position + Vector3.UP * (STAND_HEIGHT + 0.1)
 	var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(from, to, collision_mask)
 	query.exclude = [self]

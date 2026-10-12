@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://dw5oygy2w1y6y"
+path="res://.godot/imported/Neon Pharaoh.mp3-4154b8c147ec9ace1e1945b3ac858e99.mp3str"
+
+[deps]
+
+source_file="res://assets/audio/music/Neon Pharaoh.mp3"
+dest_files=["res://.godot/imported/Neon Pharaoh.mp3-4154b8c147ec9ace1e1945b3ac858e99.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
