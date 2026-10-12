@@ -1,0 +1,159 @@
+[gd_scene load_steps=2 format=3 uid="uid://hud001"]
+
+[ext_resource type="Script" path="res://scripts/hud.gd" id="1"]
+
+[node name="HUD" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("1")
+
+; ===== ПРИЦЕЛ =====
+
+[node name="Crosshair" type="Control" parent="."]
+layout_mode = 1
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -10.0
+offset_top = -10.0
+offset_right = 10.0
+offset_bottom = 10.0
+mouse_filter = 2
+
+[node name="CrossH" type="ColorRect" parent="Crosshair"]
+anchor_left = 0.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_top = -1.0
+offset_bottom = 1.0
+color = Color(1, 1, 1, 0.85)
+mouse_filter = 2
+
+[node name="CrossV" type="ColorRect" parent="Crosshair"]
+anchor_left = 0.5
+anchor_top = 0.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -1.0
+offset_right = 1.0
+color = Color(1, 1, 1, 0.85)
+mouse_filter = 2
+
+; ===== КРАСНАЯ ВСПЫШКА УРОНА =====
+[node name="HitFlash" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.8, 0.0, 0.0, 0.0)
+mouse_filter = 2
+
+; ===== НИЖНЯЯ ПАНЕЛЬ =====
+[node name="BottomBar" type="PanelContainer" parent="."]
+layout_mode = 1
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -70.0
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="HBox" type="HBoxContainer" parent="BottomBar"]
+alignment = 1
+mouse_filter = 2
+
+[node name="HealthIcon" type="Label" parent="BottomBar/HBox"]
+text = "❤"
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(1, 0.2, 0.2, 1)
+mouse_filter = 2
+
+[node name="HealthLabel" type="Label" parent="BottomBar/HBox"]
+text = "HP: 100"
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
+mouse_filter = 2
+
+[node name="HealthBar" type="ProgressBar" parent="BottomBar/HBox"]
+custom_minimum_size = Vector2(180, 20)
+value = 100.0
+max_value = 100.0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+mouse_filter = 2
+
+[node name="Spacer" type="Control" parent="BottomBar/HBox"]
+custom_minimum_size = Vector2(30, 0)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="WeaponNameLabel" type="Label" parent="BottomBar/HBox"]
+text = "РЕВОЛЬВЕР"
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(1.0, 0.85, 0.35, 1)
+mouse_filter = 2
+
+[node name="Spacer2" type="Control" parent="BottomBar/HBox"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="AmmoIcon" type="Label" parent="BottomBar/HBox"]
+text = "🔫"
+theme_override_font_sizes/font_size = 24
+mouse_filter = 2
+
+[node name="AmmoLabel" type="Label" parent="BottomBar/HBox"]
+text = "6 / 120"
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+mouse_filter = 2
+
+[node name="Spacer3" type="Control" parent="BottomBar/HBox"]
+custom_minimum_size = Vector2(25, 0)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="SlotHintLabel" type="Label" parent="BottomBar/HBox"]
+text = "[1: Рев | 2: Двустволка | 3: Автомат | 4: РПГ]"
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.7, 0.65, 0.55, 1)
+mouse_filter = 2
+
+; ===== ЭКРАН СМЕРТИ =====
+[node name="DeathScreen" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Bg" type="ColorRect" parent="DeathScreen"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.4, 0.0, 0.0, 0.7)
+mouse_filter = 2
+
+[node name="DeathLabel" type="Label" parent="DeathScreen"]
+layout_mode = 1
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -50.0
+offset_right = 200.0
+offset_bottom = 50.0
+text = "ВЫ ПОГИБЛИ"
+theme_override_font_sizes/font_size = 64
+theme_override_colors/font_color = Color(1, 0.1, 0.1, 1)
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2

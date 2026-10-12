@@ -1,0 +1,154 @@
+[gd_scene load_steps=23 format=3 uid="uid://world001"]
+
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/enemy.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="3"]
+[ext_resource type="Script" path="res://scripts/cactus_sprite.gd" id="4"]
+[ext_resource type="Script" path="res://scripts/world_setup.gd" id="5"]
+[ext_resource type="PackedScene" path="res://scenes/network_menu.tscn" id="6"]
+[ext_resource type="Script" path="res://scripts/desert_generator.gd" id="7"]
+[ext_resource type="Script" path="res://scripts/wave_spawner.gd" id="8"]
+
+
+; ===== Материалы =====
+
+[sub_resource type="StandardMaterial3D" id="Mat_sand"]
+albedo_color = Color(0.87, 0.72, 0.46, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="Mat_rock_dark"]
+albedo_color = Color(0.45, 0.35, 0.22, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="Mat_rock"]
+albedo_color = Color(0.6, 0.48, 0.32, 1)
+roughness = 0.95
+
+; Материал для кактуса-билборда (зелёный, прозрачность включена для будущего PNG)
+[sub_resource type="StandardMaterial3D" id="Mat_cactus_sprite"]
+transparency = 1
+albedo_color = Color(0.22, 0.52, 0.18, 1)
+billboard_mode = 1
+billboard_keep_scale = true
+
+; ===== Формы коллизий =====
+
+[sub_resource type="BoxShape3D" id="Floor_shape"]
+size = Vector3(2000, 0.4, 2000)
+
+[sub_resource type="BoxShape3D" id="Rock1_shape"]
+size = Vector3(3, 2.5, 2)
+
+[sub_resource type="BoxShape3D" id="Rock2_shape"]
+size = Vector3(2, 3, 2.5)
+
+[sub_resource type="BoxShape3D" id="Rock3_shape"]
+size = Vector3(4, 2, 3)
+
+[sub_resource type="CylinderShape3D" id="Cactus_col"]
+height = 3.0
+radius = 0.3
+
+; ===== Меши =====
+
+[sub_resource type="BoxMesh" id="FloorMesh"]
+size = Vector3(2000, 0.4, 2000)
+material = SubResource("Mat_sand")
+
+[sub_resource type="BoxMesh" id="RockMesh1"]
+size = Vector3(3, 2.5, 2)
+material = SubResource("Mat_rock_dark")
+
+[sub_resource type="BoxMesh" id="RockMesh2"]
+size = Vector3(2, 3, 2.5)
+material = SubResource("Mat_rock_dark")
+
+[sub_resource type="BoxMesh" id="RockMesh3"]
+size = Vector3(4, 2, 3)
+material = SubResource("Mat_rock")
+
+[sub_resource type="BoxMesh" id="RockMesh4"]
+size = Vector3(5, 1.5, 3.5)
+material = SubResource("Mat_rock")
+
+; ===== СЦЕНА =====
+
+[node name="World" type="Node3D"]
+script = ExtResource("5")
+
+; --- Освещение ---
+[node name="SunLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.35, 0.35, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 30, 0)
+light_color = Color(1.0, 0.88, 0.65, 1)
+light_energy = 2.5
+shadow_enabled = true
+
+[node name="AmbientFill" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.866, 0.35, -0.35, 0, 0.707, 0.707, 0.5, 0.612, -0.612, 0, 10, 0)
+light_color = Color(0.45, 0.38, 0.28, 1)
+light_energy = 0.5
+shadow_enabled = false
+
+; --- Навигация ---
+[node name="NavigationRegion3D" type="NavigationRegion3D" parent="."]
+
+; --- ПОЛ (огромный, открытый мир) ---
+[node name="Floor" type="StaticBody3D" parent="."]
+
+[node name="FloorMesh" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("FloorMesh")
+
+[node name="FloorCol" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("Floor_shape")
+
+; --- ДАЛЕКИЕ СКАЛЫ НА ГОРИЗОНТЕ ---
+[node name="RockDistant1" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 70, 2.0, 60)
+
+[node name="Mesh" type="MeshInstance3D" parent="RockDistant1"]
+mesh = SubResource("RockMesh4")
+
+[node name="Col" type="CollisionShape3D" parent="RockDistant1"]
+shape = SubResource("Rock3_shape")
+
+[node name="RockDistant2" type="StaticBody3D" parent="."]
+transform = Transform3D(0.7, 0, 0.7, 0, 1, 0, -0.7, 0, 0.7, -80, 2.5, 75)
+
+[node name="Mesh" type="MeshInstance3D" parent="RockDistant2"]
+mesh = SubResource("RockMesh2")
+
+[node name="Col" type="CollisionShape3D" parent="RockDistant2"]
+shape = SubResource("Rock2_shape")
+
+[node name="RockDistant3" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -90, 2.0, -85)
+
+[node name="Mesh" type="MeshInstance3D" parent="RockDistant3"]
+mesh = SubResource("RockMesh3")
+
+[node name="Col" type="CollisionShape3D" parent="RockDistant3"]
+shape = SubResource("Rock3_shape")
+
+
+; --- ИГРОКИ (динамический спавн в мультиплеере/одиночке) ---
+[node name="Players" type="Node3D" parent="."]
+
+; --- СПАВНЕР ВОЛН ВРАГОВ ---
+[node name="WaveSpawner" type="Node3D" parent="."]
+script = ExtResource("8")
+
+
+
+
+; --- UI (HUD + Сетевое лобби в CanvasLayer) ---
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="HUD" parent="CanvasLayer" instance=ExtResource("3")]
+
+[node name="NetworkMenu" parent="CanvasLayer" instance=ExtResource("6")]
+
+; --- ГЕНЕРАТОР ПУСТЫННОГО ОКРУЖЕНИЯ ---
+[node name="DesertGenerator" type="Node3D" parent="."]
+script = ExtResource("7")
+
