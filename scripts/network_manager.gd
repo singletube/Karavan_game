@@ -117,11 +117,6 @@ func _spawn_player(id: int) -> Node:
 	if p is Node3D:
 		(p as Node3D).global_position = Vector3(randf_range(-6.0, 6.0), 1.0, randf_range(-6.0, 6.0))
 
-	# Обновляем HUD для локального игрока
-	var hud: Node = get_tree().current_scene.find_child("HUD", true, false)
-	if hud and hud.has_method("_find_and_connect_player"):
-		hud._find_and_connect_player()
-
 	return p
 
 func _remove_player(id: int) -> void:

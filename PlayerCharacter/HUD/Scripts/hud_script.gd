@@ -28,9 +28,36 @@ class_name HUD
 @onready var weapon_name_label_text: Label = %WeaponNameLabelText
 @onready var nb_ammo_in_mag_label_text: Label = %NbAmmoInMagLabelText
 @onready var nb_ammo_total_label_text: Label = %NbAmmoTotalLabelText
+@onready var weapon_properties: Control = $WeaponProperties
+
+var health_panel: PanelContainer
+var health_label: Label
+var health_bar: ProgressBar
+var death_overlay: ColorRect
+var wave_label: Label
 
 func _ready() -> void:
 	weapon_manager.weapon_stack_updated.connect(Callable(self, "update_weapon_stack_display"))
+	$PlayerCharacterProperties.hide()
+	$FPSProperties.hide()
+	weapon_properties.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	weapon_properties.offset_left = -300.0
+	weapon_properties.offset_top = -116.0
+	weapon_properties.offset_right = -12.0
+	weapon_properties.offset_bottom = -12.0
+	for label in [weapon_stack_label_text, weapon_name_label_text, nb_ammo_in_mag_label_text, nb_ammo_total_label_text]:
+		label.add_theme_font_size_override("font_size", 16)
+	weapon_name_label_text.text = "ОРУЖИЕ:"
+	nb_ammo_in_mag_label_text.text = "В МАГАЗИНЕ:"
+	nb_ammo_total_label_text.text = "В ЗАПАСЕ:"
+	_build_game_hud()
+	if play_char.has_signal("health_changed"):
+		play_char.connect("health_changed", _on_health_changed)
+	if play_char.has_signal("player_died"):
+		play_char.connect("player_died", _on_player_died)
+	_on_health_changed(int(play_char.get("health")))
+	update_weapon_stack_display()
+	_connect_wave_spawner()
 	
 func _process(_delta : float) -> void:
 	display_current_FPS()
@@ -58,17 +85,155 @@ func display_play_char_properties() -> void:
 	camera_bob_vertical_offset_label_text.set_text(str(round_to_3_decimals(play_char.cam.v_offset)))
 	
 func update_weapon_stack_display() -> void:
-	var available_weapons_name_list : Array[String] = []
-	for weapon_id in weapon_manager.weapon_list.keys():
-		if weapon_id in weapon_manager.weapon_stack:
-			available_weapons_name_list.append(weapon_manager.weapon_list[weapon_id].resources.weapon_name)
-	weapon_stack_label_text.set_text(str(available_weapons_name_list))
+	weapon_stack_label_text.text = "1–5 / КОЛЕСО — СМЕНА"
 	
 func display_weapon_properties() -> void:
 	if weapon_manager.current_weapon:
-		weapon_name_label_text.set_text(str(weapon_manager.current_weapon.resources.weapon_name))
-		nb_ammo_in_mag_label_text.set_text(str(weapon_manager.current_weapon.resources.total_ammo_in_mag / weapon_manager.current_weapon.resources.nb_proj_shots_at_same_time))
-		nb_ammo_total_label_text.set_text(str(weapon_manager.ammo_manager.ammo_dict[weapon_manager.current_weapon.resources.ammo_type] / weapon_manager.current_weapon.resources.nb_proj_shots_at_same_time))
+		var resource: WeaponResource = weapon_manager.current_weapon.resources
+		var ammo_per_shot := maxi(1, resource.nb_proj_shots_at_same_time)
+		var magazine := floori(float(resource.total_ammo_in_mag) / ammo_per_shot)
+		var reserve := floori(float(weapon_manager.ammo_manager.ammo_dict.get(resource.ammo_type, 0)) / ammo_per_shot)
+		if resource.all_ammo_in_mag:
+			magazine = reserve
+			reserve = 0
+		weapon_name_label_text.text = _localized_weapon_name(resource.weapon_name)
+		nb_ammo_in_mag_label_text.text = str(magazine)
+		nb_ammo_total_label_text.text = str(reserve)
+
+func _localized_weapon_name(weapon_name: String) -> String:
+	var names := {
+		"Pistol": "ПИСТОЛЕТ",
+		"Shotgun": "ДРОБОВИК",
+		"AssaultRifle": "АВТОМАТ",
+		"SniperRifle": "СНАЙПЕРКА",
+		"RocketLauncher": "РАКЕТНИЦА",
+	}
+	return names.get(weapon_name, weapon_name)
+
+func _build_game_hud() -> void:
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.035, 0.045, 0.055, 0.88)
+	panel_style.border_color = Color(0.85, 0.62, 0.25, 0.85)
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(6)
+	var health_box := PanelContainer.new()
+	health_box.name = "HealthPanel"
+	health_box.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	health_box.offset_left = 12.0
+	health_box.offset_top = -58.0
+	health_box.offset_right = 230.0
+	health_box.offset_bottom = -12.0
+	health_box.add_theme_stylebox_override("panel", panel_style)
+	var health_column := VBoxContainer.new()
+	health_column.add_theme_constant_override("separation", 3)
+	health_box.add_child(health_column)
+	health_label = Label.new()
+	health_label.add_theme_font_size_override("font_size", 18)
+	health_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.84))
+	health_column.add_child(health_label)
+	health_bar = ProgressBar.new()
+	health_bar.min_value = 0.0
+	health_bar.max_value = 100.0
+	health_bar.show_percentage = false
+	health_bar.custom_minimum_size = Vector2(196.0, 14.0)
+	var bar_background := StyleBoxFlat.new()
+	bar_background.bg_color = Color(0.14, 0.035, 0.035, 1.0)
+	var bar_fill := StyleBoxFlat.new()
+	bar_fill.bg_color = Color(0.2, 0.9, 0.25, 1.0)
+	health_bar.add_theme_stylebox_override("background", bar_background)
+	health_bar.add_theme_stylebox_override("fill", bar_fill)
+	health_column.add_child(health_bar)
+	add_child(health_box)
+
+	var controls_hint := Label.new()
+	controls_hint.name = "ControlsHint"
+	controls_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	controls_hint.offset_left = -500.0
+	controls_hint.offset_top = -50.0
+	controls_hint.offset_right = 500.0
+	controls_hint.offset_bottom = -8.0
+	controls_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	controls_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	controls_hint.text = "1 Пистолет · 2 Автомат · 3 Дробовик · 4 Снайперка · 5 Ракетница\nЛКМ — огонь · R — перезарядка · колесо — смена · C/X — присесть"
+	controls_hint.add_theme_font_size_override("font_size", 13)
+	controls_hint.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.9))
+	controls_hint.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
+	controls_hint.add_theme_constant_override("shadow_offset_x", 1)
+	controls_hint.add_theme_constant_override("shadow_offset_y", 1)
+	add_child(controls_hint)
+
+	wave_label = Label.new()
+	wave_label.name = "WaveStatus"
+	wave_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	wave_label.offset_left = -260.0
+	wave_label.offset_top = 12.0
+	wave_label.offset_right = 260.0
+	wave_label.offset_bottom = 60.0
+	wave_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	wave_label.text = "ОЖИДАНИЕ ВОЛНЫ"
+	wave_label.add_theme_font_size_override("font_size", 18)
+	wave_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.43, 1.0))
+	wave_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
+	wave_label.add_theme_constant_override("shadow_offset_x", 1)
+	wave_label.add_theme_constant_override("shadow_offset_y", 1)
+	add_child(wave_label)
+
+	death_overlay = ColorRect.new()
+	death_overlay.name = "DeathOverlay"
+	death_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	death_overlay.color = Color(0.08, 0.0, 0.0, 0.76)
+	death_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	death_overlay.hide()
+	var death_text := Label.new()
+	death_text.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	death_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	death_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	death_text.text = "ВЫ ПОГИБЛИ"
+	death_text.add_theme_font_size_override("font_size", 58)
+	death_text.add_theme_color_override("font_color", Color(1.0, 0.18, 0.12, 1.0))
+	death_overlay.add_child(death_text)
+	add_child(death_overlay)
+
+func _on_health_changed(value: int) -> void:
+	var current_health := clampi(value, 0, 100)
+	health_bar.value = current_health
+	health_label.text = "ЗДОРОВЬЕ: %d%%" % current_health
+	var fill_style := health_bar.get_theme_stylebox("fill") as StyleBoxFlat
+	if fill_style:
+		fill_style.bg_color = Color(0.2, 0.9, 0.25, 1.0).lerp(Color(0.95, 0.12, 0.08, 1.0), 1.0 - float(current_health) / 100.0)
+	death_overlay.visible = current_health <= 0
+
+func _on_player_died() -> void:
+	death_overlay.show()
+
+func _connect_wave_spawner() -> void:
+	var spawner := get_tree().current_scene.get_node_or_null("WaveSpawner")
+	if spawner == null:
+		return
+	if spawner.has_signal("wave_started"):
+		spawner.connect("wave_started", _on_wave_started)
+	if spawner.has_signal("wave_completed"):
+		spawner.connect("wave_completed", _on_wave_completed)
+	if spawner.has_signal("enemies_remaining"):
+		spawner.connect("enemies_remaining", _on_enemies_remaining)
+	if spawner.has_signal("wave_countdown"):
+		spawner.connect("wave_countdown", _on_wave_countdown)
+
+func _on_wave_started(wave_number: int, wave_name: String) -> void:
+	wave_label.text = "ВОЛНА %d: %s\nВраги атакуют караван!" % [wave_number, wave_name.to_upper()]
+
+func _on_wave_completed(wave_number: int) -> void:
+	wave_label.text = "ВОЛНА %d ОТБИТА\nПередышка..." % wave_number
+
+func _on_enemies_remaining(count: int) -> void:
+	if count > 0 and wave_label.text.begins_with("ВОЛНА"):
+		wave_label.text = "%s\nОСТАЛОСЬ ВРАГОВ: %d" % [wave_label.text.get_slice("\n", 0), count]
+	elif count == 0 and wave_label.text.begins_with("ВОЛНА"):
+		wave_label.text = "ВСЕ ВРАГИ УНИЧТОЖЕНЫ"
+
+func _on_wave_countdown(seconds: int) -> void:
+	if not wave_label.text.begins_with("ВОЛНА") or wave_label.text.contains("ОТБИТА"):
+		wave_label.text = "ПОДГОТОВКА\nСЛЕДУЮЩАЯ ВОЛНА ЧЕРЕЗ %d СЕК" % seconds
 		
 func display_current_FPS() -> void:
 	frames_per_second_label_text.set_text(str(Engine.get_frames_per_second()))

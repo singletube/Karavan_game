@@ -35,7 +35,7 @@ func _ready() -> void:
 	if is_local():
 		cam.current = true
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-		get_node_or_null("HUD").hide()
+		get_node_or_null("HUD").show()
 		health_changed.emit(health)
 		_publish_weapon_status(true)
 	else:
