@@ -172,18 +172,29 @@ func _update_target_and_state() -> void:
 	var min_dist: float = INF
 
 	for p in players:
-		if p is Node3D and not (p.get("is_dead") == true):
+		if p is Node3D and is_instance_valid(p) and not (p.get("is_dead") == true):
 			var d: float = global_position.distance_to(p.global_position)
 			if d < min_dist:
 				min_dist = d
 				closest = p
+
+	# Если враги ближе к каравану, чем к игроку — они атакуют караван
+	var caravans: Array = get_tree().get_nodes_in_group("caravan")
+	for c in caravans:
+		if c is Node3D and is_instance_valid(c) and not (c.get("is_destroyed") == true):
+			var d: float = global_position.distance_to((c as Node3D).global_position)
+			if d < min_dist:
+				min_dist = d
+				closest = c as Node3D
 
 	player = closest
 	if not player:
 		state = EnemyState.IDLE
 		return
 
-	if min_dist <= attack_reach:
+	var is_caravan: bool = player.is_in_group("caravan")
+	var reach_threshold: float = attack_reach + (2.2 if is_caravan else 0.0)
+	if min_dist <= reach_threshold:
 		state = EnemyState.ATTACK
 	elif min_dist <= CHASE_RANGE:
 		state = EnemyState.CHASE
@@ -278,9 +289,10 @@ func _attack_melee() -> void:
 	if hit_sound:
 		hit_sound.stream = snd_bite
 		hit_sound.play()
-	if player and player.has_method("take_damage"):
+	if player and is_instance_valid(player) and player.has_method("take_damage"):
+		var reach_bonus: float = 2.4 if player.is_in_group("caravan") else 0.6
 		var dist: float = global_position.distance_to(player.global_position)
-		if dist <= attack_reach + 0.6:
+		if dist <= attack_reach + reach_bonus:
 			player.take_damage(attack_dmg)
 
 func _attack_spitter() -> void:
@@ -288,13 +300,14 @@ func _attack_spitter() -> void:
 	if hit_sound:
 		hit_sound.stream = snd_acid
 		hit_sound.play()
-	if player and player.has_method("take_damage"):
+	if player and is_instance_valid(player) and player.has_method("take_damage"):
+		var reach_bonus: float = 3.5 if player.is_in_group("caravan") else 2.0
 		var dist: float = global_position.distance_to(player.global_position)
-		if dist <= attack_reach + 2.0:
+		if dist <= attack_reach + reach_bonus:
 			player.take_damage(attack_dmg)
 
 func _attack_screamer() -> void:
-	# АОЕ звуковая волна: урон всем игрокам в радиусе досягаемости
+	# АОЕ звуковая волна: урон всем игрокам и каравану в радиусе досягаемости
 	if hit_sound:
 		hit_sound.stream = snd_screamer
 		hit_sound.play()
@@ -306,8 +319,16 @@ func _attack_screamer() -> void:
 				if p.has_method("take_damage"):
 					p.take_damage(attack_dmg)
 
+	var caravans: Array = get_tree().get_nodes_in_group("caravan")
+	for c: Node in caravans:
+		if c is Node3D and is_instance_valid(c) and not (c.get("is_destroyed") == true):
+			var dist: float = global_position.distance_to((c as Node3D).global_position)
+			if dist <= attack_reach + 2.0:
+				if c.has_method("take_damage"):
+					c.take_damage(attack_dmg)
+
 func _attack_exploder() -> void:
-	# Самоубийственный взрыв: наносит урон всем игрокам и другим зомби в радиусе 6.0, затем погибает
+	# Самоубийственный взрыв: наносит урон всем игрокам, каравану и другим зомби в радиусе 6.0, затем погибает
 	if die_sound:
 		die_sound.stream = snd_exp
 		die_sound.play()
@@ -319,6 +340,14 @@ func _attack_exploder() -> void:
 			if dist <= exp_radius:
 				if p.has_method("take_damage"):
 					p.take_damage(attack_dmg)
+
+	var caravans: Array = get_tree().get_nodes_in_group("caravan")
+	for c: Node in caravans:
+		if c is Node3D and is_instance_valid(c) and not (c.get("is_destroyed") == true):
+			var dist: float = global_position.distance_to((c as Node3D).global_position)
+			if dist <= exp_radius + 1.5:
+				if c.has_method("take_damage"):
+					c.take_damage(attack_dmg)
 
 	var enemies: Array = get_tree().get_nodes_in_group("enemy")
 	for e: Node in enemies:

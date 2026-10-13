@@ -1,0 +1,70 @@
+[gd_scene load_steps=10 format=3 uid="uid://caravan001"]
+
+[ext_resource type="Script" path="res://scripts/caravan.gd" id="1_caravan"]
+[ext_resource type="Script" path="res://scripts/caravan_model_3d.gd" id="2_model"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(2.2, 0.2, 3.6)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_lr"]
+size = Vector3(0.15, 0.7, 3.6)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_front"]
+size = Vector3(2.2, 0.8, 0.15)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_back"]
+size = Vector3(2.2, 0.35, 0.15)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_donkey"]
+size = Vector3(0.8, 1.4, 1.6)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_hitch"]
+size = Vector3(1.0, 0.2, 1.8)
+
+[node name="Caravan" type="AnimatableBody3D" groups=["caravan"]]
+collision_layer = 3
+collision_mask = 3
+script = ExtResource("1_caravan")
+
+[node name="CaravanModel3D" type="Node3D" parent="."]
+script = ExtResource("2_model")
+
+; --- Коллизии повозки (пол кузова, борта, осёл) ---
+
+[node name="ColFloor" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.65, 0)
+shape = SubResource("BoxShape3D_floor")
+
+[node name="ColWallLeft" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.05, 1.05, 0)
+shape = SubResource("BoxShape3D_wall_lr")
+
+[node name="ColWallRight" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.05, 1.05, 0)
+shape = SubResource("BoxShape3D_wall_lr")
+
+[node name="ColWallFront" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, -1.75)
+shape = SubResource("BoxShape3D_wall_front")
+
+[node name="ColWallBack" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 1.75)
+shape = SubResource("BoxShape3D_wall_back")
+
+[node name="ColDonkey" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, -4.2)
+shape = SubResource("BoxShape3D_donkey")
+
+[node name="ColHitch" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, -2.8)
+shape = SubResource("BoxShape3D_hitch")
+
+; --- Звуковые эффекты ---
+
+[node name="HitSound" type="AudioStreamPlayer3D" parent="."]
+max_distance = 35.0
+bus = &"SFX"
+
+[node name="BreakSound" type="AudioStreamPlayer3D" parent="."]
+max_distance = 45.0
+bus = &"SFX"

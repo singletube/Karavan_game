@@ -28,6 +28,13 @@ func _ready() -> void:
 	super()
 	_add_crouch_key()
 	_build_legacy_muzzle_flash()
+
+	var caravan: Node = get_tree().current_scene.get_node_or_null("Caravan")
+	if not caravan:
+		caravan = get_tree().get_first_node_in_group("caravan")
+	if caravan and caravan.has_method("get_cargo_spawn_position"):
+		global_position = caravan.get_cargo_spawn_position()
+
 	target_pos = global_position
 	target_rot_y = rotation.y
 	await get_tree().process_frame
@@ -182,6 +189,14 @@ func _die() -> void:
 	await get_tree().create_timer(3.0).timeout
 	health = 100
 	is_dead = false
-	global_position = Vector3(randf_range(-10.0, 10.0), 1.5, randf_range(-10.0, 10.0))
+
+	var caravan: Node = get_tree().current_scene.get_node_or_null("Caravan")
+	if not caravan:
+		caravan = get_tree().get_first_node_in_group("caravan")
+	if caravan and caravan.has_method("get_cargo_spawn_position"):
+		global_position = caravan.get_cargo_spawn_position()
+	else:
+		global_position = Vector3(randf_range(-6.0, 6.0), 1.5, randf_range(-6.0, 6.0))
+
 	health_changed.emit(health)
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)

@@ -278,17 +278,19 @@ func _spawn_single_enemy(z_type: String, pos: Vector3) -> void:
 		enemy.enemy_died.connect(_on_enemy_died.bind(enemy))
 
 func _get_random_spawn_point() -> Vector3:
-	var players: Array = get_tree().get_nodes_in_group("player")
-	var alive_players: Array[Node3D] = []
-
-	for p: Node in players:
-		if p is Node3D and is_instance_valid(p) and not (p.get("is_dead") == true):
-			alive_players.append(p as Node3D)
-
 	var anchor_pos: Vector3 = Vector3.ZERO
-	if alive_players.size() > 0:
-		var chosen_player: Node3D = alive_players[randi() % alive_players.size()]
-		anchor_pos = chosen_player.global_position
+	var caravan := get_tree().get_first_node_in_group("caravan") as Node3D
+	if caravan and is_instance_valid(caravan):
+		anchor_pos = caravan.global_position
+	else:
+		var players: Array = get_tree().get_nodes_in_group("player")
+		var alive_players: Array[Node3D] = []
+		for p: Node in players:
+			if p is Node3D and is_instance_valid(p) and not (p.get("is_dead") == true):
+				alive_players.append(p as Node3D)
+		if alive_players.size() > 0:
+			var chosen_player: Node3D = alive_players[randi() % alive_players.size()]
+			anchor_pos = chosen_player.global_position
 
 	var angle: float = randf() * TAU
 	var dist: float = randf_range(min_spawn_dist, max_spawn_dist)
@@ -313,4 +315,16 @@ func _complete_wave() -> void:
 		audio_player.stream = snd_wave_win
 		audio_player.play()
 
+	_start_break(wave_break)
+
+func reset_to_wave_zero() -> void:
+	wave_active = false
+	is_in_break = false
+	enemies_to_spawn.clear()
+	if enemies_container:
+		for child: Node in enemies_container.get_children():
+			child.queue_free()
+	enemies_alive = 0
+	current_wave = 0
+	enemies_remaining.emit(0)
 	_start_break(wave_break)

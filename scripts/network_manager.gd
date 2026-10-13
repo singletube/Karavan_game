@@ -115,7 +115,13 @@ func _spawn_player(id: int) -> Node:
 	container.add_child(p)
 
 	if p is Node3D:
-		(p as Node3D).global_position = Vector3(randf_range(-6.0, 6.0), 1.0, randf_range(-6.0, 6.0))
+		var caravan: Node = get_tree().current_scene.get_node_or_null("Caravan")
+		if not caravan:
+			caravan = get_tree().get_first_node_in_group("caravan")
+		if caravan and caravan.has_method("get_cargo_spawn_position"):
+			(p as Node3D).global_position = caravan.get_cargo_spawn_position()
+		else:
+			(p as Node3D).global_position = Vector3(randf_range(-6.0, 6.0), 1.0, randf_range(-6.0, 6.0))
 
 	return p
 

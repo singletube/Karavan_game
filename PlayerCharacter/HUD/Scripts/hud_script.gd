@@ -35,6 +35,9 @@ var health_label: Label
 var health_bar: ProgressBar
 var death_overlay: ColorRect
 var wave_label: Label
+var caravan_panel: PanelContainer
+var caravan_label: Label
+var caravan_bar: ProgressBar
 
 func _ready() -> void:
 	weapon_manager.weapon_stack_updated.connect(Callable(self, "update_weapon_stack_display"))
@@ -58,6 +61,7 @@ func _ready() -> void:
 	_on_health_changed(int(play_char.get("health")))
 	update_weapon_stack_display()
 	_connect_wave_spawner()
+	_connect_caravan()
 	
 func _process(_delta : float) -> void:
 	display_current_FPS()
@@ -178,6 +182,48 @@ func _build_game_hud() -> void:
 	wave_label.add_theme_constant_override("shadow_offset_y", 1)
 	add_child(wave_label)
 
+	var caravan_style := StyleBoxFlat.new()
+	caravan_style.bg_color = Color(0.04, 0.035, 0.02, 0.9)
+	caravan_style.border_color = Color(0.92, 0.72, 0.28, 0.9)
+	caravan_style.set_border_width_all(1)
+	caravan_style.set_corner_radius_all(6)
+
+	caravan_panel = PanelContainer.new()
+	caravan_panel.name = "CaravanPanel"
+	caravan_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	caravan_panel.offset_left = -160.0
+	caravan_panel.offset_top = 62.0
+	caravan_panel.offset_right = 160.0
+	caravan_panel.offset_bottom = 106.0
+	caravan_panel.add_theme_stylebox_override("panel", caravan_style)
+
+	var caravan_col := VBoxContainer.new()
+	caravan_col.add_theme_constant_override("separation", 2)
+	caravan_panel.add_child(caravan_col)
+
+	caravan_label = Label.new()
+	caravan_label.text = "КАРАВАН (ПОВОЗКА И ОСЁЛ): 500 / 500"
+	caravan_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caravan_label.add_theme_font_size_override("font_size", 13)
+	caravan_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.75, 1.0))
+	caravan_col.add_child(caravan_label)
+
+	caravan_bar = ProgressBar.new()
+	caravan_bar.min_value = 0.0
+	caravan_bar.max_value = 500.0
+	caravan_bar.value = 500.0
+	caravan_bar.show_percentage = false
+	caravan_bar.custom_minimum_size = Vector2(300.0, 10.0)
+
+	var c_bar_bg := StyleBoxFlat.new()
+	c_bar_bg.bg_color = Color(0.12, 0.08, 0.04, 1.0)
+	var c_bar_fill := StyleBoxFlat.new()
+	c_bar_fill.bg_color = Color(0.95, 0.76, 0.22, 1.0)
+	caravan_bar.add_theme_stylebox_override("background", c_bar_bg)
+	caravan_bar.add_theme_stylebox_override("fill", c_bar_fill)
+	caravan_col.add_child(caravan_bar)
+	add_child(caravan_panel)
+
 	death_overlay = ColorRect.new()
 	death_overlay.name = "DeathOverlay"
 	death_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -243,6 +289,38 @@ func display_speed_lines(value : bool) -> void:
 	
 func round_to_3_decimals(value: float) -> float:
 	return round(value * 1000.0) / 1000.0
+
+func _connect_caravan() -> void:
+	await get_tree().process_frame
+	var caravan: Node = get_tree().current_scene.get_node_or_null("Caravan")
+	if not caravan:
+		caravan = get_tree().get_first_node_in_group("caravan")
+	if caravan == null:
+		return
+	if caravan.has_signal("health_changed"):
+		caravan.connect("health_changed", _on_caravan_health_changed)
+	if caravan.has_signal("caravan_destroyed"):
+		caravan.connect("caravan_destroyed", _on_caravan_destroyed)
+	if caravan.has_signal("caravan_respawned"):
+		caravan.connect("caravan_respawned", _on_caravan_respawned)
+	_on_caravan_health_changed(int(caravan.get("health")), int(caravan.get("MAX_HEALTH")))
+
+func _on_caravan_health_changed(current: int, max_hp: int) -> void:
+	if caravan_bar and caravan_label:
+		caravan_bar.max_value = max_hp
+		caravan_bar.value = current
+		caravan_label.text = "КАРАВАН (ПОВОЗКА И ОСЁЛ): %d / %d" % [current, max_hp]
+		var fill_style := caravan_bar.get_theme_stylebox("fill") as StyleBoxFlat
+		if fill_style and max_hp > 0:
+			fill_style.bg_color = Color(0.95, 0.76, 0.22, 1.0).lerp(Color(0.95, 0.15, 0.1, 1.0), 1.0 - (float(current) / float(max_hp)))
+
+func _on_caravan_destroyed() -> void:
+	if caravan_label:
+		caravan_label.text = "КАРАВАН УНИЧТОЖЕН!"
+	death_overlay.show()
+
+func _on_caravan_respawned() -> void:
+	death_overlay.hide()
 	
 	
 	
