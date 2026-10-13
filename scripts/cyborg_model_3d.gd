@@ -644,10 +644,22 @@ func _animate_death(delta: float) -> void:
 	death_progress = minf(1.0, death_progress + delta * 2.8)
 	var t : float = death_progress
 
-	# Труп валится навзничь на землю, оставаясь лежать сверху на песке (y = 0.15)
-	root_node.position.y = lerpf(root_node.position.y, 0.15, t)
+	# Труп валится навзничь на землю, оставаясь лежать сверху на песке
+	var target_y : float = 0.28
+	if current_type == "Brute":
+		target_y = 0.45
+	elif current_type == "Crawler":
+		target_y = 0.18
+	elif current_type == "Exploder":
+		target_y = 0.35
+
+	root_node.position.y = lerpf(root_node.position.y, target_y, t)
 	root_node.rotation.x = lerp_angle(root_node.rotation.x, deg_to_rad(-85.0), t)
-	l_knee.rotation.x = lerp_angle(l_knee.rotation.x, deg_to_rad(45.0), t)
-	r_knee.rotation.x = lerp_angle(r_knee.rotation.x, deg_to_rad(30.0), t)
+	l_hip.rotation.x = lerp_angle(l_hip.rotation.x, deg_to_rad(-10.0), t)
+	r_hip.rotation.x = lerp_angle(r_hip.rotation.x, deg_to_rad(-10.0), t)
+	l_knee.rotation.x = lerp_angle(l_knee.rotation.x, deg_to_rad(40.0), t)
+	r_knee.rotation.x = lerp_angle(r_knee.rotation.x, deg_to_rad(25.0), t)
 	l_shoulder.rotation.z = lerp_angle(l_shoulder.rotation.z, deg_to_rad(45.0), t)
 	r_shoulder.rotation.z = lerp_angle(r_shoulder.rotation.z, deg_to_rad(-45.0), t)
+	pelvis.rotation = pelvis.rotation.lerp(Vector3.ZERO, t)
+	torso.rotation = torso.rotation.lerp(Vector3.ZERO, t)

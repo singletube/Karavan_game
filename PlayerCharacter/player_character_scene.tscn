@@ -1812,14 +1812,16 @@ mesh = SubResource("CapsuleMesh_p2iaj")
 [node name="CeilingCheck" type="RayCast3D" parent="Raycasts" unique_id=286395466]
 unique_name_in_owner = true
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.758088, 0)
-exclude_parent = false
+exclude_parent = true
 target_position = Vector3(0, 3, 0)
+collision_mask = 1
 debug_shape_custom_color = Color(1, 0, 0, 1)
 
 [node name="FloorCheck" type="RayCast3D" parent="Raycasts" unique_id=1259898103]
 unique_name_in_owner = true
-exclude_parent = false
+exclude_parent = true
 target_position = Vector3(0, -3, 0)
+collision_mask = 1
 debug_shape_custom_color = Color(0, 0.823529, 0.956863, 1)
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=4972146]

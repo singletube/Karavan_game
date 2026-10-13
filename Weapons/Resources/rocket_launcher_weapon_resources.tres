@@ -3,7 +3,7 @@
 [ext_resource type="PackedScene" uid="uid://x8oniabn746q" path="res://Weapons/Scenes/muzzle_flash_particle_scene.tscn" id="1_5rm5b"]
 [ext_resource type="PackedScene" uid="uid://u4tj3ey6tjg8" path="res://Weapons/Scenes/rocket_scene.tscn" id="2_5xksu"]
 [ext_resource type="Script" uid="uid://bnhfyt5sl8jcd" path="res://Weapons/Scripts/weapon_resources_script.gd" id="2_tu3fa"]
-[ext_resource type="AudioStream" path="res://assets/audio/shoot_rocket.mp3" id="3_sound"]
+[ext_resource type="AudioStream" uid="uid://bpvrfxuxs7a47" path="res://assets/audio/shoot_rocket.mp3" id="3_sound"]
 
 [sub_resource type="Curve" id="Curve_e7efc"]
 _limits = [0.0, 1.0, 0.0, 340.0]

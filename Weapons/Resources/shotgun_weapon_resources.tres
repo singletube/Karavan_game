@@ -2,7 +2,7 @@
 
 [ext_resource type="PackedScene" uid="uid://x8oniabn746q" path="res://Weapons/Scenes/muzzle_flash_particle_scene.tscn" id="1_rwuxs"]
 [ext_resource type="Script" uid="uid://bnhfyt5sl8jcd" path="res://Weapons/Scripts/weapon_resources_script.gd" id="2_bxlgv"]
-[ext_resource type="AudioStream" path="res://assets/audio/shoot_shotgun.mp3" id="3_sound"]
+[ext_resource type="AudioStream" uid="uid://bco7y8mre6k8i" path="res://assets/audio/shoot_shotgun.mp3" id="3_sound"]
 
 [sub_resource type="Curve" id="Curve_e7efc"]
 _limits = [0.0, 1.0, 0.0, 210.0]
