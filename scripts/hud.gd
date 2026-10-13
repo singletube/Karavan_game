@@ -181,7 +181,9 @@ func _on_health_changed(value: int) -> void:
 	var fill_style := health_bar.get_theme_stylebox("fill") as StyleBoxFlat
 	if fill_style:
 		fill_style.bg_color = Color(0.2, 0.9, 0.25, 1.0).lerp(Color(0.95, 0.12, 0.08, 1.0), 1.0 - float(clamped_health) / 100.0)
-	if value > 0 and death_screen.visible:
+	if clamped_health <= 0:
+		death_screen.show()
+	else:
 		death_screen.hide()
 	if _displayed_health >= 0 and clamped_health < _displayed_health:
 		_flash_damage()
