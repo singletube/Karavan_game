@@ -2243,11 +2243,11 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+stretch = true
 
 [node name="SubViewport" type="SubViewport" parent="SubViewportContainer" unique_id=58854477]
 transparent_bg = true
 handle_input_locally = false
-size = Vector2i(1152, 648)
 render_target_update_mode = 4
 
 [node name="ViewportCam" type="Camera3D" parent="SubViewportContainer/SubViewport" unique_id=1621469486]
