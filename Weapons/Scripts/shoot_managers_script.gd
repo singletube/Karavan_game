@@ -84,6 +84,7 @@ func get_camera_fov() -> Vector3:
 	
 	#Create intersection space to contain possible collisions 
 	var new_intersection : PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(raycast_start, raycast_end)
+	new_intersection.exclude = [weapon_manager.get_parent().get_rid()]
 	var intersection : Dictionary = get_world_3d().direct_space_state.intersect_ray(new_intersection)
 	
 	#If the raycast has collide with something, return collision point transform properties
@@ -105,6 +106,7 @@ func hitscan_shot(point_of_collision_hitscan : Vector3) -> void:
 	
 	#create new intersection space to contain possibe collisions 
 	var new_intersection : PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(current_weapon.attack_point.get_global_transform().origin, point_of_collision_hitscan + spread + hitscan_bullet_direction * 2)
+	new_intersection.exclude = [weapon_manager.get_parent().get_rid()]
 	new_intersection.collide_with_areas = true
 	new_intersection.collide_with_bodies = true 
 	var hitscan_bullet_collision : Dictionary = get_world_3d().direct_space_state.intersect_ray(new_intersection)

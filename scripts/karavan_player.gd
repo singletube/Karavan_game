@@ -23,6 +23,7 @@ func _enter_tree() -> void:
 
 func _ready() -> void:
 	super()
+	_add_crouch_key()
 	target_pos = global_position
 	target_rot_y = rotation.y
 	await get_tree().process_frame
@@ -58,6 +59,29 @@ func _physics_process(delta: float) -> void:
 func _process(_delta: float) -> void:
 	if is_local() and not is_dead:
 		_publish_weapon_status(false)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not is_local() or is_dead or not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	var weapon_key_to_index := {
+		KEY_1: 0,
+		KEY_2: 1,
+		KEY_3: 2,
+		KEY_4: 3,
+		KEY_5: 4,
+	}
+	if event.keycode in weapon_key_to_index:
+		var manager := get_node_or_null("WeaponManager") as WeaponManager
+		var index: int = weapon_key_to_index[event.keycode]
+		if manager and manager.can_change_weapons and index < manager.weapon_stack.size():
+			manager.weapon_index = index
+			manager.change_weapon(manager.weapon_stack[index])
+		get_viewport().set_input_as_handled()
+
+func _add_crouch_key() -> void:
+	var crouch_event := InputEventKey.new()
+	crouch_event.physical_keycode = KEY_C
+	InputMap.action_add_event(&"crouch", crouch_event)
 
 @rpc("any_peer", "unreliable_ordered")
 func sync_state(pos: Vector3, rot_y: float) -> void:

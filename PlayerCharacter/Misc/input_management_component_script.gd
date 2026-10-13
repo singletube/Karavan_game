@@ -6,19 +6,19 @@ class_name InputManagementComponent
 
 @export_group("Keybind variables")
 @export_subgroup("Player character variables")
-@export var move_forward_action: StringName = "play_char_move_forward_action"
-@export var move_backward_action: StringName = "play_char_move_backward_action"
-@export var move_left_action: StringName = "play_char_move_left_ation"
-@export var move_right_action: StringName = "play_char_move_right_action"
-@export var run_action: StringName = "play_char_run_action"
-@export var crouch_action: StringName = "play_char_crouch_action"
-@export var jump_action: StringName = "play_char_jump_action"
+@export var move_forward_action: StringName = "move_forward"
+@export var move_backward_action: StringName = "move_back"
+@export var move_left_action: StringName = "move_left"
+@export var move_right_action: StringName = "move_right"
+@export var run_action: StringName = "run"
+@export var crouch_action: StringName = "crouch"
+@export var jump_action: StringName = "jump"
 @export_subgroup("Camera variables")
 @export var zoom_action : StringName = "play_char_zoom_action"
 @export var mouse_mode_action : StringName = "play_char_mouse_mode_action"
 @export_subgroup("Weapon manager variables")
-@export var shoot_action : StringName = "play_char_shoot_action"
-@export var reload_action : StringName = "play_char_reload_action"
+@export var shoot_action : StringName = "shoot"
+@export var reload_action : StringName = "reload"
 @export var weapon_wheel_up_action : StringName = "play_char_weapon_wheel_up_action"
 @export var weapon_wheel_down_action : StringName = "play_char_weapon_wheel_down_action"
 
@@ -122,16 +122,11 @@ func input_actions_check() -> void:
 	#check if the input actions written in the editor are the same as the ones registered in the Input map, and if they are written correctly
 	#if not, add it to runtime Input map with default keybindings
 	if check_on_ready_if_inputs_registered:
-		var registered_input_actions: Array[StringName] = []
-		for input_action in InputMap.get_actions():
-			if input_action.begins_with(&"play_char_"):
-				registered_input_actions.append(input_action)
-				
 		for input_action in input_actions_list:
 			if input_action == &"":
 				assert(false, "There's an undefined input action")
 				
-			if not registered_input_actions.has(input_action):
+			if not InputMap.has_action(input_action):
 				var key_names = default_input_actions[input_action].map(func(entry):
 					match entry["type"]:
 						"key":

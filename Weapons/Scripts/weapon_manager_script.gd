@@ -157,7 +157,7 @@ func weapon_sound_management(sound_name : AudioStream, sound_speed : float) -> v
 	await get_tree().process_frame
 	if audio_ins.is_inside_tree():
 		audio_ins.global_transform = current_weapon.attack_point.global_transform
-		audio_ins.bus = "SFX"
+		audio_ins.bus = "Master"
 		audio_ins.pitch_scale = sound_speed
 		audio_ins.stream = sound_name
 		audio_ins.play()
