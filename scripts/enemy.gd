@@ -401,7 +401,8 @@ func _spawn_hit_blood(pos: Vector3, hit_direction: Vector3) -> void:
 	droplet_mesh.radius = 0.025
 	droplet_mesh.height = 0.05
 	droplet_mesh.material = droplet_material
-	p.draw_pass_1 = droplet_mesh
+	# CPUParticles3D uses `mesh`; `draw_pass_1` belongs to GPUParticles3D.
+	p.mesh = droplet_mesh
 	get_parent().add_child(p)
 	p.global_position = pos
 	var timer := get_tree().create_timer(p.lifetime + 0.1)
