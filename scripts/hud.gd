@@ -15,10 +15,20 @@ var wave_title_label     : Label          = null
 var wave_subtitle_label  : Label          = null
 
 var target_player : Node = null
+var _displayed_health: int = -1
 
 func _ready() -> void:
 	hit_flash.modulate.a = 0.0
 	death_screen.hide()
+	health_bar.min_value = 0.0
+	health_bar.max_value = 100.0
+	health_bar.show_percentage = false
+	var health_background := StyleBoxFlat.new()
+	health_background.bg_color = Color(0.12, 0.035, 0.035, 0.95)
+	var health_fill := StyleBoxFlat.new()
+	health_fill.bg_color = Color(0.2, 0.9, 0.25, 1.0)
+	health_bar.add_theme_stylebox_override("background", health_background)
+	health_bar.add_theme_stylebox_override("fill", health_fill)
 	ammo_label.add_theme_font_size_override("font_size", 17)
 	slot_hint_label.add_theme_font_size_override("font_size", 12)
 	slot_hint_label.text = "1–5: оружие · Колесо: смена · ЛКМ: огонь · R: перезарядка · C/X: присесть"
@@ -165,11 +175,17 @@ func connect_player(p: Node) -> void:
 			_on_weapon_changed(str(status.weapon_name), null, int(status.magazine), int(status.reserve))
 
 func _on_health_changed(value: int) -> void:
-	health_bar.value = value
-	health_label.text = "HP: %d" % value
+	var clamped_health := clampi(value, 0, 100)
+	health_bar.value = clamped_health
+	health_label.text = "HP: %d%%" % clamped_health
+	var fill_style := health_bar.get_theme_stylebox("fill") as StyleBoxFlat
+	if fill_style:
+		fill_style.bg_color = Color(0.2, 0.9, 0.25, 1.0).lerp(Color(0.95, 0.12, 0.08, 1.0), 1.0 - float(clamped_health) / 100.0)
 	if value > 0 and death_screen.visible:
 		death_screen.hide()
-	_flash_damage()
+	if _displayed_health >= 0 and clamped_health < _displayed_health:
+		_flash_damage()
+	_displayed_health = clamped_health
 
 func _on_ammo_changed(current: int, total: int) -> void:
 	ammo_label.text = "В МАГАЗИНЕ: %d    В ЗАПАСЕ: %d" % [current, total]
@@ -194,6 +210,12 @@ func _flash_damage() -> void:
 	tween.tween_property(hit_flash, "modulate:a", 0.0, 0.4)
 
 func _process(_delta: float) -> void:
+	# Keep health visible even if the player was spawned before signal hookup or
+	# a multiplayer health signal arrived before the HUD connected.
+	if is_instance_valid(target_player):
+		var current_health: Variant = target_player.get("health")
+		if current_health != null and int(current_health) != _displayed_health:
+			_on_health_changed(int(current_health))
 	if Input.is_action_just_pressed("ui_cancel"):
 		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
 			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
