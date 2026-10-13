@@ -100,43 +100,59 @@ func get_camera_fov() -> Vector3:
 		return raycast_end 
 		
 func hitscan_shot(point_of_collision_hitscan : Vector3) -> void:
-	rng = RandomNumberGenerator.new()
-	
-	#set up weapon shot sprad 
-	var spread : Vector3 = Vector3(rng.randf_range(current_weapon.resources.min_spread, current_weapon.resources.max_spread), rng.randf_range(current_weapon.resources.min_spread, current_weapon.resources.max_spread), rng.randf_range(current_weapon.resources.min_spread, current_weapon.resources.max_spread))
-	
-	#calculate direction of the hitscan bullet 
-	var hitscan_bullet_direction : Vector3 = (point_of_collision_hitscan - current_weapon.attack_point.get_global_transform().origin).normalized()
-	
-	#create new intersection space to contain possibe collisions 
-	var new_intersection : PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(current_weapon.attack_point.get_global_transform().origin, point_of_collision_hitscan + spread + hitscan_bullet_direction * 2)
-	new_intersection.exclude = [weapon_manager.get_parent().get_rid()]
-	new_intersection.collide_with_areas = true
-	new_intersection.collide_with_bodies = true 
-	var hitscan_bullet_collision : Dictionary = get_world_3d().direct_space_state.intersect_ray(new_intersection)
-	
-	#if the raycast has collide
-	if hitscan_bullet_collision: 
-		var collider = hitscan_bullet_collision.collider
-		var collider_point : Vector3 = hitscan_bullet_collision.position
-		var collider_normal : Vector3 = hitscan_bullet_collision.normal 
-		var final_damage : int = 0
-		
-		if collider.is_in_group("Enemies") and collider.has_method("hitscan_hit"):
-			final_damage = current_weapon.resources.damage_per_proj * current_weapon.resources.damage_dropoff.sample(point_of_collision_hitscan.distance_to(global_position) / current_weapon.resources.max_range)
-			collider.hitscan_hit(final_damage, hitscan_bullet_direction, hitscan_bullet_collision.position)
-		
-		elif collider.is_in_group("EnemiesHead") and collider.has_method("hitscan_hit"):
-				final_damage = current_weapon.resources.damage_per_proj * current_weapon.resources.headshot_damage_mult * current_weapon.resources.damage_dropoff.sample(point_of_collision_hitscan.distance_to(global_position) / current_weapon.resources.max_range)
-				collider.hitscan_hit(final_damage, hitscan_bullet_direction, hitscan_bullet_collision.position)
-		
-		elif collider.is_in_group("HitableObjects") and collider.has_method("hitscan_hit"): 
-			final_damage = current_weapon.resources.damage_per_proj * current_weapon.resources.damage_dropoff.sample(point_of_collision_hitscan.distance_to(global_position) / current_weapon.resources.max_range)
-			collider.hitscan_hit(final_damage/6.0, hitscan_bullet_direction, hitscan_bullet_collision.position)
-			weapon_manager.display_bullet_hole(collider_point, collider_normal)
-			
-		else:
-			weapon_manager.display_bullet_hole(collider_point, collider_normal)
+	var camera: Camera3D = %Camera
+	var origin: Vector3 = camera.global_position
+	var direction: Vector3 = (point_of_collision_hitscan - origin).normalized()
+	var spread := Vector3(
+		randf_range(current_weapon.resources.min_spread, current_weapon.resources.max_spread),
+		randf_range(current_weapon.resources.min_spread, current_weapon.resources.max_spread),
+		randf_range(current_weapon.resources.min_spread, current_weapon.resources.max_spread)
+	)
+	direction = (direction + camera.global_transform.basis * spread).normalized()
+	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * current_weapon.resources.max_range)
+	query.exclude = [weapon_manager.get_parent().get_rid()]
+	query.collide_with_areas = true
+	query.collide_with_bodies = true
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return
+
+	var collider: Object = hit.get("collider")
+	var target: Node = _find_damage_target(collider)
+	if target != null:
+		var damage_scale := 1.0
+		if collider is Node and (collider as Node).is_in_group("EnemiesHead"):
+			damage_scale = current_weapon.resources.headshot_damage_mult
+		var distance_ratio := clampf(origin.distance_to(hit.position) / maxf(current_weapon.resources.max_range, 1.0), 0.0, 1.0)
+		var damage_curve: Curve = current_weapon.resources.damage_dropoff
+		var dropoff := damage_curve.sample(distance_ratio) if damage_curve else 1.0
+		var damage := maxf(1.0, current_weapon.resources.damage_per_proj * damage_scale * dropoff)
+		if target.is_in_group("HitableObjects"):
+			damage /= 6.0
+		if target.has_method("take_damage"):
+			if target.is_in_group("Enemies") or target.is_in_group("enemy"):
+				target.call("take_damage", maxi(1, roundi(damage)), direction)
+			else:
+				target.call("take_damage", maxi(1, roundi(damage)))
+		elif target.has_method("hitscan_hit"):
+			target.call("hitscan_hit", damage, direction, hit.position)
+	elif collider is Node and (collider as Node).is_in_group("HitableObjects") and collider.has_method("hitscan_hit"):
+		var distance_ratio := clampf(origin.distance_to(hit.position) / maxf(current_weapon.resources.max_range, 1.0), 0.0, 1.0)
+		var damage_curve: Curve = current_weapon.resources.damage_dropoff
+		var dropoff := damage_curve.sample(distance_ratio) if damage_curve else 1.0
+		(collider as Node).call("hitscan_hit", current_weapon.resources.damage_per_proj * dropoff / 6.0, direction, hit.position)
+	if not (collider is Node and ((collider as Node).is_in_group("Enemies") or (collider as Node).is_in_group("EnemiesHead"))):
+		weapon_manager.display_bullet_hole(hit.position, hit.normal)
+
+func _find_damage_target(collider: Object) -> Node:
+	var node := collider as Node
+	while node != null:
+		if node.is_in_group("Enemies") or node.is_in_group("enemy") or node.is_in_group("HitableObjects"):
+			return node
+		if node.has_method("take_damage") or node.has_method("hitscan_hit"):
+			return node
+		node = node.get_parent()
+	return null
 			
 func projectile_shot(point_of_collision_projectile : Vector3) -> void:
 	rng = RandomNumberGenerator.new()

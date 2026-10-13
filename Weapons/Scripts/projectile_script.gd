@@ -25,8 +25,13 @@ func _process(delta : float) -> void:
 	else: hit()
 		
 func _on_body_entered(body : Node3D) -> void:
-	hit()
-	apply_damage(body)
+	if body == self or body == get_parent():
+		return
+	if is_explosive:
+		explode()
+	else:
+		apply_damage(body)
+		hit()
 
 func hit() -> void:
 	mesh.visible = false
@@ -35,14 +40,38 @@ func hit() -> void:
 	if is_explosive: explode()
 
 func apply_damage(body : Node3D) -> void:
-	if body.is_in_group("Enemies") and body.has_method("projectile_hit"):
-			body.projectile_hit(damage, direction)
-			
-	if body.is_in_group("HitableObjects") and body.has_method("projectile_hit"):
-		body.projectile_hit(damage, direction)
+	var target := _find_damage_target(body)
+	if target == null:
+		return
+	if target.has_method("take_damage"):
+		target.call("take_damage", maxi(1, roundi(damage)), direction)
+	elif target.has_method("projectile_hit"):
+		target.call("projectile_hit", damage, direction)
+
+func _find_damage_target(collider: Object) -> Node:
+	var node := collider as Node
+	while node != null:
+		if node.is_in_group("Enemies") or node.is_in_group("enemy") or node.is_in_group("HitableObjects"):
+			return node
+		if node.has_method("take_damage") or node.has_method("projectile_hit"):
+			return node
+		node = node.get_parent()
+	return null
 	
 func explode() -> void:
-	#this function is visual and audio only, it doesn't affect the gameplay
+	# Damage all enemies and players in blast radius before showing effects.
+	var blast_radius := 8.0
+	for group_name in ["enemy", "player"]:
+		for target in get_tree().get_nodes_in_group(group_name):
+			if not target is Node3D or not is_instance_valid(target):
+				continue
+			if target == get_parent() or target.get("is_dead") == true:
+				continue
+			var distance: float = global_position.distance_to((target as Node3D).global_position)
+			if distance <= blast_radius and target.has_method("take_damage"):
+				var falloff: float = maxf(0.25, 1.0 - distance / blast_radius)
+				target.call("take_damage", maxi(1, roundi(damage * falloff)), direction)
+
 	sound_management(explosion_sound)
 	
 	var particles_ins : ExplosionParticleEffect = null
@@ -51,6 +80,7 @@ func explode() -> void:
 		particles_ins.particle_to_emit = "Explosion"
 		particles_ins.global_transform = global_transform
 		get_tree().get_root().add_child.call_deferred(particles_ins)
+		particles_ins.global_transform = global_transform
 	else:
 		print("Projectile already has emit explosion particles")
 		
