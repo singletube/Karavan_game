@@ -159,7 +159,7 @@ func get_combat_status() -> Dictionary:
 		"reserve": ceili(float(manager.ammo_manager.ammo_dict.get(resource.ammo_type, 0)) / ammo_per_shot),
 	}
 
-func take_damage(amount: int) -> void:
+func take_damage(amount: int, _hit_direction: Vector3 = Vector3.ZERO, _hit_position: Vector3 = Vector3.ZERO) -> void:
 	if is_dead:
 		return
 	if not is_local():

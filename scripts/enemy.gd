@@ -378,33 +378,36 @@ func projectile_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO, hit_po
 func _spawn_hit_blood(pos: Vector3, hit_direction: Vector3) -> void:
 	var p := CPUParticles3D.new()
 	p.name = "HitBlood"
-	p.emitting = true
+	p.emitting = false
 	p.one_shot = true
 	p.explosiveness = 1.0
-	p.amount = 18
-	p.lifetime = 0.55
+	p.amount = 24
+	p.lifetime = 0.7
+	p.visibility_aabb = AABB(Vector3(-2.0, -2.0, -2.0), Vector3(4.0, 4.0, 4.0))
 	var spray_direction := Vector3.UP
 	if hit_direction.length_squared() > 0.01:
 		spray_direction += -hit_direction.normalized() * 0.55
 	p.direction = spray_direction.normalized()
 	p.spread = 38.0
-	p.initial_velocity_min = 2.0
-	p.initial_velocity_max = 4.5
+	p.initial_velocity_min = 3.0
+	p.initial_velocity_max = 6.0
 	p.gravity = Vector3(0.0, -10.0, 0.0)
 	p.color = Color(0.8, 0.015, 0.035, 1.0)
-	p.scale_amount_min = 0.8
-	p.scale_amount_max = 1.5
+	p.scale_amount_min = 1.5
+	p.scale_amount_max = 2.5
 	var droplet_material := StandardMaterial3D.new()
 	droplet_material.albedo_color = Color(0.8, 0.015, 0.035, 1.0)
 	droplet_material.roughness = 0.35
 	var droplet_mesh := SphereMesh.new()
-	droplet_mesh.radius = 0.025
-	droplet_mesh.height = 0.05
+	droplet_mesh.radius = 0.03
+	droplet_mesh.height = 0.06
 	droplet_mesh.material = droplet_material
 	# CPUParticles3D uses `mesh`; `draw_pass_1` belongs to GPUParticles3D.
 	p.mesh = droplet_mesh
 	get_parent().add_child(p)
 	p.global_position = pos
+	p.restart()
+	p.emitting = true
 	var timer := get_tree().create_timer(p.lifetime + 0.1)
 	timer.timeout.connect(func(): if is_instance_valid(p): p.queue_free())
 
