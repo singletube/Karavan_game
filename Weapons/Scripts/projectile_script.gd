@@ -44,7 +44,10 @@ func apply_damage(body : Node3D) -> void:
 	if target == null:
 		return
 	if target.has_method("take_damage"):
-		target.call("take_damage", maxi(1, roundi(damage)), direction)
+		if target.is_in_group("Enemies") or target.is_in_group("enemy"):
+			target.call("take_damage", maxi(1, roundi(damage)), direction, body.global_position + Vector3.UP * 0.7)
+		else:
+			target.call("take_damage", maxi(1, roundi(damage)))
 	elif target.has_method("projectile_hit"):
 		target.call("projectile_hit", damage, direction)
 

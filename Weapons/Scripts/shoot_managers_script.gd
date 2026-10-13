@@ -131,7 +131,7 @@ func hitscan_shot(point_of_collision_hitscan : Vector3) -> void:
 			damage /= 6.0
 		if target.has_method("take_damage"):
 			if target.is_in_group("Enemies") or target.is_in_group("enemy"):
-				target.call("take_damage", maxi(1, roundi(damage)), direction)
+				target.call("take_damage", maxi(1, roundi(damage)), direction, hit.position)
 			else:
 				target.call("take_damage", maxi(1, roundi(damage)))
 		elif target.has_method("hitscan_hit"):

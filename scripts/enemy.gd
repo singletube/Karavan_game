@@ -330,7 +330,7 @@ func _attack_exploder() -> void:
 
 	_die()
 
-func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO) -> void:
+func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> void:
 	if is_dead:
 		return
 
@@ -357,8 +357,11 @@ func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO) -> void:
 	sprite.scale = Vector3(1.22, 0.82, 1.22)
 	hit_tween.tween_property(sprite, "scale", Vector3(1.0, 1.0, 1.0), 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
-	# 3. Визуальный спавн брызг масла, крови и металлических искр
-	_spawn_hit_sparks(global_position + Vector3(0.0, 0.9, 0.0))
+	# Кровь появляется прямо в точке попадания и разлетается против направления пули.
+	var blood_position := hit_position
+	if blood_position == Vector3.ZERO:
+		blood_position = global_position + Vector3(0.0, 0.9, 0.0)
+	_spawn_hit_blood(blood_position, hit_direction)
 
 	if hit_sound:
 		hit_sound.play()
@@ -366,30 +369,42 @@ func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO) -> void:
 	if health <= 0:
 		_die()
 
-func hitscan_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO, _hit_position: Vector3 = Vector3.ZERO) -> void:
-	take_damage(int(damage), hit_direction)
+func hitscan_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> void:
+	take_damage(int(damage), hit_direction, hit_position)
 
-func projectile_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO) -> void:
-	take_damage(int(damage), hit_direction)
+func projectile_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> void:
+	take_damage(int(damage), hit_direction, hit_position)
 
-func _spawn_hit_sparks(pos: Vector3) -> void:
+func _spawn_hit_blood(pos: Vector3, hit_direction: Vector3) -> void:
 	var p := CPUParticles3D.new()
+	p.name = "HitBlood"
 	p.emitting = true
 	p.one_shot = true
-	p.explosiveness = 0.95
-	p.amount = 14
-	p.lifetime = 0.35
-	p.direction = Vector3(randf_range(-1.0, 1.0), randf_range(0.3, 1.0), randf_range(-1.0, 1.0)).normalized()
-	p.spread = 45.0
-	p.initial_velocity_min = 3.5
-	p.initial_velocity_max = 7.0
-	p.gravity = Vector3(0.0, -14.0, 0.0)
-	p.color = Color(1.0, 0.35, 0.15, 1.0) # Огненно-металлические искры киборга
-	p.scale_amount_min = 0.04
-	p.scale_amount_max = 0.12
+	p.explosiveness = 1.0
+	p.amount = 18
+	p.lifetime = 0.55
+	var spray_direction := Vector3.UP
+	if hit_direction.length_squared() > 0.01:
+		spray_direction += -hit_direction.normalized() * 0.55
+	p.direction = spray_direction.normalized()
+	p.spread = 38.0
+	p.initial_velocity_min = 2.0
+	p.initial_velocity_max = 4.5
+	p.gravity = Vector3(0.0, -10.0, 0.0)
+	p.color = Color(0.8, 0.015, 0.035, 1.0)
+	p.scale_amount_min = 0.8
+	p.scale_amount_max = 1.5
+	var droplet_material := StandardMaterial3D.new()
+	droplet_material.albedo_color = Color(0.8, 0.015, 0.035, 1.0)
+	droplet_material.roughness = 0.35
+	var droplet_mesh := SphereMesh.new()
+	droplet_mesh.radius = 0.025
+	droplet_mesh.height = 0.05
+	droplet_mesh.material = droplet_material
+	p.draw_pass_1 = droplet_mesh
 	get_parent().add_child(p)
 	p.global_position = pos
-	var timer := get_tree().create_timer(0.4)
+	var timer := get_tree().create_timer(p.lifetime + 0.1)
 	timer.timeout.connect(func(): if is_instance_valid(p): p.queue_free())
 
 func _die() -> void:

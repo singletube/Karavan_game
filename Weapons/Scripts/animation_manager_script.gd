@@ -2,6 +2,8 @@ extends Node3D
 
 class_name AnimationManager
 
+const WEAPON_CAMERA_RIGHT_OFFSET := 0.25
+
 var current_weapon : WeaponSlot
 
 #use persistent (global) variables to prevent the values calculated in lerp from being overwritten every frame, thereby avoiding erratic movement
@@ -100,7 +102,7 @@ func weapon_bob_calculus(vel : float, delta : float) -> Vector3:
 	return current_bob_val
 	
 func weapon_model_positioning(tilt_values : Vector3, sway_values : Array[Vector3], bob_values : Vector3) -> void:
-	current_weapon.model.position = current_weapon.resources.pos_val[0] + sway_values[0] + bob_values
+	current_weapon.model.position = current_weapon.resources.pos_val[0] + Vector3(WEAPON_CAMERA_RIGHT_OFFSET, 0.0, 0.0) + sway_values[0] + bob_values
 	current_weapon.model.rotation = current_weapon.resources.pos_val[1] + sway_values[1] + tilt_values
 	
 	
