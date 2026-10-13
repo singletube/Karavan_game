@@ -136,8 +136,8 @@ func _publish_weapon_status(force: bool) -> void:
 		return
 	var resource: WeaponResource = manager.current_weapon.resources
 	var ammo_per_shot: int = maxi(1, resource.nb_proj_shots_at_same_time)
-	var magazine: int = ceili(float(resource.total_ammo_in_mag) / ammo_per_shot)
-	var reserve: int = ceili(float(manager.ammo_manager.ammo_dict.get(resource.ammo_type, 0)) / ammo_per_shot)
+	var magazine: int = floori(float(resource.total_ammo_in_mag) / ammo_per_shot)
+	var reserve: int = floori(float(manager.ammo_manager.ammo_dict.get(resource.ammo_type, 0)) / ammo_per_shot)
 	if force or resource.weapon_id != _last_weapon_id:
 		_last_weapon_id = resource.weapon_id
 		weapon_changed.emit(resource.weapon_name, null, magazine, reserve)
@@ -155,8 +155,8 @@ func get_combat_status() -> Dictionary:
 	return {
 		"health": health,
 		"weapon_name": resource.weapon_name,
-		"magazine": ceili(float(resource.total_ammo_in_mag) / ammo_per_shot),
-		"reserve": ceili(float(manager.ammo_manager.ammo_dict.get(resource.ammo_type, 0)) / ammo_per_shot),
+		"magazine": floori(float(resource.total_ammo_in_mag) / ammo_per_shot),
+		"reserve": floori(float(manager.ammo_manager.ammo_dict.get(resource.ammo_type, 0)) / ammo_per_shot),
 	}
 
 func take_damage(amount: int, _hit_direction: Vector3 = Vector3.ZERO, _hit_position: Vector3 = Vector3.ZERO) -> void:

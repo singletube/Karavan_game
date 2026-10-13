@@ -4,6 +4,7 @@ extends Control
 @onready var health_label      : Label       = $BottomBar/HBox/HealthLabel
 @onready var ammo_label        : Label       = $BottomBar/HBox/AmmoLabel
 @onready var weapon_name_label : Label       = $BottomBar/HBox/WeaponNameLabel
+@onready var slot_hint_label   : Label       = $BottomBar/HBox/SlotHintLabel
 @onready var crosshair         : Control     = $Crosshair
 @onready var hit_flash         : ColorRect   = $HitFlash
 @onready var death_screen      : Control     = $DeathScreen
@@ -18,6 +19,9 @@ var target_player : Node = null
 func _ready() -> void:
 	hit_flash.modulate.a = 0.0
 	death_screen.hide()
+	ammo_label.add_theme_font_size_override("font_size", 17)
+	slot_hint_label.add_theme_font_size_override("font_size", 12)
+	slot_hint_label.text = "1–5: оружие · Колесо: смена · ЛКМ: огонь · R: перезарядка · C/X: присесть"
 	_setup_wave_ui()
 
 	await get_tree().process_frame
@@ -168,7 +172,7 @@ func _on_health_changed(value: int) -> void:
 	_flash_damage()
 
 func _on_ammo_changed(current: int, total: int) -> void:
-	ammo_label.text = "%d / %d" % [current, total]
+	ammo_label.text = "В МАГАЗИНЕ: %d    В ЗАПАСЕ: %d" % [current, total]
 
 func _on_weapon_changed(w_name: String, _tex: Texture2D, cur_ammo: int, tot_ammo: int) -> void:
 	var display_names := {
@@ -179,7 +183,7 @@ func _on_weapon_changed(w_name: String, _tex: Texture2D, cur_ammo: int, tot_ammo
 		"RocketLauncher": "РАКЕТНИЦА",
 	}
 	weapon_name_label.text = display_names.get(w_name, w_name)
-	ammo_label.text = "%d / %d" % [cur_ammo, tot_ammo]
+	ammo_label.text = "В МАГАЗИНЕ: %d    В ЗАПАСЕ: %d" % [cur_ammo, tot_ammo]
 
 func _on_player_died() -> void:
 	death_screen.show()
