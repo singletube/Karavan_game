@@ -68,23 +68,13 @@ func shoot() -> void:
 		
 func get_camera_fov() -> Vector3:  
 	var camera : Camera3D = %Camera
-	var window : Window = get_window()
-	var viewport : Vector2i
-	
-	#match viewport to window size, to ensure that the raycast goes in the right direction
-	match window.content_scale_mode:
-		window.CONTENT_SCALE_MODE_VIEWPORT:
-			viewport = window.content_scale_size
-		window.CONTENT_SCALE_MODE_CANVAS_ITEMS:
-			viewport = window.content_scale_size
-		window.CONTENT_SCALE_MODE_DISABLED:
-			viewport = window.get_size()
-			
-	#Start raycast in camera position, and launch it in camera direction 
-	var raycast_start : Vector3 = camera.project_ray_origin(viewport/2.0)
+	# Use the actual camera viewport, not the window size: viewport stretch and
+	# embedded viewports otherwise offset the ray from the screen-center crosshair.
+	var viewport_center: Vector2 = camera.get_viewport().get_visible_rect().size * 0.5
+	var raycast_start : Vector3 = camera.project_ray_origin(viewport_center)
 	var raycast_end : Vector3 = Vector3.ZERO
-	if current_weapon.resources.type == current_weapon.resources.TYPES.HITSCAN: raycast_end = raycast_start + camera.project_ray_normal(viewport/2) * current_weapon.resources.max_range 
-	if current_weapon.resources.type == current_weapon.resources.TYPES.PROJECTILE: raycast_end = raycast_start + camera.project_ray_normal(viewport/2) * 280
+	var ray_length: float = current_weapon.resources.max_range if current_weapon.resources.type == current_weapon.resources.TYPES.HITSCAN else 280.0
+	raycast_end = raycast_start + camera.project_ray_normal(viewport_center) * ray_length
 	
 	#Create intersection space to contain possible collisions 
 	var new_intersection : PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(raycast_start, raycast_end)
@@ -101,14 +91,10 @@ func get_camera_fov() -> Vector3:
 		
 func hitscan_shot(point_of_collision_hitscan : Vector3) -> void:
 	var camera: Camera3D = %Camera
-	var origin: Vector3 = camera.global_position
+	# The hit ray must be the same ray used to find the crosshair's collision point.
+	# Applying a second random spread here made impacts drift away from the reticle.
+	var origin: Vector3 = camera.project_ray_origin(camera.get_viewport().get_visible_rect().size * 0.5)
 	var direction: Vector3 = (point_of_collision_hitscan - origin).normalized()
-	var spread := Vector3(
-		randf_range(current_weapon.resources.min_spread, current_weapon.resources.max_spread),
-		randf_range(current_weapon.resources.min_spread, current_weapon.resources.max_spread),
-		randf_range(current_weapon.resources.min_spread, current_weapon.resources.max_spread)
-	)
-	direction = (direction + camera.global_transform.basis * spread).normalized()
 	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * current_weapon.resources.max_range)
 	query.exclude = [weapon_manager.get_parent().get_rid()]
 	query.collide_with_areas = true
@@ -155,13 +141,11 @@ func _find_damage_target(collider: Object) -> Node:
 	return null
 			
 func projectile_shot(point_of_collision_projectile : Vector3) -> void:
-	rng = RandomNumberGenerator.new()
-	
-	#set up weapon shot sprad 
-	var spread : Vector3 = Vector3(rng.randf_range(current_weapon.resources.min_spread, current_weapon.resources.max_spread), rng.randf_range(current_weapon.resources.min_spread, current_weapon.resources.max_spread), rng.randf_range(current_weapon.resources.min_spread, current_weapon.resources.max_spread))
-	
-	#Calculate direction of the projectile
-	var projectile_direction : Vector3 = ((point_of_collision_projectile - current_weapon.attack_point.get_global_transform().origin).normalized() + spread)
+	# Aim from the muzzle through the point found by the camera-center ray.
+	# This makes the projectile converge on the crosshair instead of flying off at
+	# an unrelated world-axis spread offset.
+	var muzzle_origin: Vector3 = current_weapon.attack_point.global_position
+	var projectile_direction: Vector3 = (point_of_collision_projectile - muzzle_origin).normalized()
 	
 	#Instantiate projectile
 	var proj_ins : Projectile = current_weapon.resources.proj_ref.instantiate()

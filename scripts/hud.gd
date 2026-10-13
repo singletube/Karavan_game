@@ -151,6 +151,14 @@ func connect_player(p: Node) -> void:
 		p.player_died.connect(_on_player_died)
 	if p.has_signal("weapon_changed") and not p.is_connected("weapon_changed", _on_weapon_changed):
 		p.weapon_changed.connect(_on_weapon_changed)
+	# Signals can be emitted before the HUD finds a newly spawned player. Pull
+	# the current state now so the initial weapon and ammo are never stale.
+	if p.has_method("get_combat_status"):
+		var status: Dictionary = p.call("get_combat_status")
+		if status.has("health"):
+			_on_health_changed(int(status.health))
+		if status.has("weapon_name"):
+			_on_weapon_changed(str(status.weapon_name), null, int(status.magazine), int(status.reserve))
 
 func _on_health_changed(value: int) -> void:
 	health_bar.value = value
@@ -163,7 +171,14 @@ func _on_ammo_changed(current: int, total: int) -> void:
 	ammo_label.text = "%d / %d" % [current, total]
 
 func _on_weapon_changed(w_name: String, _tex: Texture2D, cur_ammo: int, tot_ammo: int) -> void:
-	weapon_name_label.text = w_name
+	var display_names := {
+		"Pistol": "ПИСТОЛЕТ",
+		"Shotgun": "ДРОБОВИК",
+		"AssaultRifle": "АВТОМАТ",
+		"SniperRifle": "СНАЙПЕРСКАЯ ВИНТОВКА",
+		"RocketLauncher": "РАКЕТНИЦА",
+	}
+	weapon_name_label.text = display_names.get(w_name, w_name)
 	ammo_label.text = "%d / %d" % [cur_ammo, tot_ammo]
 
 func _on_player_died() -> void:
