@@ -50,7 +50,11 @@ func shoot() -> void:
 					if current_weapon.resources.type == current_weapon.resources.TYPES.HITSCAN: hitscan_shot(point_of_collision)
 					elif current_weapon.resources.type == current_weapon.resources.TYPES.PROJECTILE: projectile_shot(point_of_collision)
 					
-				if current_weapon.resources.show_muzzle_flash: weapon_manager.display_muzzle_flash()
+				var player := weapon_manager.get_parent()
+				if player.has_method("play_legacy_muzzle_flash"):
+					player.play_legacy_muzzle_flash(current_weapon.muzzle_flash_spawner.global_transform)
+				elif current_weapon.resources.show_muzzle_flash:
+					weapon_manager.display_muzzle_flash()
 				
 				weapon_manager.camera_recoil_holder.set_recoil_values(current_weapon.resources.base_rot_speed, current_weapon.resources.target_rot_speed)
 				weapon_manager.camera_recoil_holder.add_recoil(current_weapon.resources.recoil_val)

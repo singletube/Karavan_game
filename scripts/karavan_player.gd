@@ -9,6 +9,8 @@ signal ammo_changed(current: int, total: int)
 signal weapon_changed(w_name: String, tex: Texture2D, cur_ammo: int, tot_ammo: int)
 signal player_died
 
+const LEGACY_FLASH_TEXTURE: Texture2D = preload("res://assets/textures/muzzle_flash.png")
+
 var health: int = 100
 var is_dead: bool = false
 var target_pos: Vector3 = Vector3.ZERO
@@ -16,6 +18,7 @@ var target_rot_y: float = 0.0
 var _last_weapon_id: int = -1
 var _last_magazine: int = -1
 var _last_reserve: int = -1
+var _legacy_muzzle_flash: Node3D
 
 func _enter_tree() -> void:
 	if name.is_valid_int():
@@ -24,6 +27,7 @@ func _enter_tree() -> void:
 func _ready() -> void:
 	super()
 	_add_crouch_key()
+	_build_legacy_muzzle_flash()
 	target_pos = global_position
 	target_rot_y = rotation.y
 	await get_tree().process_frame
@@ -82,6 +86,43 @@ func _add_crouch_key() -> void:
 	var crouch_event := InputEventKey.new()
 	crouch_event.physical_keycode = KEY_C
 	InputMap.action_add_event(&"crouch", crouch_event)
+
+func _build_legacy_muzzle_flash() -> void:
+	_legacy_muzzle_flash = Node3D.new()
+	_legacy_muzzle_flash.name = "LegacyMuzzleFlash"
+	_legacy_muzzle_flash.visible = false
+	add_child(_legacy_muzzle_flash)
+
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.8, 0.3, 1.0)
+	light.light_energy = 8.0
+	light.omni_range = 3.0
+	_legacy_muzzle_flash.add_child(light)
+
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(1.0, 0.9, 0.3, 1.0)
+	material.albedo_texture = LEGACY_FLASH_TEXTURE
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+
+	var flash_mesh := MeshInstance3D.new()
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.22, 0.22)
+	flash_mesh.mesh = quad
+	flash_mesh.material_override = material
+	_legacy_muzzle_flash.add_child(flash_mesh)
+
+func play_legacy_muzzle_flash(muzzle_transform: Transform3D) -> void:
+	if _legacy_muzzle_flash == null:
+		return
+	_legacy_muzzle_flash.global_transform = muzzle_transform
+	_legacy_muzzle_flash.show()
+	var timer := get_tree().create_timer(0.05)
+	timer.timeout.connect(func():
+		if is_instance_valid(_legacy_muzzle_flash):
+			_legacy_muzzle_flash.hide()
+	)
 
 @rpc("any_peer", "unreliable_ordered")
 func sync_state(pos: Vector3, rot_y: float) -> void:
