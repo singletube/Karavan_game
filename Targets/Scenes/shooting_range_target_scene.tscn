@@ -1,7 +1,7 @@
 [gd_scene format=4 uid="uid://difyxh81clvxp"]
 
-[ext_resource type="Script" uid="uid://0mu6mj41uch3" path="res://Godot-Simple-FPS-Weapon-System-Asset/addons/JehenoSimpleFPSWeaponSystem/Targets/Scripts/shooting_range_target_script.gd" id="1_t3p3u"]
-[ext_resource type="Script" uid="uid://cnw6x7g8unlvp" path="res://Godot-Simple-FPS-Weapon-System-Asset/addons/JehenoSimpleFPSWeaponSystem/Targets/Scripts/shooting_range_target_head_script.gd" id="3_khj2i"]
+[ext_resource type="Script" uid="uid://0mu6mj41uch3" path="res://Targets/Scripts/shooting_range_target_script.gd" id="1_t3p3u"]
+[ext_resource type="Script" uid="uid://cnw6x7g8unlvp" path="res://Targets/Scripts/shooting_range_target_head_script.gd" id="3_khj2i"]
 
 [sub_resource type="CompressedTexture2D" id="CompressedTexture2D_jmx7l"]
 load_path = "res://.godot/imported/Material.004_baseColor.png-71e6961f02f10f08eeaa9e1ff3196998.s3tc.ctex"

@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://cbkopxy3q6dc3"]
 
-[ext_resource type="Script" uid="uid://c8a2kystypxdm" path="res://Godot-Simple-FPS-Weapon-System-Asset/addons/JehenoSimpleFPSWeaponSystem/Targets/Scripts/shooting_range_target_manager_script.gd" id="1_5mpkv"]
-[ext_resource type="PackedScene" uid="uid://difyxh81clvxp" path="res://Godot-Simple-FPS-Weapon-System-Asset/addons/JehenoSimpleFPSWeaponSystem/Targets/Scenes/shooting_range_target_scene.tscn" id="2_2hmmh"]
+[ext_resource type="Script" uid="uid://c8a2kystypxdm" path="res://Targets/Scripts/shooting_range_target_manager_script.gd" id="1_5mpkv"]
+[ext_resource type="PackedScene" uid="uid://difyxh81clvxp" path="res://Targets/Scenes/shooting_range_target_scene.tscn" id="2_2hmmh"]
 
 [node name="ShootingRange" type="Node3D" unique_id=1367509212]
 script = ExtResource("1_5mpkv")

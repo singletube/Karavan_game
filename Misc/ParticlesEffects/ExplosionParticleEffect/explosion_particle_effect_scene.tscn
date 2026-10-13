@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://spdmg8vdtjiu"]
 
-[ext_resource type="Script" uid="uid://dmjnvc52tc7xw" path="res://Godot-Simple-FPS-Weapon-System-Asset/addons/JehenoSimpleFPSWeaponSystem/Misc/ParticlesEffects/ExplosionParticleEffect/explosion_particle_effect_script.gd" id="1_d4lx1"]
+[ext_resource type="Script" uid="uid://dmjnvc52tc7xw" path="res://Misc/ParticlesEffects/ExplosionParticleEffect/explosion_particle_effect_script.gd" id="1_d4lx1"]
 
 [sub_resource type="Curve" id="Curve_nv6qg"]
 _data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(0.749049, 1), 0.0, 0.0, 0, 0, Vector2(1, 0.0173228), 0.0, 0.0, 0, 0]

@@ -2,9 +2,9 @@ extends Node
 
 class_name StateMachine
 
-@export var initial_state : State
+@export var initial_state : PlayerMovementState
 
-var curr_state : State
+var curr_state : PlayerMovementState
 var curr_state_name  : String
 var states : Dictionary = {}
 
@@ -15,7 +15,7 @@ signal change_fov
 func _ready() -> void:
 	#get all the state childrens
 	for child in get_children():
-		if child is State:
+		if child is PlayerMovementState:
 			states[child.name.to_lower()] = child
 			child.transitioned.connect(on_state_child_transition)
 			
@@ -31,7 +31,7 @@ func _process(delta : float) -> void:
 func _physics_process(delta: float) -> void:
 	if curr_state: curr_state.physics_update(delta)
 	
-func on_state_child_transition(state : State, new_state_name : String) -> void:
+func on_state_child_transition(state : PlayerMovementState, new_state_name : String) -> void:
 	#manage the transition from one state to another
 	
 	if state != curr_state: return

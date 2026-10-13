@@ -3,7 +3,7 @@ extends Node
 const DEFAULT_PORT := 7000
 const MAX_PLAYERS  := 16
 
-const PLAYER_SCENE = preload("res://scenes/player.tscn")
+const PLAYER_SCENE = preload("res://PlayerCharacter/player_character_scene.tscn")
 
 @onready var world: Node3D = get_tree().current_scene
 var players_container: Node3D

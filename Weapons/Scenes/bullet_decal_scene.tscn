@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://0gq5270ogtxu"]
 
-[ext_resource type="Texture2D" uid="uid://cf1nbn3eqdof8" path="res://Godot-Simple-FPS-Weapon-System-Asset/addons/JehenoSimpleFPSWeaponSystem/Weapons/Images/bullet_hole_decal.png" id="1_d0hng"]
+[ext_resource type="Texture2D" uid="uid://cf1nbn3eqdof8" path="res://Weapons/Images/bullet_hole_decal.png" id="1_d0hng"]
 
 [node name="BulletDecal" type="Node3D" unique_id=1795303468]
 

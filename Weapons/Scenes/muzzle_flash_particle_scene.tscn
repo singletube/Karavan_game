@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://x8oniabn746q"]
 
-[ext_resource type="Texture2D" uid="uid://br3rf0u4bxs67" path="res://Godot-Simple-FPS-Weapon-System-Asset/addons/JehenoSimpleFPSWeaponSystem/Weapons/Images/muzzle_flash.png" id="1_f6nr6"]
+[ext_resource type="Texture2D" uid="uid://br3rf0u4bxs67" path="res://Weapons/Images/muzzle_flash.png" id="1_f6nr6"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_64eh8"]
 transparency = 1

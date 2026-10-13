@@ -1,6 +1,6 @@
 [gd_scene format=4 uid="uid://pjv5ptit5tvg"]
 
-[ext_resource type="Script" uid="uid://bp4miwy6defwl" path="res://Godot-Simple-FPS-Weapon-System-Asset/addons/JehenoSimpleFPSWeaponSystem/Weapons/Scripts/Ammunition/ammo_refiller_script.gd" id="1_bsrep"]
+[ext_resource type="Script" uid="uid://bp4miwy6defwl" path="res://Weapons/Scripts/Ammunition/ammo_refiller_script.gd" id="1_bsrep"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_diulm"]
 size = Vector3(1.90394, 1.28174, 2.08409)

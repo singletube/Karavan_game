@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 TextureGen="*res://scripts/texture_gen.gd"
 NetworkManager="*res://scripts/network_manager.gd"
+MusicManager="*res://scripts/music_manager.gd"
 
 [display]
 

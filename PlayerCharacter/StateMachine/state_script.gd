@@ -1,6 +1,6 @@
 extends Node
 
-class_name State
+class_name PlayerMovementState
 
 signal transitioned
 

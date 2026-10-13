@@ -49,8 +49,8 @@ var walk_frame_i := 0
 var is_dead      := false
 var player       : Node3D = null
 
-enum State { IDLE, CHASE, ATTACK, DEAD }
-var state : State = State.IDLE
+enum EnemyState { IDLE, CHASE, ATTACK, DEAD }
+var state : EnemyState = EnemyState.IDLE
 
 func _ready() -> void:
 	if cyborg_model_3d:
@@ -155,8 +155,8 @@ func _physics_process(delta: float) -> void:
 				cyborg_model_3d.look_at(look_pos, Vector3.UP)
 				cyborg_model_3d.rotate_y(PI) # Разворот лицом вперед
 
-		var is_moving: bool = (state == State.CHASE and velocity.length_squared() > 0.1)
-		var is_atk: bool = (state == State.ATTACK)
+		var is_moving: bool = (state == EnemyState.CHASE and velocity.length_squared() > 0.1)
+		var is_atk: bool = (state == EnemyState.ATTACK)
 		var is_hurting: bool = (hurt_timer > 0.0)
 		cyborg_model_3d.update_animation(delta, is_moving, move_speed, is_atk, is_hurting, false)
 
@@ -180,15 +180,15 @@ func _update_target_and_state() -> void:
 
 	player = closest
 	if not player:
-		state = State.IDLE
+		state = EnemyState.IDLE
 		return
 
 	if min_dist <= attack_reach:
-		state = State.ATTACK
+		state = EnemyState.ATTACK
 	elif min_dist <= CHASE_RANGE:
-		state = State.CHASE
+		state = EnemyState.CHASE
 	else:
-		state = State.IDLE
+		state = EnemyState.IDLE
 
 func _process_movement_and_animation(delta: float) -> void:
 	if hurt_timer > 0.0:
@@ -199,12 +199,12 @@ func _process_movement_and_animation(delta: float) -> void:
 		return
 
 	match state:
-		State.IDLE:
+		EnemyState.IDLE:
 			velocity.x = move_toward(velocity.x, 0.0, move_speed * 4.0 * delta)
 			velocity.z = move_toward(velocity.z, 0.0, move_speed * 4.0 * delta)
 			sprite.frame = FRAME_IDLE
 
-		State.CHASE:
+		EnemyState.CHASE:
 			var dir := Vector3.ZERO
 			nav_agent.target_position = player.global_position
 			var next_pos: Vector3 = nav_agent.get_next_path_position()
@@ -244,7 +244,7 @@ func _process_movement_and_animation(delta: float) -> void:
 				walk_frame_i = (walk_frame_i + 1) % FRAMES_WALK.size()
 				sprite.frame = FRAMES_WALK[walk_frame_i]
 
-		State.ATTACK:
+		EnemyState.ATTACK:
 			velocity.x = move_toward(velocity.x, 0.0, move_speed * 6.0 * delta)
 			velocity.z = move_toward(velocity.z, 0.0, move_speed * 6.0 * delta)
 
@@ -366,6 +366,12 @@ func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO) -> void:
 	if health <= 0:
 		_die()
 
+func hitscan_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO, _hit_position: Vector3 = Vector3.ZERO) -> void:
+	take_damage(int(damage), hit_direction)
+
+func projectile_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO) -> void:
+	take_damage(int(damage), hit_direction)
+
 func _spawn_hit_sparks(pos: Vector3) -> void:
 	var p := CPUParticles3D.new()
 	p.emitting = true
@@ -390,7 +396,7 @@ func _die() -> void:
 	if is_dead:
 		return
 	is_dead = true
-	state = State.DEAD
+	state = EnemyState.DEAD
 	velocity = Vector3.ZERO
 	shape.disabled = true
 

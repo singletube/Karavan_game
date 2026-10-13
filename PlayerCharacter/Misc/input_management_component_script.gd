@@ -92,6 +92,7 @@ func build_default_keybinding() -> void:
 			{ "type": "key", "code": Key.KEY_SHIFT }
 		],
 		crouch_action : [
+			{ "type": "key", "code": Key.KEY_C },
 			{ "type": "key", "code": Key.KEY_X }
 		],
 		jump_action : [

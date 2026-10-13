@@ -1,4 +1,4 @@
-extends State
+extends PlayerMovementState
 
 class_name JumpState
 
