@@ -449,8 +449,294 @@ func on_interact(player: Node) -> void:
 	return crate_root
 
 # =========================================================================
+# 4. АВТОЗАВАЛ ИЗ РАЗБИТЫХ МАШИН (WRECK BLOCKADE)
+# =========================================================================
+static func create_wreck_blockade() -> Node3D:
+	_ensure_materials()
+	var root := Node3D.new()
+	root.name = "WreckBlockade"
+	root.add_to_group("road_obstacle")
+	root.add_to_group("interactive")
+
+	root.set_meta("prompt_text", "РАЗОБРАТЬ АВТОЗАВАЛ (Удерживайте [E])")
+	root.set_meta("requires_hold", true)
+	root.set_meta("hold_duration", 2.4)
+	root.set_meta("health", 65)
+
+	var script_code := """
+extends Node3D
+
+var health: int = 65
+var is_cleared: bool = false
+var snd_explosion: AudioStream = preload("res://assets/audio/explosion.wav")
+
+func on_interact_completed(player: Node) -> void:
+	if is_cleared:
+		return
+	is_cleared = true
+	_spawn_debris_particles()
+	if player and player.has_method("notify_hud"):
+		player.notify_hud("АВТОЗАВАЛ РАСЧИЩЕН! ПУТЬ СВОБОДЕН", Color(0.3, 1.0, 0.4))
+	queue_free()
+
+func hitscan_hit(damage: float, _hit_dir: Vector3 = Vector3.ZERO, _hit_pos: Vector3 = Vector3.ZERO) -> void:
+	take_damage(int(damage))
+
+func projectile_hit(damage: float, _hit_dir: Vector3 = Vector3.ZERO, _hit_pos: Vector3 = Vector3.ZERO) -> void:
+	take_damage(int(damage))
+
+func take_damage(amt: int) -> void:
+	if is_cleared:
+		return
+	health -= amt
+	if health <= 0:
+		detonate()
+
+func detonate() -> void:
+	if is_cleared:
+		return
+	is_cleared = true
+
+	var ap := AudioStreamPlayer3D.new()
+	ap.stream = snd_explosion
+	ap.pitch_scale = randf_range(0.85, 1.05)
+	ap.max_distance = 65.0
+	get_parent().add_child(ap)
+	ap.global_position = global_position
+	ap.play()
+	ap.finished.connect(ap.queue_free)
+
+	_spawn_explosion_fx()
+
+	var enemies := get_tree().get_nodes_in_group("Enemies")
+	for e in enemies:
+		if is_instance_valid(e) and e is CharacterBody3D:
+			var dist: float = global_position.distance_to(e.global_position)
+			if dist <= 8.0:
+				var dmg: int = int(140.0 * (1.0 - dist / 8.0))
+				if e.has_method("take_damage"):
+					e.take_damage(dmg, (e.global_position - global_position).normalized(), global_position)
+
+	var players := get_tree().get_nodes_in_group("player")
+	for p in players:
+		if is_instance_valid(p) and p.has_method("notify_hud"):
+			p.notify_hud("МАШИНЫ ВЗОРВАНЫ! ПРОЕЗД ОТКРЫТ", Color(1.0, 0.6, 0.2))
+
+	queue_free()
+
+func _spawn_explosion_fx() -> void:
+	var p := CPUParticles3D.new()
+	p.emitting = false
+	p.one_shot = true
+	p.explosiveness = 1.0
+	p.amount = 50
+	p.lifetime = 1.3
+	p.direction = Vector3.UP
+	p.spread = 85.0
+	p.initial_velocity_min = 8.0
+	p.initial_velocity_max = 18.0
+	p.gravity = Vector3(0.0, -9.8, 0.0)
+
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.4, 0.08)
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.3
+	sphere.height = 0.6
+	sphere.material = mat
+	p.mesh = sphere
+
+	get_parent().add_child(p)
+	p.global_position = global_position + Vector3(0.0, 1.2, 0.0)
+	p.emitting = true
+	p.finished.connect(p.queue_free)
+
+func _spawn_debris_particles() -> void:
+	var p := CPUParticles3D.new()
+	p.emitting = false
+	p.one_shot = true
+	p.explosiveness = 0.95
+	p.amount = 30
+	p.lifetime = 0.8
+	p.direction = Vector3.UP
+	p.spread = 70.0
+	p.initial_velocity_min = 4.0
+	p.initial_velocity_max = 8.0
+	p.gravity = Vector3(0.0, -12.0, 0.0)
+
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.35, 0.25, 0.18)
+	var box := BoxMesh.new()
+	box.size = Vector3(0.18, 0.18, 0.18)
+	box.material = mat
+	p.mesh = box
+
+	get_parent().add_child(p)
+	p.global_position = global_position + Vector3(0.0, 1.0, 0.0)
+	p.emitting = true
+	p.finished.connect(p.queue_free)
+"""
+	var c_script := GDScript.new()
+	c_script.source_code = script_code
+	c_script.reload()
+	root.set_script(c_script)
+
+	# 1. Первая разбитая ржавая машина (развернута под углом поперек левой стороны)
+	var car1 := Node3D.new()
+	car1.position = Vector3(-1.4, 0.0, 0.0)
+	car1.rotation = Vector3(deg_to_rad(6.0), deg_to_rad(35.0), deg_to_rad(-8.0))
+	root.add_child(car1)
+	_add_box(car1, Vector3(2.1, 0.75, 4.0), mat_metal_rusty, Vector3(0.0, 0.55, 0.0))
+	_add_box(car1, Vector3(1.7, 0.65, 2.0), mat_metal_rusty, Vector3(0.0, 1.20, -0.2))
+	# Колеса
+	_add_cyl(car1, 0.28, 0.42, 0.42, mat_metal_rusty, Vector3(-1.1, 0.42, 1.2), Vector3(0.0, 0.0, PI * 0.5))
+	_add_cyl(car1, 0.28, 0.42, 0.42, mat_metal_rusty, Vector3(1.1, 0.42, -1.2), Vector3(0.0, 0.0, PI * 0.5))
+
+	# 2. Вторая перевернутая машина поперек правой стороны дороги
+	var car2 := Node3D.new()
+	car2.position = Vector3(1.5, 0.0, 0.4)
+	car2.rotation = Vector3(deg_to_rad(12.0), deg_to_rad(-40.0), deg_to_rad(15.0))
+	root.add_child(car2)
+	_add_box(car2, Vector3(2.0, 0.7, 3.6), mat_metal_rusty, Vector3(0.0, 0.5, 0.0))
+	_add_box(car2, Vector3(1.6, 0.6, 1.8), mat_metal_rusty, Vector3(0.0, 1.1, -0.1))
+
+	# 3. Взрывоопасная бочка в эпицентре завала
+	var barrel := _add_cyl(root, 0.95, 0.34, 0.34, mat_barrel_red, Vector3(0.0, 0.48, -0.1))
+	_add_cyl(barrel, 0.12, 0.35, 0.35, mat_barrel_stripe, Vector3(0.0, 0.18, 0.0))
+	_add_cyl(barrel, 0.12, 0.35, 0.35, mat_barrel_stripe, Vector3(0.0, -0.18, 0.0))
+
+	# 4. Статичная коллизия перекрытия
+	var body := StaticBody3D.new()
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(5.2, 2.0, 2.4)
+	col.shape = shape
+	col.position = Vector3(0.0, 1.0, 0.0)
+	body.add_child(col)
+	root.add_child(body)
+
+	return root
+
+# =========================================================================
+# 5. КАМЕННЫЙ ОБВАЛ (ROCKFALL BLOCKADE)
+# =========================================================================
+static func create_rockfall_blockade() -> Node3D:
+	_ensure_materials()
+	var root := Node3D.new()
+	root.name = "RockfallBlockade"
+	root.add_to_group("road_obstacle")
+	root.add_to_group("interactive")
+
+	root.set_meta("prompt_text", "РАЗОБРАТЬ КАМЕННЫЙ ЗАВАЛ (Удерживайте [E])")
+	root.set_meta("requires_hold", true)
+	root.set_meta("hold_duration", 2.2)
+	root.set_meta("health", 50)
+
+	var script_code := """
+extends Node3D
+
+var health: int = 50
+var is_cleared: bool = false
+var snd_explosion: AudioStream = preload("res://assets/audio/explosion.wav")
+
+func on_interact_completed(player: Node) -> void:
+	if is_cleared:
+		return
+	is_cleared = true
+	_spawn_debris_particles()
+	if player and player.has_method("notify_hud"):
+		player.notify_hud("КАМНИ РАЗОБРАНЫ! ПУТЬ СВОБОДЕН", Color(0.3, 1.0, 0.4))
+	queue_free()
+
+func hitscan_hit(damage: float, _hit_dir: Vector3 = Vector3.ZERO, _hit_pos: Vector3 = Vector3.ZERO) -> void:
+	take_damage(int(damage))
+
+func projectile_hit(damage: float, _hit_dir: Vector3 = Vector3.ZERO, _hit_pos: Vector3 = Vector3.ZERO) -> void:
+	take_damage(int(damage))
+
+func take_damage(amt: int) -> void:
+	if is_cleared:
+		return
+	health -= amt
+	if health <= 0:
+		detonate()
+
+func detonate() -> void:
+	if is_cleared:
+		return
+	is_cleared = true
+
+	var ap := AudioStreamPlayer3D.new()
+	ap.stream = snd_explosion
+	ap.pitch_scale = randf_range(0.75, 0.95)
+	ap.max_distance = 60.0
+	get_parent().add_child(ap)
+	ap.global_position = global_position
+	ap.play()
+	ap.finished.connect(ap.queue_free)
+
+	_spawn_debris_particles()
+
+	var players := get_tree().get_nodes_in_group("player")
+	for p in players:
+		if is_instance_valid(p) and p.has_method("notify_hud"):
+			p.notify_hud("СКАЛЫ РАЗБИТЫ! КАРАВАН ИДЕТ ДАЛЬШЕ", Color(1.0, 0.8, 0.3))
+
+	queue_free()
+
+func _spawn_debris_particles() -> void:
+	var p := CPUParticles3D.new()
+	p.emitting = false
+	p.one_shot = true
+	p.explosiveness = 0.95
+	p.amount = 35
+	p.lifetime = 0.85
+	p.direction = Vector3.UP
+	p.spread = 75.0
+	p.initial_velocity_min = 5.0
+	p.initial_velocity_max = 10.0
+	p.gravity = Vector3(0.0, -14.0, 0.0)
+
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.55, 0.42, 0.28)
+	var box := BoxMesh.new()
+	box.size = Vector3(0.24, 0.24, 0.24)
+	box.material = mat
+	p.mesh = box
+
+	get_parent().add_child(p)
+	p.global_position = global_position + Vector3(0.0, 1.0, 0.0)
+	p.emitting = true
+	p.finished.connect(p.queue_free)
+"""
+	var c_script := GDScript.new()
+	c_script.source_code = script_code
+	c_script.reload()
+	root.set_script(c_script)
+
+	# Скальные глыбы поперек дороги
+	_add_box(root, Vector3(2.6, 1.5, 2.0), mat_concrete, Vector3(-1.2, 0.75, 0.0), Vector3(deg_to_rad(12.0), deg_to_rad(25.0), deg_to_rad(-6.0)))
+	_add_box(root, Vector3(2.4, 1.3, 1.8), mat_concrete, Vector3(1.3, 0.65, 0.2), Vector3(deg_to_rad(-8.0), deg_to_rad(-30.0), deg_to_rad(10.0)))
+	_add_box(root, Vector3(1.6, 0.9, 1.4), mat_concrete, Vector3(0.1, 0.45, -0.4), Vector3(deg_to_rad(15.0), deg_to_rad(10.0), deg_to_rad(5.0)))
+	# Сломанное бревно / столб
+	_add_cyl(root, 3.8, 0.15, 0.15, mat_beam_wood, Vector3(0.0, 0.85, 0.0), Vector3(deg_to_rad(12.0), deg_to_rad(75.0), deg_to_rad(78.0)))
+
+	# Статичная коллизия
+	var body := StaticBody3D.new()
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(5.0, 1.8, 2.2)
+	col.shape = shape
+	col.position = Vector3(0.0, 0.9, 0.0)
+	body.add_child(col)
+	root.add_child(body)
+
+	return root
+
+# =========================================================================
 # ВСПОМОГАТЕЛЬНЫЕ МЕШ-ФУНКЦИИ
 # =========================================================================
+
 static func _add_box(parent: Node3D, sz: Vector3, mat: Material, pos: Vector3 = Vector3.ZERO, rot: Vector3 = Vector3.ZERO) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var box := BoxMesh.new()

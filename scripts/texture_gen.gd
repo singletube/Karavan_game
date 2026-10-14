@@ -1895,4 +1895,3 @@ static func _generate_sand_puff_image() -> Image:
 				img.set_pixel(x, y, Color(sand_color.r, sand_color.g, sand_color.b, alpha))
 
 	return img
-

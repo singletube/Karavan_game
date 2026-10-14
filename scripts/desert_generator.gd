@@ -175,45 +175,80 @@ func _build_chunk_floor(chunk: Node3D) -> void:
 func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGenerator) -> void:
 	var is_spawn_center: bool = (coord == Vector2i(0, 0))
 	var half: float = (chunk_size * 0.5) - 3.0
+	var exclusion_zones: Array[Vector3] = [] # x, z, radius
 
-	# 0. Дорожные события и контрольные точки на центральном тракте (coord.x == 0)
-	var has_barricade: bool = false
-	var has_gas_station: bool = false
-	var has_oasis: bool = false
+	if is_spawn_center:
+		exclusion_zones.append(Vector3(0.0, 0.0, 16.0))
 
+	# 0. Процедурные случайные события на центральном тракте каравана (coord.x == 0)
+	# Препятствия встречаются заметно чаще, чем ништяки (в соотношении ~3:1)
 	if coord.x == 0 and coord.y < 0:
-		var step_mod: int = abs(coord.y) % 4
-		if step_mod == 2:
-			# Баррикада с взрывоопасными бочками прямо поперек дороги (караван остановится!)
-			var barricade := RoadEvents3D.create_road_barricade()
-			barricade.position = Vector3(0.0, 0.0, 0.0)
-			chunk.add_child(barricade)
-			has_barricade = true
-		elif step_mod == 1:
-			# Заброшенная заправка с ящиком боеприпасов и топлива справа от дороги
-			var gas_station := RoadEvents3D.create_gas_station()
-			gas_station.position = Vector3(14.0, 0.0, 0.0)
-			gas_station.rotation.y = deg_to_rad(-90.0)
-			chunk.add_child(gas_station)
-			has_gas_station = true
-		elif step_mod == 3:
-			# Пустынный оазис с водоемом, пальмами и древним сундуком слева от дороги
-			var oasis := RoadEvents3D.create_oasis()
-			oasis.position = Vector3(-14.5, 0.0, 0.0)
-			chunk.add_child(oasis)
-			has_oasis = true
+		# 75% вероятность наличия дорожного события в чанке
+		if rng.randf() < 0.75:
+			var event_roll: float = rng.randf()
+			if event_roll < 0.72:
+				# --- ПРЕПЯТСТВИЕ (Караван останавливается, игроку нужно расчистить!) ---
+				var obst_type: int = rng.randi() % 3
+				var obst_node: Node3D = null
+				match obst_type:
+					0:
+						# Баррикада с взрывоопасными бочками
+						obst_node = RoadEvents3D.create_road_barricade()
+					1:
+						# Автозавал из разбитых ржавых машин
+						obst_node = RoadEvents3D.create_wreck_blockade()
+					_:
+						# Каменный обвал со скалами и балками
+						obst_node = RoadEvents3D.create_rockfall_blockade()
+
+				# Случайное смещение по Z вдоль дороги (препятствия возникают на разном расстоянии!)
+				var obst_z: float = rng.randf_range(-32.0, 32.0)
+				obst_node.position = Vector3(0.0, 0.0, obst_z)
+				chunk.add_child(obst_node)
+				exclusion_zones.append(Vector3(0.0, obst_z, 14.0))
+
+			else:
+				# --- НИШТЯК (Заброшенная заправка или оазис с лутом) ---
+				var goodie_type: int = rng.randi() % 2
+				var side_x: float = 14.5 if rng.randf() < 0.5 else -14.5
+				var goodie_z: float = rng.randf_range(-25.0, 25.0)
+				var goodie_node: Node3D = null
+
+				if goodie_type == 0:
+					# Заброшенная заправка с ящиком патронов и топлива
+					goodie_node = RoadEvents3D.create_gas_station()
+					goodie_node.rotation.y = deg_to_rad(-90.0 if side_x > 0.0 else 90.0)
+				else:
+					# Пустынный оазис с пальмами, водоемом и древним сундуком
+					goodie_node = RoadEvents3D.create_oasis()
+
+				goodie_node.position = Vector3(side_x, 0.0, goodie_z)
+				chunk.add_child(goodie_node)
+				exclusion_zones.append(Vector3(side_x, goodie_z, 18.0))
+
+	# В диких боковых чанках (coord.x != 0) редкий оазис или заправка в глубине пустыни (7% шанс)
+	elif coord.x != 0 and abs(coord.y) > 0 and rng.randf() < 0.07:
+		var wild_z: float = rng.randf_range(-28.0, 28.0)
+		var wild_x: float = rng.randf_range(-28.0, 28.0)
+		var wild_node: Node3D = RoadEvents3D.create_oasis() if rng.randf() < 0.6 else RoadEvents3D.create_gas_station()
+		wild_node.position = Vector3(wild_x, 0.0, wild_z)
+		chunk.add_child(wild_node)
+		exclusion_zones.append(Vector3(wild_x, wild_z, 18.0))
+
+	# Вспомогательная лямбда проверки попадания в зону исключения
+	var is_in_exclusion := func(p: Vector3) -> bool:
+		for z: Vector3 in exclusion_zones:
+			var dx: float = p.x - z.x
+			var dz: float = p.z - z.y
+			if (dx * dx + dz * dz) < (z.z * z.z):
+				return true
+		return false
 
 	# 1. Засохшие деревья (1-3 на чанк)
 	var tree_count: int = rng.randi_range(1, 3)
 	for i in range(tree_count):
 		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, true)
-		if is_spawn_center and pos.length() < 12.0:
-			continue
-		if has_barricade and abs(pos.z) < 14.0 and abs(pos.x) < 8.0:
-			continue
-		if has_gas_station and pos.x > 7.0 and abs(pos.z) < 10.0:
-			continue
-		if has_oasis and pos.x < -7.0 and abs(pos.z) < 10.0:
+		if is_in_exclusion.call(pos):
 			continue
 		var s: float = rng.randf_range(0.85, 1.35)
 		var rot_y: float = rng.randf_range(0.0, TAU)
@@ -223,33 +258,26 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	var cactus_count: int = rng.randi_range(2, 4)
 	for i in range(cactus_count):
 		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, true)
-		if is_spawn_center and pos.length() < 10.0:
-			continue
-		if has_barricade and abs(pos.z) < 14.0 and abs(pos.x) < 8.0:
-			continue
-		if has_gas_station and pos.x > 7.0 and abs(pos.z) < 10.0:
-			continue
-		if has_oasis and pos.x < -7.0 and abs(pos.z) < 10.0:
+		if is_in_exclusion.call(pos):
 			continue
 		var s: float = rng.randf_range(0.85, 1.35)
 		var rot_y: float = rng.randf_range(0.0, TAU)
 		_create_cactus(chunk, pos, s, rot_y)
 
-	# 3. Разбитые ржавые машины (35% шанс на чанк — укрытия и атмосфера трассы)
-	if rng.randf() < 0.35 and not is_spawn_center and not has_barricade and not has_gas_station:
+	# 3. Разбитые ржавые машины на обочинах (35% шанс)
+	if rng.randf() < 0.35 and not is_spawn_center:
 		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, true, 2.0)
-		var s: float = rng.randf_range(0.9, 1.25)
-		var rot_y: float = rng.randf_range(0.0, TAU)
-		_create_car(chunk, pos, s, rot_y)
+		if not is_in_exclusion.call(pos):
+			var s: float = rng.randf_range(0.9, 1.25)
+			var rot_y: float = rng.randf_range(0.0, TAU)
+			_create_car(chunk, pos, s, rot_y)
 
 	# 4. Скальные валуны (50% шанс — укрытия на склонах барханов)
 	if rng.randf() < 0.50:
 		var rock_count: int = rng.randi_range(1, 2)
 		for i in range(rock_count):
 			var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, true, 4.0)
-			if is_spawn_center and pos.length() < 14.0:
-				continue
-			if has_barricade and abs(pos.z) < 12.0:
+			if is_in_exclusion.call(pos):
 				continue
 			var s: float = rng.randf_range(0.85, 1.4)
 			var rot_y: float = rng.randf_range(0.0, TAU)
@@ -259,12 +287,15 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	var bones_count: int = rng.randi_range(0, 2)
 	for i in range(bones_count):
 		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, false)
+		if is_in_exclusion.call(pos):
+			continue
 		var s: float = rng.randf_range(0.9, 1.3)
 		var rot_y: float = rng.randf_range(0.0, TAU)
 		_create_bones(chunk, pos, s, rot_y)
 
+
 	# 6. Перекати-поле (12% шанс на чанк)
-	if rng.randf() < 0.12 and TUMBLEWEED_SCENE and not has_barricade:
+	if rng.randf() < 0.12 and TUMBLEWEED_SCENE:
 		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, false)
 		var tw := TUMBLEWEED_SCENE.instantiate() as Node3D
 		if tw:

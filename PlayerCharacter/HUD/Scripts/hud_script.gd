@@ -47,6 +47,14 @@ var interact_bar: ProgressBar
 var toast_label: Label
 var _is_caravan_blocked: bool = false
 
+var compass_panel: PanelContainer
+var compass_tape: Control
+var compass_caravan_label: Label
+var caravan_ref: Node3D = null
+var compass_pulse_timer: float = 0.0
+var _caravan_last_health: int = -1
+var _caravan_hurt_timer: float = 0.0
+
 func _ready() -> void:
 	weapon_manager.weapon_stack_updated.connect(Callable(self, "update_weapon_stack_display"))
 	$PlayerCharacterProperties.hide()
@@ -73,11 +81,12 @@ func _ready() -> void:
 	_connect_wave_spawner()
 	_connect_caravan()
 	
-func _process(_delta : float) -> void:
+func _process(delta : float) -> void:
 	display_current_FPS()
 	display_play_char_properties()
 	display_weapon_properties()
 	_update_time_display()
+	_update_compass(delta)
 	
 func display_play_char_properties() -> void:
 	#player character properties
@@ -352,6 +361,8 @@ func _build_game_hud() -> void:
 	toast_label.hide()
 	add_child(toast_label)
 
+	_build_compass()
+
 	death_overlay = ColorRect.new()
 	death_overlay.name = "DeathOverlay"
 	death_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -425,6 +436,7 @@ func _connect_caravan() -> void:
 		caravan = get_tree().get_first_node_in_group("caravan")
 	if caravan == null:
 		return
+	caravan_ref = caravan as Node3D
 	if caravan.has_signal("health_changed"):
 		caravan.connect("health_changed", _on_caravan_health_changed)
 	if caravan.has_signal("caravan_destroyed"):
@@ -472,6 +484,10 @@ func show_toast(msg: String, col: Color = Color(0.3, 1.0, 0.45), duration: float
 	tw.chain().tween_callback(toast_label.hide)
 
 func _on_caravan_health_changed(current: int, max_hp: int) -> void:
+	if _caravan_last_health > 0 and current < _caravan_last_health:
+		_caravan_hurt_timer = 2.8
+	_caravan_last_health = current
+
 	if caravan_bar and caravan_label:
 		caravan_bar.max_value = max_hp
 		caravan_bar.value = current
@@ -487,6 +503,184 @@ func _on_caravan_destroyed() -> void:
 
 func _on_caravan_respawned() -> void:
 	death_overlay.hide()
+
+# =========================================================================
+# КОМПАС НАВИГАЦИИ С УКАЗАТЕЛЕМ КАРАВАНА
+# =========================================================================
+func _build_compass() -> void:
+	var c_style := StyleBoxFlat.new()
+	c_style.bg_color = Color(0.03, 0.025, 0.02, 0.88)
+	c_style.border_color = Color(0.85, 0.68, 0.28, 0.85)
+	c_style.set_border_width_all(1)
+	c_style.set_corner_radius_all(6)
+
+	compass_panel = PanelContainer.new()
+	compass_panel.name = "CompassPanel"
+	compass_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	compass_panel.offset_left = -210.0
+	compass_panel.offset_top = 10.0
+	compass_panel.offset_right = 210.0
+	compass_panel.offset_bottom = 58.0
+	compass_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	compass_panel.add_theme_stylebox_override("panel", c_style)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 1)
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	compass_panel.add_child(vbox)
+
+	compass_tape = Control.new()
+	compass_tape.name = "CompassTape"
+	compass_tape.custom_minimum_size = Vector2(400.0, 24.0)
+	compass_tape.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	compass_tape.draw.connect(_draw_compass)
+	vbox.add_child(compass_tape)
+
+	compass_caravan_label = Label.new()
+	compass_caravan_label.name = "CompassCaravanLabel"
+	compass_caravan_label.text = "КАРАВАН: ПОИСК..."
+	compass_caravan_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	compass_caravan_label.add_theme_font_size_override("font_size", 11)
+	compass_caravan_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.45, 1.0))
+	vbox.add_child(compass_caravan_label)
+
+	add_child(compass_panel)
+
+func _update_compass(delta: float) -> void:
+	if not compass_panel:
+		return
+
+	compass_pulse_timer += delta
+	if _caravan_hurt_timer > 0.0:
+		_caravan_hurt_timer = maxf(0.0, _caravan_hurt_timer - delta)
+
+	if caravan_ref == null or not is_instance_valid(caravan_ref):
+		caravan_ref = get_tree().get_first_node_in_group("caravan") as Node3D
+
+	if caravan_ref and is_instance_valid(caravan_ref) and play_char:
+		var to_c: Vector3 = caravan_ref.global_position - play_char.global_position
+		to_c.y = 0.0
+		var dist: float = to_c.length()
+
+		if _caravan_hurt_timer > 0.0:
+			compass_caravan_label.text = "⚠️ КАРАВАН ПОД АТАКОЙ! %dм" % int(dist)
+			compass_caravan_label.add_theme_color_override("font_color", Color(1.0, 0.25, 0.2, 1.0))
+		elif _is_caravan_blocked:
+			compass_caravan_label.text = "🚫 КАРАВАН ОСТАНОВЛЕН (ЗАВАЛ): %dм" % int(dist)
+			compass_caravan_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.2, 1.0))
+		elif dist < 4.5:
+			compass_caravan_label.text = "🐫 ВЫ В КУЗОВЕ КАРАВАНА"
+			compass_caravan_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5, 1.0))
+		elif dist < 12.0:
+			compass_caravan_label.text = "🐫 КАРАВАН РЯДОМ: %dм" % int(dist)
+			compass_caravan_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5, 1.0))
+		else:
+			compass_caravan_label.text = "🐫 КАРАВАН: %dм" % int(dist)
+			compass_caravan_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35, 1.0))
+
+	if compass_tape:
+		compass_tape.queue_redraw()
+
+func _draw_compass() -> void:
+	if not compass_tape or not play_char or not play_char.cam:
+		return
+
+	var w: float = compass_tape.size.x
+	var h: float = compass_tape.size.y
+	var cx: float = w * 0.5
+
+	# Вектор взгляда камеры по горизонтали
+	var cam_fwd: Vector3 = -play_char.cam.global_transform.basis.z
+	cam_fwd.y = 0.0
+	if cam_fwd.length_squared() < 0.001:
+		cam_fwd = Vector3(0.0, 0.0, -1.0)
+	cam_fwd = cam_fwd.normalized()
+
+	var cam_yaw_rad: float = atan2(cam_fwd.x, -cam_fwd.z)
+	var cam_yaw_deg: float = wrapf(rad_to_deg(cam_yaw_rad), 0.0, 360.0)
+
+	var fov_deg: float = 120.0
+	var pixels_per_deg: float = w / fov_deg
+
+	# Направляющая линия шкалы
+	compass_tape.draw_line(Vector2(12.0, h - 3.0), Vector2(w - 12.0, h - 3.0), Color(0.85, 0.65, 0.25, 0.4), 1.0)
+
+	var font: Font = compass_tape.get_theme_default_font()
+	var font_size: int = 11
+
+	# Насечки делений шкалы компаса через каждые 15 градусов
+	var start_deg: int = int(floor((cam_yaw_deg - 60.0) / 15.0)) * 15
+	var end_deg: int = int(ceil((cam_yaw_deg + 60.0) / 15.0)) * 15
+
+	for d_deg in range(start_deg, end_deg + 1, 15):
+		var diff: float = float(d_deg) - cam_yaw_deg
+		var x: float = cx + diff * pixels_per_deg
+		if x < 6.0 or x > w - 6.0:
+			continue
+
+		var norm_deg: int = int(round(wrapf(float(d_deg), 0.0, 360.0))) % 360
+		var is_cardinal: bool = (norm_deg % 90 == 0)
+		var is_subcardinal: bool = (norm_deg % 45 == 0) and not is_cardinal
+
+		var tick_h: float = 8.0 if is_cardinal else (5.0 if is_subcardinal else 3.0)
+		var tick_col := Color(0.95, 0.85, 0.45, 0.85) if is_cardinal else Color(0.70, 0.60, 0.40, 0.55)
+		compass_tape.draw_line(Vector2(x, h - 3.0), Vector2(x, h - 3.0 - tick_h), tick_col, 1.2 if is_cardinal else 1.0)
+
+		var label_str: String = ""
+		match norm_deg:
+			0:   label_str = "С"
+			45:  label_str = "СВ"
+			90:  label_str = "В"
+			135: label_str = "ЮВ"
+			180: label_str = "Ю"
+			225: label_str = "ЮЗ"
+			270: label_str = "З"
+			315: label_str = "СЗ"
+
+		if not label_str.is_empty() and font:
+			var col := Color(1.0, 0.88, 0.32, 1.0) if norm_deg == 0 else Color(0.92, 0.86, 0.72, 0.95)
+			var str_sz := font.get_string_size(label_str, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+			compass_tape.draw_string(font, Vector2(x - str_sz.x * 0.5, 12.0), label_str, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, col)
+
+	# Центральный золотой визир (стрелочка ▼)
+	var arrow_pts := PackedVector2Array([
+		Vector2(cx - 5.0, 0.0),
+		Vector2(cx + 5.0, 0.0),
+		Vector2(cx, 6.0)
+	])
+	compass_tape.draw_colored_polygon(arrow_pts, Color(1.0, 0.85, 0.30, 1.0))
+
+	# Метка Каравана на компасе
+	if caravan_ref and is_instance_valid(caravan_ref):
+		var to_c: Vector3 = caravan_ref.global_position - play_char.global_position
+		to_c.y = 0.0
+		if to_c.length_squared() > 0.001:
+			var c_fwd := to_c.normalized()
+			var c_yaw_rad: float = atan2(c_fwd.x, -c_fwd.z)
+			var c_diff_deg: float = wrapf(rad_to_deg(c_yaw_rad - cam_yaw_rad), -180.0, 180.0)
+
+			var marker_col := Color(1.0, 0.82, 0.25, 1.0)
+			if _is_caravan_blocked or _caravan_hurt_timer > 0.0:
+				var pulse: float = 0.5 + 0.5 * sin(compass_pulse_timer * 9.0)
+				marker_col = Color(1.0, 0.2, 0.1).lerp(Color(1.0, 0.85, 0.2), pulse)
+
+			if abs(c_diff_deg) <= 56.0:
+				var marker_x: float = cx + c_diff_deg * pixels_per_deg
+				compass_tape.draw_circle(Vector2(marker_x, 15.0), 3.5, marker_col)
+				if font:
+					var c_icon := "🐫"
+					var icon_sz := font.get_string_size(c_icon, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
+					compass_tape.draw_string(font, Vector2(marker_x - icon_sz.x * 0.5, 12.0), c_icon, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, marker_col)
+			elif c_diff_deg < -56.0:
+				if font:
+					var left_str := "◀ 🐫"
+					compass_tape.draw_string(font, Vector2(6.0, 15.0), left_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, marker_col)
+			else:
+				if font:
+					var right_str := "🐫 ▶"
+					var r_sz := font.get_string_size(right_str, HORIZONTAL_ALIGNMENT_RIGHT, -1, 12)
+					compass_tape.draw_string(font, Vector2(w - r_sz.x - 6.0, 15.0), right_str, HORIZONTAL_ALIGNMENT_RIGHT, -1, 12, marker_col)
+
 
 func _init_blood_textures() -> void:
 	_blood_textures.clear()
