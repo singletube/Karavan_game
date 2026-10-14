@@ -333,12 +333,15 @@ func _get_interpolated_palette(t: float) -> Dictionary:
 # =====================================================================
 # ШЕЙДЕР ПЕСКА
 # =====================================================================
+var sand_material: ShaderMaterial
+
+func get_sand_material() -> ShaderMaterial:
+	if sand_material == null:
+		_setup_sand()
+	return sand_material
+
 func _setup_sand() -> void:
-	var floor_node := get_node_or_null("Floor") as StaticBody3D
-	if not floor_node:
-		return
-	var mesh_inst := floor_node.get_node_or_null("FloorMesh") as MeshInstance3D
-	if not mesh_inst:
+	if sand_material != null:
 		return
 
 	var shader := load("res://shaders/sand.gdshader") as Shader
@@ -346,14 +349,18 @@ func _setup_sand() -> void:
 		push_warning("sand.gdshader не найден!")
 		return
 
-	var mat := ShaderMaterial.new()
-	mat.shader = shader
-	mat.set_shader_parameter("sand_light",       Color(0.96, 0.84, 0.58))
-	mat.set_shader_parameter("sand_mid",         Color(0.82, 0.66, 0.38))
-	mat.set_shader_parameter("sand_dark",        Color(0.62, 0.46, 0.22))
-	mat.set_shader_parameter("texture_scale",    0.20)
-	mat.set_shader_parameter("ripple_strength",  0.65)
-	mat.set_shader_parameter("roughness_base",   0.85)
-	mat.set_shader_parameter("specular_amt",     0.22)
+	sand_material = ShaderMaterial.new()
+	sand_material.shader = shader
+	sand_material.set_shader_parameter("sand_light",       Color(0.96, 0.84, 0.58))
+	sand_material.set_shader_parameter("sand_mid",         Color(0.82, 0.66, 0.38))
+	sand_material.set_shader_parameter("sand_dark",        Color(0.62, 0.46, 0.22))
+	sand_material.set_shader_parameter("texture_scale",    0.20)
+	sand_material.set_shader_parameter("ripple_strength",  0.65)
+	sand_material.set_shader_parameter("roughness_base",   0.85)
+	sand_material.set_shader_parameter("specular_amt",     0.22)
 
-	mesh_inst.material_override = mat
+	var floor_node := get_node_or_null("Floor") as StaticBody3D
+	if floor_node:
+		var mesh_inst := floor_node.get_node_or_null("FloorMesh") as MeshInstance3D
+		if mesh_inst:
+			mesh_inst.material_override = sand_material
