@@ -38,6 +38,9 @@ var wave_label: Label
 var caravan_panel: PanelContainer
 var caravan_label: Label
 var caravan_bar: ProgressBar
+var time_panel: PanelContainer
+var time_label: Label
+var flashlight_label: Label
 
 func _ready() -> void:
 	weapon_manager.weapon_stack_updated.connect(Callable(self, "update_weapon_stack_display"))
@@ -58,6 +61,8 @@ func _ready() -> void:
 		play_char.connect("health_changed", _on_health_changed)
 	if play_char.has_signal("player_died"):
 		play_char.connect("player_died", _on_player_died)
+	if play_char.has_signal("flashlight_toggled"):
+		play_char.connect("flashlight_toggled", _on_flashlight_toggled)
 	_on_health_changed(int(play_char.get("health")))
 	update_weapon_stack_display()
 	_connect_wave_spawner()
@@ -65,10 +70,9 @@ func _ready() -> void:
 	
 func _process(_delta : float) -> void:
 	display_current_FPS()
-	
 	display_play_char_properties()
-	
 	display_weapon_properties()
+	_update_time_display()
 	
 func display_play_char_properties() -> void:
 	#player character properties
@@ -175,7 +179,7 @@ func _build_game_hud() -> void:
 	controls_hint.offset_bottom = -8.0
 	controls_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	controls_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	controls_hint.text = "1 Пистолет · 2 Автомат · 3 Дробовик · 4 Снайперка · 5 Ракетница · 6 Бензопила\nЛКМ — огонь/пилить · R — перезарядка · колесо — смена · C/X — присесть"
+	controls_hint.text = "1–6 Оружие · ЛКМ огонь/пилить · R перезар · F фонарик · C/X присесть\nКолесо мыши — смена · Защищайте караван и осла!"
 	controls_hint.add_theme_font_size_override("font_size", 13)
 	controls_hint.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.9))
 	controls_hint.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
@@ -240,6 +244,44 @@ func _build_game_hud() -> void:
 	caravan_bar.add_theme_stylebox_override("fill", c_bar_fill)
 	caravan_col.add_child(caravan_bar)
 	add_child(caravan_panel)
+
+	# Панель времени суток и статуса фонарика (в правом верхнем углу)
+	var time_style := StyleBoxFlat.new()
+	time_style.bg_color = Color(0.04, 0.035, 0.02, 0.88)
+	time_style.border_color = Color(0.85, 0.65, 0.25, 0.8)
+	time_style.set_border_width_all(1)
+	time_style.set_corner_radius_all(6)
+
+	time_panel = PanelContainer.new()
+	time_panel.name = "TimePanel"
+	time_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	time_panel.offset_left = -230.0
+	time_panel.offset_top = 16.0
+	time_panel.offset_right = -16.0
+	time_panel.offset_bottom = 68.0
+	time_panel.add_theme_stylebox_override("panel", time_style)
+
+	var time_vbox := VBoxContainer.new()
+	time_vbox.add_theme_constant_override("separation", 2)
+	time_panel.add_child(time_vbox)
+
+	time_label = Label.new()
+	time_label.name = "TimeLabel"
+	time_label.text = "☀️ 12:00 · ДЕНЬ"
+	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	time_label.add_theme_font_size_override("font_size", 14)
+	time_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.72, 1.0))
+	time_vbox.add_child(time_label)
+
+	flashlight_label = Label.new()
+	flashlight_label.name = "FlashlightStatusLabel"
+	flashlight_label.text = "🔦 [F] ФОНАРИК: ВЫКЛ"
+	flashlight_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	flashlight_label.add_theme_font_size_override("font_size", 12)
+	flashlight_label.add_theme_color_override("font_color", Color(0.65, 0.65, 0.65, 1.0))
+	time_vbox.add_child(flashlight_label)
+
+	add_child(time_panel)
 
 	death_overlay = ColorRect.new()
 	death_overlay.name = "DeathOverlay"
@@ -427,6 +469,40 @@ func add_screen_blood_splatter(count: int = 3) -> void:
 		tween.tween_property(splat, "modulate:a", 0.0, fade_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		tween.tween_property(splat, "position:y", splat.position.y + drip_offset, fade_time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 		tween.chain().tween_callback(Callable(splat, "queue_free"))
+
+func _on_flashlight_toggled(is_on: bool) -> void:
+	if flashlight_label:
+		if is_on:
+			flashlight_label.text = "🔦 [F] ФОНАРИК: ВКЛ"
+			flashlight_label.add_theme_color_override("font_color", Color(0.35, 1.0, 0.45, 1.0))
+		else:
+			flashlight_label.text = "🔦 [F] ФОНАРИК: ВЫКЛ"
+			flashlight_label.add_theme_color_override("font_color", Color(0.65, 0.65, 0.65, 1.0))
+
+func _update_time_display() -> void:
+	if time_label == null:
+		return
+	var scene_root: Node = get_tree().current_scene
+	if scene_root and scene_root.has_method("get_clock_time"):
+		var clock_str: String = scene_root.get_clock_time()
+		var phase_name: String = scene_root.get_phase_name()
+		var icon: String = "☀️"
+		var col: Color = Color(1.0, 0.92, 0.72)
+		match phase_name:
+			"ДЕНЬ":
+				icon = "☀️"
+				col = Color(1.0, 0.92, 0.65)
+			"ЗАКАТ":
+				icon = "🌅"
+				col = Color(1.0, 0.55, 0.25)
+			"НОЧЬ":
+				icon = "🌙"
+				col = Color(0.65, 0.80, 1.0)
+			"РАССВЕТ":
+				icon = "🌄"
+				col = Color(1.0, 0.75, 0.50)
+		time_label.text = "%s %s · %s" % [icon, clock_str, phase_name]
+		time_label.add_theme_color_override("font_color", col)
 	
 	
 	

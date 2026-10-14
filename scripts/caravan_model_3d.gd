@@ -24,7 +24,12 @@ var donkey_ears: Array[Node3D] = []
 var donkey_legs: Array[Node3D] = [] # FL, FR, BL, BR
 var donkey_tail: Node3D
 var canopy_root: Node3D
+var lantern_pivot: Node3D
 var lantern_light: OmniLight3D
+var donkey_lantern_light: OmniLight3D
+var mat_lantern_glass: StandardMaterial3D
+var mat_lantern_flame: StandardMaterial3D
+var anim_timer: float = 0.0
 
 func _init() -> void:
 	_init_materials()
@@ -75,6 +80,20 @@ func _init_materials() -> void:
 	mat_leather = StandardMaterial3D.new()
 	mat_leather.albedo_color = Color(0.32, 0.18, 0.10, 1.0)
 	mat_leather.roughness = 0.6
+
+	# Стекло фонаря с теплым янтарным свечением
+	mat_lantern_glass = StandardMaterial3D.new()
+	mat_lantern_glass.albedo_color = Color(1.0, 0.85, 0.45, 0.65)
+	mat_lantern_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat_lantern_glass.emission_enabled = true
+	mat_lantern_glass.emission = Color(1.0, 0.76, 0.35)
+	mat_lantern_glass.emission_energy_multiplier = 3.5
+	mat_lantern_glass.roughness = 0.2
+
+	# Керосиновое пламя внутри колбы
+	mat_lantern_flame = StandardMaterial3D.new()
+	mat_lantern_flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat_lantern_flame.albedo_color = Color(1.0, 0.95, 0.70)
 
 func _create_box(parent: Node, size: Vector3, mat: Material, pos: Vector3 = Vector3.ZERO, rot: Vector3 = Vector3.ZERO) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
@@ -169,14 +188,40 @@ func _build_carriage() -> void:
 	_create_cylinder(carriage, 0.28, 0.65, mat_cargo_sack, Vector3(0.2, 1.0, -1.35))
 	_create_cylinder(carriage, 0.25, 0.55, mat_cargo_sack, Vector3(-0.15, 0.95, -1.35))
 
-	# Фонарь караванщика на передней стойке
-	var lantern_post := _create_box(carriage, Vector3(0.06, 0.35, 0.06), mat_iron, Vector3(1.15, 1.6, -1.75))
-	_create_box(lantern_post, Vector3(0.18, 0.22, 0.18), mat_donkey_dark, Vector3(0.0, -0.05, 0.0))
+	# Фонарь караванщика на передней правой стойке
+	var lantern_bracket := _create_box(carriage, Vector3(0.24, 0.06, 0.06), mat_iron, Vector3(1.22, 1.85, -1.75))
+	_create_cylinder(lantern_bracket, 0.02, 0.12, mat_iron, Vector3(0.10, -0.05, 0.0))
+
+	# Узел подвеса (шарнир для раскачивания фонаря)
+	lantern_pivot = Node3D.new()
+	lantern_pivot.name = "LanternPivot"
+	lantern_pivot.position = Vector3(1.32, 1.76, -1.75)
+	carriage.add_child(lantern_pivot)
+
+	# Корпус антикварного фонаря
+	_create_cylinder(lantern_pivot, 0.11, 0.07, mat_iron, Vector3(0.0, -0.04, 0.0))
+	_create_cylinder(lantern_pivot, 0.05, 0.05, mat_iron, Vector3(0.0, 0.02, 0.0))
+	# 4 угловые железные стойки
+	_create_box(lantern_pivot, Vector3(0.02, 0.26, 0.02), mat_iron, Vector3(-0.08, -0.18, -0.08))
+	_create_box(lantern_pivot, Vector3(0.02, 0.26, 0.02), mat_iron, Vector3(0.08, -0.18, -0.08))
+	_create_box(lantern_pivot, Vector3(0.02, 0.26, 0.02), mat_iron, Vector3(-0.08, -0.18, 0.08))
+	_create_box(lantern_pivot, Vector3(0.02, 0.26, 0.02), mat_iron, Vector3(0.08, -0.18, 0.08))
+	# Стеклянная колба с теплым свечением
+	_create_cylinder(lantern_pivot, 0.085, 0.22, mat_lantern_glass, Vector3(0.0, -0.18, 0.0))
+	# Яркое керосиновое пламя фитиля внутри
+	_create_cylinder(lantern_pivot, 0.03, 0.07, mat_lantern_flame, Vector3(0.0, -0.18, 0.0))
+	# Нижний резервуар для масла
+	_create_cylinder(lantern_pivot, 0.12, 0.08, mat_iron, Vector3(0.0, -0.32, 0.0))
+
+	# Основной источник теплого янтарного света
 	lantern_light = OmniLight3D.new()
-	lantern_light.light_color = Color(1.0, 0.75, 0.35, 1.0)
-	lantern_light.light_energy = 2.5
-	lantern_light.omni_range = 8.0
-	lantern_post.add_child(lantern_light)
+	lantern_light.name = "CaravanOmniLight"
+	lantern_light.light_color = Color(1.0, 0.74, 0.32, 1.0)
+	lantern_light.light_energy = 3.6
+	lantern_light.omni_range = 16.0
+	lantern_light.shadow_enabled = true
+	lantern_light.position = Vector3(0.0, -0.18, 0.0)
+	lantern_pivot.add_child(lantern_light)
 
 	# 4 больших деревянных колеса со спицами и железными ободами
 	var wheel_data := [
@@ -235,6 +280,24 @@ func _build_donkey() -> void:
 	# Темная грива
 	_create_box(neck, Vector3(0.12, 0.68, 0.18), mat_donkey_dark, Vector3(0.0, 0.02, 0.22))
 
+	# Медный нагрудный фонарь осла (освещает путь перед копытами)
+	var donkey_lantern := Node3D.new()
+	donkey_lantern.name = "DonkeyLantern"
+	donkey_lantern.position = Vector3(0.0, 0.88, -0.78)
+	donkey_root.add_child(donkey_lantern)
+	_create_box(donkey_lantern, Vector3(0.14, 0.06, 0.14), mat_iron, Vector3(0.0, 0.08, 0.0))
+	_create_cylinder(donkey_lantern, 0.06, 0.12, mat_lantern_glass, Vector3.ZERO)
+	_create_cylinder(donkey_lantern, 0.02, 0.05, mat_lantern_flame, Vector3.ZERO)
+	_create_box(donkey_lantern, Vector3(0.14, 0.05, 0.14), mat_iron, Vector3(0.0, -0.07, 0.0))
+
+	donkey_lantern_light = OmniLight3D.new()
+	donkey_lantern_light.name = "DonkeyLanternLight"
+	donkey_lantern_light.light_color = Color(1.0, 0.80, 0.40, 1.0)
+	donkey_lantern_light.light_energy = 2.4
+	donkey_lantern_light.omni_range = 10.0
+	donkey_lantern_light.shadow_enabled = false
+	donkey_lantern.add_child(donkey_lantern_light)
+
 	# Голова осла
 	donkey_head = Node3D.new()
 	donkey_head.name = "DonkeyHead"
@@ -291,6 +354,8 @@ func _build_donkey() -> void:
 # 3. АНИМАЦИЯ ХОДЬБЫ И ДВИЖЕНИЯ
 # =========================================================================
 func update_animation(delta: float, is_moving: bool, move_speed: float, walk_phase: float) -> void:
+	anim_timer += delta
+
 	if is_moving:
 		# Вращение колес в соответствии со скоростью (радиус ~0.52)
 		var wheel_rot: float = (move_speed / 0.52) * delta
@@ -324,9 +389,24 @@ func update_animation(delta: float, is_moving: bool, move_speed: float, walk_pha
 		if canopy_root:
 			canopy_root.rotation.z = sin(walk_phase * 2.0) * deg_to_rad(1.2)
 			canopy_root.rotation.x = cos(walk_phase * 2.5) * deg_to_rad(1.0)
+
+		# Динамическое раскачивание подвесного фонаря на крюке (инерция движения + ветер)
+		if lantern_pivot:
+			lantern_pivot.rotation.z = sin(walk_phase * 2.2) * deg_to_rad(14.0) + sin(anim_timer * 2.8) * deg_to_rad(3.5)
+			lantern_pivot.rotation.x = cos(walk_phase * 2.0) * deg_to_rad(9.0)
 	else:
 		# Остановка — возврат ног в исходное положение
 		for l: Node3D in donkey_legs:
 			l.rotation.x = lerp_angle(l.rotation.x, 0.0, delta * 8.0)
 		if donkey_tail:
 			donkey_tail.rotation.z = sin(walk_phase * 1.5) * deg_to_rad(8.0)
+		if lantern_pivot:
+			lantern_pivot.rotation.z = sin(anim_timer * 2.2) * deg_to_rad(4.0)
+			lantern_pivot.rotation.x = cos(anim_timer * 1.8) * deg_to_rad(2.5)
+
+	# Живое мерцание керосинового пламени фонарей
+	var flame_flicker: float = 1.0 + sin(anim_timer * 18.0) * 0.08 + cos(anim_timer * 34.0) * 0.05
+	if lantern_light:
+		lantern_light.light_energy = 3.6 * flame_flicker
+	if donkey_lantern_light:
+		donkey_lantern_light.light_energy = 2.4 * flame_flicker

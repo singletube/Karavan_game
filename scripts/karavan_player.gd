@@ -8,6 +8,7 @@ signal health_changed(value: int)
 signal ammo_changed(current: int, total: int)
 signal weapon_changed(w_name: String, tex: Texture2D, cur_ammo: int, tot_ammo: int)
 signal player_died
+signal flashlight_toggled(is_on: bool)
 
 const LEGACY_FLASH_TEXTURE: Texture2D = preload("res://assets/textures/muzzle_flash.png")
 
@@ -20,6 +21,11 @@ var _last_magazine: int = -1
 var _last_reserve: int = -1
 var _legacy_muzzle_flash: Node3D
 
+var flashlight: SpotLight3D
+var flashlight_halo: SpotLight3D
+var flashlight_audio: AudioStreamPlayer
+var flashlight_enabled: bool = false
+
 func _enter_tree() -> void:
 	if name.is_valid_int():
 		set_multiplayer_authority(name.to_int())
@@ -28,6 +34,7 @@ func _ready() -> void:
 	super()
 	_add_crouch_key()
 	_build_legacy_muzzle_flash()
+	_build_flashlight()
 
 	var caravan: Node = get_tree().current_scene.get_node_or_null("Caravan")
 	if not caravan:
@@ -82,6 +89,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_5: 4,
 		KEY_6: 5,
 	}
+	if event.keycode == KEY_F:
+		toggle_flashlight()
+		get_viewport().set_input_as_handled()
+		return
+
 	if event.keycode in weapon_key_to_index:
 		var manager := get_node_or_null("WeaponManager") as WeaponManager
 		var index: int = weapon_key_to_index[event.keycode]
@@ -131,6 +143,56 @@ func play_legacy_muzzle_flash(muzzle_transform: Transform3D) -> void:
 		if is_instance_valid(_legacy_muzzle_flash):
 			_legacy_muzzle_flash.hide()
 	)
+
+func _build_flashlight() -> void:
+	if not is_local() or not cam:
+		return
+
+	# Тактический налобный/оружейный фонарик игрока
+	flashlight = SpotLight3D.new()
+	flashlight.name = "PlayerFlashlight"
+	flashlight.position = Vector3(0.24, -0.22, -0.2)
+	flashlight.light_color = Color(0.96, 0.97, 1.0)
+	flashlight.light_energy = 3.4
+	flashlight.spot_range = 42.0
+	flashlight.spot_angle = 32.0
+	flashlight.spot_attenuation = 1.25
+	flashlight.shadow_enabled = true
+
+	# Мягкий ореол подсветки периферийного зрения
+	flashlight_halo = SpotLight3D.new()
+	flashlight_halo.name = "FlashlightHalo"
+	flashlight_halo.light_color = Color(0.90, 0.94, 1.0)
+	flashlight_halo.light_energy = 0.55
+	flashlight_halo.spot_range = 15.0
+	flashlight_halo.spot_angle = 58.0
+	flashlight_halo.spot_attenuation = 2.0
+	flashlight_halo.shadow_enabled = false
+	flashlight.add_child(flashlight_halo)
+
+	flashlight.visible = false
+	cam.add_child(flashlight)
+
+	# Звук механического щелчка переключателя
+	flashlight_audio = AudioStreamPlayer.new()
+	flashlight_audio.name = "FlashlightAudio"
+	var click_res := load("res://assets/audio/reload_click.wav") as AudioStream
+	if not click_res:
+		click_res = load("res://assets/audio/reload_click.mp3") as AudioStream
+	flashlight_audio.stream = click_res
+	flashlight_audio.volume_db = -6.0
+	flashlight_audio.pitch_scale = 1.75
+	add_child(flashlight_audio)
+
+func toggle_flashlight() -> void:
+	if not is_local() or is_dead:
+		return
+	flashlight_enabled = not flashlight_enabled
+	if flashlight:
+		flashlight.visible = flashlight_enabled
+	if flashlight_audio:
+		flashlight_audio.play()
+	flashlight_toggled.emit(flashlight_enabled)
 
 @rpc("any_peer", "unreliable_ordered")
 func sync_state(pos: Vector3, rot_y: float) -> void:
