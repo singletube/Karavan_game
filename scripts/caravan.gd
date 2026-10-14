@@ -19,6 +19,10 @@ var is_destroyed: bool = false
 var is_blocked: bool = false
 var walk_phase: float = 0.0
 
+var track_dist: float = 0.0
+var wheel_dust_timer: float = 0.0
+var last_hoof_cycle: int = -1
+
 @onready var model: CaravanModel3D = $CaravanModel3D
 @onready var hit_sound: AudioStreamPlayer3D = $HitSound
 @onready var break_sound: AudioStreamPlayer3D = $BreakSound
@@ -51,8 +55,41 @@ func _physics_process(delta: float) -> void:
 
 	walk_phase += delta * (move_speed * 1.5)
 
+	# 1. Следы колес повозки на песке (каждые 0.85м пути)
+	track_dist += move_speed * delta
+	if track_dist >= 0.85:
+		track_dist = 0.0
+		SandEffects.add_caravan_wheel_tracks(global_position, move_direction)
+
+	# 2. Клубы пыли из-под катящихся по песку колес
+	wheel_dust_timer += delta
+	if wheel_dust_timer >= 0.35:
+		wheel_dust_timer = 0.0
+		var right := move_direction.normalized().cross(Vector3.UP).normalized()
+		SandEffects.spawn_dust_puff(global_position - right * 1.18 + Vector3(0.0, 0.05, 1.2), 0.45)
+		SandEffects.spawn_dust_puff(global_position + right * 1.18 + Vector3(0.0, 0.05, 1.2), 0.45)
+
+	# 3. Следы копыт осла при шаге
+	var hoof_cycle: int = int(floor((walk_phase * 4.0) / PI))
+	if hoof_cycle != last_hoof_cycle:
+		last_hoof_cycle = hoof_cycle
+		var is_pair_a := (hoof_cycle % 2 == 0)
+		if is_pair_a:
+			var fl_pos: Vector3 = global_transform * Vector3(-0.24, 0.0, -4.68)
+			var br_pos: Vector3 = global_transform * Vector3(0.24, 0.0, -3.72)
+			SandEffects.add_hoofprint(fl_pos, move_direction)
+			SandEffects.add_hoofprint(br_pos, move_direction)
+			SandEffects.spawn_dust_puff(fl_pos, 0.35)
+		else:
+			var fr_pos: Vector3 = global_transform * Vector3(0.24, 0.0, -4.68)
+			var bl_pos: Vector3 = global_transform * Vector3(-0.24, 0.0, -3.72)
+			SandEffects.add_hoofprint(fr_pos, move_direction)
+			SandEffects.add_hoofprint(bl_pos, move_direction)
+			SandEffects.spawn_dust_puff(fr_pos, 0.35)
+
 	if model:
 		model.update_animation(delta, true, move_speed, walk_phase)
+
 
 func _check_road_obstacles() -> bool:
 	var obstacles := get_tree().get_nodes_in_group("road_obstacle")

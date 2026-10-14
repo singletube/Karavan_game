@@ -15,6 +15,8 @@ var mat_donkey_fur: StandardMaterial3D
 var mat_donkey_muzzle: StandardMaterial3D
 var mat_donkey_dark: StandardMaterial3D
 var mat_leather: StandardMaterial3D
+var mat_rim_cleat: StandardMaterial3D
+var mat_spoke_band: StandardMaterial3D
 
 # Узлы для анимации
 var wheels: Array[Node3D] = []
@@ -94,6 +96,18 @@ func _init_materials() -> void:
 	mat_lantern_flame = StandardMaterial3D.new()
 	mat_lantern_flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat_lantern_flame.albedo_color = Color(1.0, 0.95, 0.70)
+
+	# Железные грунтозацепы и ободные болты колес (яркий металл со стальным блеском)
+	mat_rim_cleat = StandardMaterial3D.new()
+	mat_rim_cleat.albedo_color = Color(0.82, 0.74, 0.58, 1.0)
+	mat_rim_cleat.metallic = 0.85
+	mat_rim_cleat.roughness = 0.35
+
+	# Бандажи спиц и кольца ступицы
+	mat_spoke_band = StandardMaterial3D.new()
+	mat_spoke_band.albedo_color = Color(0.16, 0.16, 0.18, 1.0)
+	mat_spoke_band.metallic = 0.80
+	mat_spoke_band.roughness = 0.40
 
 func _create_box(parent: Node, size: Vector3, mat: Material, pos: Vector3 = Vector3.ZERO, rot: Vector3 = Vector3.ZERO) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
@@ -243,20 +257,50 @@ func _build_carriage() -> void:
 
 func _build_wheel() -> Node3D:
 	var w := Node3D.new()
-	# Железный обод
+
+	# 1. Железный обод (радиус 0.52, ширина 0.12)
 	var rim := _create_cylinder(w, 0.52, 0.12, mat_iron)
 	rim.rotation.z = PI * 0.5
 
-	# Деревянная ступица
-	var hub := _create_cylinder(w, 0.15, 0.16, mat_wood_dark)
+	# 12 выступающих стальных грунтозацепов / накладок по всему ободу
+	# Благодаря им вращение колеса видно С ЛЮБОЙ ДИСТАНЦИИ И УГЛА ОБЗОРА!
+	for i in range(12):
+		var angle := float(i) * (TAU / 12.0)
+		var cleat_pos := Vector3(0.0, sin(angle) * 0.525, cos(angle) * 0.525)
+		_create_box(w, Vector3(0.14, 0.04, 0.08), mat_rim_cleat, cleat_pos, Vector3(-angle, 0.0, 0.0))
+		# Заклепка с внешней стороны обода
+		_create_box(w, Vector3(0.04, 0.04, 0.04), mat_rim_cleat, Vector3(0.065, sin(angle) * 0.48, cos(angle) * 0.48))
+		# Заклепка с внутренней стороны обода
+		_create_box(w, Vector3(0.04, 0.04, 0.04), mat_rim_cleat, Vector3(-0.065, sin(angle) * 0.48, cos(angle) * 0.48))
+
+	# 2. Деревянная ступица (радиус 0.16, ширина 0.20)
+	var hub := _create_cylinder(w, 0.16, 0.20, mat_wood_dark)
 	hub.rotation.z = PI * 0.5
 
-	# 6 деревянных спиц
-	for i in range(3):
-		var spoke := _create_box(w, Vector3(0.06, 0.94, 0.06), mat_wood_light)
-		spoke.rotation.x = float(i) * (PI / 3.0)
+	# Железное кольцо ступицы
+	var hub_ring := _create_cylinder(w, 0.17, 0.06, mat_spoke_band)
+	hub_ring.rotation.z = PI * 0.5
+
+	# Внешняя массивная ступичная гайка с чекой (ярко крутится в самом центре)
+	var axle_nut := _create_box(w, Vector3(0.08, 0.10, 0.10), mat_rim_cleat, Vector3(0.11, 0.0, 0.0))
+	_create_box(axle_nut, Vector3(0.04, 0.24, 0.03), mat_spoke_band, Vector3(0.02, 0.0, 0.0), Vector3(deg_to_rad(45.0), 0.0, 0.0))
+
+	# Внутренняя гайка ступицы
+	var axle_nut_in := _create_box(w, Vector3(0.08, 0.10, 0.10), mat_rim_cleat, Vector3(-0.11, 0.0, 0.0))
+	_create_box(axle_nut_in, Vector3(0.04, 0.24, 0.03), mat_spoke_band, Vector3(-0.02, 0.0, 0.0), Vector3(deg_to_rad(45.0), 0.0, 0.0))
+
+	# 3. 8 деревянных спиц с железными бандажами
+	for i in range(4):
+		var ang := float(i) * (PI / 4.0)
+		var spoke := _create_box(w, Vector3(0.06, 0.96, 0.06), mat_wood_light)
+		spoke.rotation.x = ang
+
+		# Металлические заклепки/бандажи на спицах ближе к ободу
+		_create_box(spoke, Vector3(0.07, 0.06, 0.07), mat_spoke_band, Vector3(0.0, 0.34, 0.0))
+		_create_box(spoke, Vector3(0.07, 0.06, 0.07), mat_spoke_band, Vector3(0.0, -0.34, 0.0))
 
 	return w
+
 
 # =========================================================================
 # 2. ОСЁЛ (АНИМИРОВАННЫЙ 3D ПЕРСОНАЖ КАРАВАНА)
@@ -357,10 +401,10 @@ func update_animation(delta: float, is_moving: bool, move_speed: float, walk_pha
 	anim_timer += delta
 
 	if is_moving:
-		# Вращение колес в соответствии со скоростью (радиус ~0.52)
+		# Вращение колес вперед в направлении движения (-Z) со скоростью каравана (радиус ~0.52)
 		var wheel_rot: float = (move_speed / 0.52) * delta
 		for w: Node3D in wheels:
-			w.rotate_x(wheel_rot)
+			w.rotate_x(-wheel_rot)
 
 		# Шаг осла: передние и задние ноги двигаются диагонально (FL-BR, FR-BL)
 		var leg_angle: float = sin(walk_phase * 4.0) * deg_to_rad(28.0)

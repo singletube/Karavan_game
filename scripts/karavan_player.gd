@@ -29,6 +29,9 @@ var flashlight_enabled: bool = false
 var current_interactable: Node = null
 var interact_hold_time: float = 0.0
 
+var footstep_dist: float = 0.0
+var footstep_left: bool = false
+
 func _enter_tree() -> void:
 	if name.is_valid_int():
 		set_multiplayer_authority(name.to_int())
@@ -74,8 +77,36 @@ func _physics_process(delta: float) -> void:
 	if is_dead:
 		return
 	super(delta)
+	_process_player_footsteps(delta)
 	if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
 		rpc("sync_state", global_position, rotation.y)
+
+func _process_player_footsteps(delta: float) -> void:
+	if not is_on_floor():
+		return
+	var h_vel := Vector2(velocity.x, velocity.z)
+	var spd := h_vel.length()
+	if spd < 0.6:
+		return
+
+	# Дистанция между следами шагов: 1.35м при ходьбе, 1.75м при беге
+	footstep_dist += spd * delta
+	var step_threshold: float = 1.35 if walk_or_run != "RunState" else 1.75
+	if footstep_dist >= step_threshold:
+		footstep_dist = 0.0
+		footstep_left = !footstep_left
+
+		var fwd_dir := Vector3(velocity.x, 0.0, velocity.z).normalized()
+		var right_dir := fwd_dir.cross(Vector3.UP).normalized()
+		var side_offset: float = -0.18 if footstep_left else 0.18
+		var foot_pos: Vector3 = global_position + right_dir * side_offset
+
+		# Оставляем отпечаток на песке только если игрок на уровне песчаной земли
+		if global_position.y <= 0.8:
+			SandEffects.add_bootprint(foot_pos, fwd_dir, footstep_left)
+			SandEffects.spawn_dust_puff(foot_pos, 0.35)
+
+		SandEffects.play_sand_step(foot_pos)
 
 func _process(delta: float) -> void:
 	if is_local() and not is_dead:

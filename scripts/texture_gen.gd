@@ -37,6 +37,12 @@ static func preload_all_textures() -> void:
 	make_weapon_rifle()
 	make_weapon_rocket()
 	make_muzzle_flash()
+	make_wheel_track()
+	make_footprint_boot()
+	make_footprint_hoof()
+	make_blood_splatter()
+	make_blood_pool()
+	make_sand_puff()
 
 
 # --- 1. КАКТУС ---
@@ -1651,3 +1657,242 @@ static func _generate_muzzle_flash_image() -> Image:
 				img.set_pixel(x, y, f_yellow)
 
 	return img
+
+
+# =========================================================================
+# 6. СЛЕД КОЛЕСА КАРАВАНА НА ПЕСКЕ (WHEEL TRACK)
+# =========================================================================
+static func make_wheel_track() -> Texture2D:
+	return get_or_create("wheel_track.png", _generate_wheel_track_image)
+
+static func _generate_wheel_track_image() -> Image:
+	var w := 32
+	var h := 64
+	var img: Image = Image.create(w, h, false, Image.FORMAT_RGBA8)
+
+	for y in range(h):
+		var y_fade: float = sin((float(y) / float(h)) * PI)
+		for x in range(w):
+			# Центральная дорожка шириной 20 пикселей (от x=6 до x=26)
+			var dist_center: float = abs(float(x) - 16.0)
+			if dist_center > 11.0:
+				continue
+
+			var groove_depth: float = 0.0
+			# Две глубокие колеи от железного обода колеса каравана
+			var d_groove: float = abs(dist_center - 5.0)
+			if d_groove < 3.5:
+				groove_depth = 1.0 - (d_groove / 3.5)
+
+			# Поперечные бороздки от спиц и неровностей колеса
+			var rib: float = sin(float(y) * 0.45) * 0.25
+			var alpha: float = clampf((groove_depth * 0.75 + 0.25 + rib) * y_fade, 0.0, 0.95)
+
+			# Темный оттенок спрессованного в колее песка
+			var r: float = lerpf(0.50, 0.26, groove_depth)
+			var g: float = lerpf(0.36, 0.17, groove_depth)
+			var b: float = lerpf(0.20, 0.09, groove_depth)
+			img.set_pixel(x, y, Color(r, g, b, alpha))
+
+	return img
+
+
+# =========================================================================
+# 7. СЛЕД БОТИНКА ИГРОКА НА ПЕСКЕ (FOOTPRINT BOOT)
+# =========================================================================
+static func make_footprint_boot() -> Texture2D:
+	return get_or_create("footprint_boot.png", _generate_footprint_boot_image)
+
+static func _generate_footprint_boot_image() -> Image:
+	var w := 32
+	var h := 48
+	var img: Image = Image.create(w, h, false, Image.FORMAT_RGBA8)
+
+	for y in range(h):
+		for x in range(w):
+			var nx: float = (float(x) - 16.0) / 10.0
+			var inside: bool = false
+			var depth: float = 0.0
+
+			# Носок и подушечка стопы (y: 6..24)
+			if y >= 6 and y <= 24:
+				var half_w: float = 1.0 - pow((float(y) - 16.0) / 11.0, 2.0) * 0.35
+				if abs(nx) <= half_w:
+					inside = true
+					depth = 0.85
+					# Рельефные протекторы ботинка (горизонтальные насечки)
+					if y % 4 == 0:
+						depth = 0.4
+
+			# Свод стопы (y: 24..30)
+			elif y > 24 and y < 30:
+				if nx > -0.45 and nx < 0.65:
+					inside = true
+					depth = 0.55
+
+			# Пятка (y: 30..42)
+			elif y >= 30 and y <= 42:
+				var half_w: float = 0.75 - pow((float(y) - 36.0) / 7.0, 2.0) * 0.25
+				if abs(nx) <= half_w:
+					inside = true
+					depth = 0.95
+					if y % 4 == 0:
+						depth = 0.5
+
+			if inside:
+				var edge_fade: float = 1.0 - pow(nx * 0.85, 4.0)
+				var alpha: float = clampf(depth * edge_fade * 0.88, 0.0, 0.9)
+				var c := Color(0.28, 0.18, 0.10, alpha)
+				img.set_pixel(x, y, c)
+
+	return img
+
+
+# =========================================================================
+# 8. СЛЕД КОПЫТА ОСЛА НА ПЕСКЕ (FOOTPRINT HOOF)
+# =========================================================================
+static func make_footprint_hoof() -> Texture2D:
+	return get_or_create("footprint_hoof.png", _generate_footprint_hoof_image)
+
+static func _generate_footprint_hoof_image() -> Image:
+	var s := 32
+	var img: Image = Image.create(s, s, false, Image.FORMAT_RGBA8)
+	var center := Vector2(16, 14)
+
+	for y in range(s):
+		for x in range(s):
+			var pos := Vector2(x, y)
+			var d: float = center.distance_to(pos)
+			var inside: bool = false
+			var depth: float = 0.0
+
+			# Внешняя подкова копыта (овальная дуга)
+			var angle := atan2(pos.y - center.y, pos.x - center.x)
+			if d >= 5.5 and d <= 11.5 and pos.y <= 24:
+				inside = true
+				depth = 0.92
+			# Центральная стрелка копыта осла ("V"-образная выемка)
+			elif d < 5.5 and pos.y >= 10 and pos.y <= 21 and abs(pos.x - 16) <= (pos.y - 10) * 0.6:
+				inside = true
+				depth = 0.75
+
+			if inside:
+				var alpha: float = clampf(depth * 0.92, 0.0, 0.95)
+				img.set_pixel(x, y, Color(0.24, 0.15, 0.08, alpha))
+
+	return img
+
+
+# =========================================================================
+# 9. БРЫЗГИ И ПЯТНА КРОВИ НА ПЕСКЕ (BLOOD SPLATTER)
+# =========================================================================
+static func make_blood_splatter() -> Texture2D:
+	return get_or_create("blood_splatter.png", _generate_blood_splatter_image)
+
+static func _generate_blood_splatter_image() -> Image:
+	var s := 64
+	var img: Image = Image.create(s, s, false, Image.FORMAT_RGBA8)
+	var center := Vector2(32, 32)
+	var c_core := Color(0.38, 0.02, 0.03, 0.96)
+	var c_mid  := Color(0.55, 0.04, 0.05, 0.90)
+	var c_edge := Color(0.28, 0.08, 0.06, 0.75)
+
+	# Детерминированный генератор для повторяемости
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77192
+
+	# 1. Центральное ядро кляксы
+	for y in range(s):
+		for x in range(s):
+			var pos := Vector2(x, y)
+			var d: float = center.distance_to(pos)
+			var angle: float = atan2(pos.y - center.y, pos.x - center.x)
+			# Неровные органические края
+			var r_max: float = 9.0 + sin(angle * 5.0) * 3.5 + cos(angle * 3.0 + 1.2) * 2.0
+			if d <= r_max:
+				var t: float = d / maxf(r_max, 1.0)
+				var c: Color = c_core.lerp(c_edge, t)
+				img.set_pixel(x, y, c)
+
+	# 2. Разлетающиеся капли и струи брызг в стороны
+	for i in range(16):
+		var sp_angle: float = (float(i) / 16.0) * TAU + rng.randf_range(-0.15, 0.15)
+		var sp_dist: float = rng.randf_range(11.0, 26.0)
+		var drop_center := center + Vector2(cos(sp_angle), sin(sp_angle)) * sp_dist
+		var drop_radius: float = rng.randf_range(1.4, 3.2)
+
+		for dy in range(-4, 5):
+			for dx in range(-4, 5):
+				var px: int = int(drop_center.x) + dx
+				var py: int = int(drop_center.y) + dy
+				if px >= 0 and px < s and py >= 0 and py < s:
+					var dist_d: float = drop_center.distance_to(Vector2(px, py))
+					if dist_d <= drop_radius:
+						img.set_pixel(px, py, c_mid)
+
+	return img
+
+
+# =========================================================================
+# 10. БОЛЬШАЯ ЛУЖА КРОВИ (BLOOD POOL)
+# =========================================================================
+static func make_blood_pool() -> Texture2D:
+	return get_or_create("blood_pool.png", _generate_blood_pool_image)
+
+static func _generate_blood_pool_image() -> Image:
+	var s := 64
+	var img: Image = Image.create(s, s, false, Image.FORMAT_RGBA8)
+	var center := Vector2(32, 32)
+
+	var c_deep := Color(0.26, 0.01, 0.02, 0.98)
+	var c_fresh:= Color(0.48, 0.03, 0.04, 0.92)
+	var c_soak := Color(0.32, 0.10, 0.07, 0.70)
+
+	for y in range(s):
+		for x in range(s):
+			var pos := Vector2(x, y)
+			var d: float = center.distance_to(pos)
+			var angle: float = atan2(pos.y - center.y, pos.x - center.x)
+
+			# Аморфная форма растекающейся по песку лужи
+			var r_pool: float = 21.0 + sin(angle * 4.0) * 4.0 + cos(angle * 7.0) * 2.5 + sin(angle * 2.0) * 3.0
+			if d <= r_pool:
+				var t: float = d / r_pool
+				var c: Color = c_deep.lerp(c_soak, pow(t, 1.4))
+				img.set_pixel(x, y, c)
+			elif d <= r_pool + 2.5:
+				var edge_fade: float = 1.0 - (d - r_pool) / 2.5
+				img.set_pixel(x, y, Color(c_soak.r, c_soak.g, c_soak.b, c_soak.a * edge_fade))
+
+	return img
+
+
+# =========================================================================
+# 11. МЯГКИЙ КЛУБ ПЕСКА / ПЫЛИ (SAND PUFF)
+# =========================================================================
+static func make_sand_puff() -> Texture2D:
+	return get_or_create("sand_puff.png", _generate_sand_puff_image)
+
+static func _generate_sand_puff_image() -> Image:
+	var s := 64
+	var img: Image = Image.create(s, s, false, Image.FORMAT_RGBA8)
+	var center := Vector2(32, 32)
+	var sand_color := Color(0.92, 0.78, 0.54)
+
+	for y in range(s):
+		for x in range(s):
+			var pos := Vector2(x, y)
+			var d: float = center.distance_to(pos)
+			var angle: float = atan2(pos.y - center.y, pos.x - center.x)
+
+			# Пушистые клубящиеся облачные лепестки
+			var r_cloud: float = 26.0 + sin(angle * 3.0) * 3.5 + cos(angle * 5.0 + 0.8) * 2.5
+			if d <= r_cloud:
+				var norm_d: float = d / r_cloud
+				# Мягкий спад плотности (косинусный)
+				var alpha: float = 0.5 * (1.0 + cos(norm_d * PI))
+				alpha = pow(alpha, 1.3) * 0.72
+				img.set_pixel(x, y, Color(sand_color.r, sand_color.g, sand_color.b, alpha))
+
+	return img
+

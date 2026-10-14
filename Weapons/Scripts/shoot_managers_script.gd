@@ -178,6 +178,9 @@ func _spawn_chainsaw_blood(pos: Vector3) -> void:
 	p.restart()
 	p.emitting = true
 
+	# Кровавые брызги на песке от распила бензопилой
+	SandEffects.add_blood_splatter(pos, Vector3.DOWN, 1.35)
+
 	var timer := get_tree().create_timer(p.lifetime + 0.1)
 	timer.timeout.connect(func(): if is_instance_valid(p): p.queue_free())
 
