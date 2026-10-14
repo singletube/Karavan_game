@@ -351,6 +351,8 @@ func _build_game_hud() -> void:
 	toast_label.add_theme_constant_override("shadow_offset_y", 1)
 	toast_label.hide()
 	add_child(toast_label)
+
+	death_overlay = ColorRect.new()
 	death_overlay.name = "DeathOverlay"
 	death_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	death_overlay.color = Color(0.08, 0.0, 0.0, 0.76)
