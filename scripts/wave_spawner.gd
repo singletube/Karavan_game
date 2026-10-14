@@ -6,7 +6,7 @@ const ENEMY_SCENE: PackedScene = preload("res://scenes/enemy.tscn")
 # --- Настройки волн ---
 @export var min_spawn_dist    : float = 18.0
 @export var max_spawn_dist    : float = 42.0
-@export var wave_break        : float = 8.0
+@export var wave_break        : float = 15.0
 @export var max_alive_enemies : int   = 30
 
 # --- Состояние спавнера ---
@@ -35,6 +35,7 @@ signal enemies_remaining(count: int)
 signal wave_countdown(seconds: int)
 
 func _ready() -> void:
+	add_to_group("wave_spawner")
 	_setup_container()
 	audio_player = AudioStreamPlayer.new()
 	add_child(audio_player)
@@ -99,6 +100,9 @@ func _start_next_wave() -> void:
 
 	wave_started.emit(current_wave, wave_name)
 	enemies_remaining.emit(enemies_alive + enemies_to_spawn.size())
+
+	if has_node("/root/MusicManager"):
+		get_node("/root/MusicManager").set_combat_mode(true)
 
 	if audio_player and snd_wave_start:
 		audio_player.stream = snd_wave_start
@@ -311,6 +315,9 @@ func _complete_wave() -> void:
 	wave_active = false
 	wave_completed.emit(current_wave)
 
+	if has_node("/root/MusicManager"):
+		get_node("/root/MusicManager").set_combat_mode(false)
+
 	if audio_player and snd_wave_win:
 		audio_player.stream = snd_wave_win
 		audio_player.play()
@@ -327,4 +334,8 @@ func reset_to_wave_zero() -> void:
 	enemies_alive = 0
 	current_wave = 0
 	enemies_remaining.emit(0)
+
+	if has_node("/root/MusicManager"):
+		get_node("/root/MusicManager").set_combat_mode(false)
+
 	_start_break(wave_break)
