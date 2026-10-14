@@ -137,18 +137,30 @@ func _build_carriage() -> void:
 	for p: Vector3 in post_positions:
 		_create_box(carriage, Vector3(0.12, 0.85, 0.12), mat_wood_dark, p)
 
-	# Тент / балдахин (тканевый навес на дугах над передней частью повозки)
+	# Высокие опорные стойки для просторной высокой крыши (высота до 3.4м)
+	var canopy_posts := [
+		Vector3(-1.05, 2.1, -1.6), Vector3(1.05, 2.1, -1.6),
+		Vector3(-1.05, 2.1, 0.1),  Vector3(1.05, 2.1, 0.1),
+		Vector3(-1.05, 2.1, 1.6),  Vector3(1.05, 2.1, 1.6)
+	]
+	for cp: Vector3 in canopy_posts:
+		_create_box(carriage, Vector3(0.1, 2.1, 0.1), mat_wood_dark, cp)
+
+	# Тент / высокий балдахин (просторная арочная крыша на высоте 3.5м над землей)
 	canopy_root = Node3D.new()
 	canopy_root.name = "Canopy"
 	carriage.add_child(canopy_root)
-	# Изогнутые дуги тента
-	_create_box(canopy_root, Vector3(2.3, 0.08, 0.08), mat_wood_dark, Vector3(0.0, 2.35, -1.0))
-	_create_box(canopy_root, Vector3(2.3, 0.08, 0.08), mat_wood_dark, Vector3(0.0, 2.35, 0.4))
-	# Верхняя ткань
-	_create_box(canopy_root, Vector3(2.35, 0.06, 2.0), mat_cloth, Vector3(0.0, 2.4, -0.3))
-	# Свисающие края тента
-	_create_box(canopy_root, Vector3(0.06, 0.45, 2.0), mat_cloth, Vector3(-1.18, 2.15, -0.3))
-	_create_box(canopy_root, Vector3(0.06, 0.45, 2.0), mat_cloth, Vector3(1.18, 2.15, -0.3))
+	# Изогнутые поперечные дуги тента
+	_create_box(canopy_root, Vector3(2.3, 0.08, 0.08), mat_wood_dark, Vector3(0.0, 3.42, -1.6))
+	_create_box(canopy_root, Vector3(2.3, 0.08, 0.08), mat_wood_dark, Vector3(0.0, 3.42, 0.1))
+	_create_box(canopy_root, Vector3(2.3, 0.08, 0.08), mat_wood_dark, Vector3(0.0, 3.42, 1.6))
+	# Продольные перекладины конька крыши
+	_create_box(canopy_root, Vector3(0.08, 0.08, 3.6), mat_wood_dark, Vector3(0.0, 3.46, 0.0))
+	# Верхняя ткань тента
+	_create_box(canopy_root, Vector3(2.35, 0.06, 3.6), mat_cloth, Vector3(0.0, 3.5, 0.0))
+	# Свисающие края тента по бокам
+	_create_box(canopy_root, Vector3(0.06, 0.65, 3.6), mat_cloth, Vector3(-1.18, 3.15, 0.0))
+	_create_box(canopy_root, Vector3(0.06, 0.65, 3.6), mat_cloth, Vector3(1.18, 3.15, 0.0))
 
 	# Декоративный груз каравана в передней части кузова (ящики и мешки с пряностями)
 	_create_box(carriage, Vector3(0.65, 0.55, 0.65), mat_cargo_crate, Vector3(-0.65, 0.95, -1.2))

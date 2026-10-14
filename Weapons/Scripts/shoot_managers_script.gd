@@ -21,6 +21,10 @@ func shoot() -> void:
 	weapon_manager.ammo_manager.ammo_dict[current_weapon.resources.ammo_type] >= current_weapon.resources.nb_proj_shots_at_same_time)
 	) and !current_weapon.resources.is_reloading:
 		current_weapon.resources.is_shooting = true
+		if current_weapon.resources.weapon_name == "Chainsaw":
+			var m: Node = current_weapon.model.get_node_or_null("ChainsawModel")
+			if m and m.has_method("set_sawing"):
+				m.set_sawing(true)
 		
 		#number of successive shots (for example if 3, the weapon will shot 3 times in a row)
 		for i in range(current_weapon.resources.nb_proj_shots):
@@ -64,6 +68,10 @@ func shoot() -> void:
 			else:
 				print("Not enought ammunitions to shoot")
 				
+		if current_weapon.resources.weapon_name == "Chainsaw":
+			var m: Node = current_weapon.model.get_node_or_null("ChainsawModel")
+			if m and m.has_method("set_sawing"):
+				m.set_sawing(false)
 		current_weapon.resources.is_shooting = false
 		
 func get_camera_fov() -> Vector3:  
@@ -118,10 +126,18 @@ func hitscan_shot(point_of_collision_hitscan : Vector3) -> void:
 		if target.has_method("take_damage"):
 			if target.is_in_group("Enemies") or target.is_in_group("enemy"):
 				target.call("take_damage", maxi(1, roundi(damage)), direction, hit.position)
+				if current_weapon.resources.weapon_name == "Chainsaw":
+					_spawn_chainsaw_blood(hit.position)
+					if weapon_manager.hud and weapon_manager.hud.has_method("add_screen_blood_splatter"):
+						weapon_manager.hud.add_screen_blood_splatter(randi_range(2, 4))
 			else:
 				target.call("take_damage", maxi(1, roundi(damage)))
 		elif target.has_method("hitscan_hit"):
 			target.call("hitscan_hit", damage, direction, hit.position)
+			if current_weapon.resources.weapon_name == "Chainsaw":
+				_spawn_chainsaw_blood(hit.position)
+				if weapon_manager.hud and weapon_manager.hud.has_method("add_screen_blood_splatter"):
+					weapon_manager.hud.add_screen_blood_splatter(randi_range(2, 4))
 	elif collider is Node and (collider as Node).is_in_group("HitableObjects") and collider.has_method("hitscan_hit"):
 		var distance_ratio := clampf(origin.distance_to(hit.position) / maxf(current_weapon.resources.max_range, 1.0), 0.0, 1.0)
 		var damage_curve: Curve = current_weapon.resources.damage_dropoff
@@ -129,6 +145,41 @@ func hitscan_shot(point_of_collision_hitscan : Vector3) -> void:
 		(collider as Node).call("hitscan_hit", current_weapon.resources.damage_per_proj * dropoff / 6.0, direction, hit.position)
 	if not (collider is Node and ((collider as Node).is_in_group("Enemies") or (collider as Node).is_in_group("EnemiesHead"))):
 		weapon_manager.display_bullet_hole(hit.position, hit.normal)
+
+func _spawn_chainsaw_blood(pos: Vector3) -> void:
+	var p := CPUParticles3D.new()
+	p.name = "ChainsawBloodSpray"
+	p.emitting = false
+	p.one_shot = true
+	p.explosiveness = 0.95
+	p.amount = 54
+	p.lifetime = 0.65
+	p.visibility_aabb = AABB(Vector3(-3.0, -3.0, -3.0), Vector3(6.0, 6.0, 6.0))
+	p.spread = 180.0
+	p.direction = Vector3.UP
+	p.initial_velocity_min = 4.5
+	p.initial_velocity_max = 9.0
+	p.gravity = Vector3(0.0, -11.0, 0.0)
+	p.color = Color(0.85, 0.012, 0.03, 1.0)
+	p.scale_amount_min = 2.2
+	p.scale_amount_max = 4.0
+
+	var droplet_material := StandardMaterial3D.new()
+	droplet_material.albedo_color = Color(0.85, 0.012, 0.03, 1.0)
+	droplet_material.roughness = 0.3
+	var droplet_mesh := SphereMesh.new()
+	droplet_mesh.radius = 0.035
+	droplet_mesh.height = 0.07
+	droplet_mesh.material = droplet_material
+	p.mesh = droplet_mesh
+
+	get_tree().get_root().add_child(p)
+	p.global_position = pos
+	p.restart()
+	p.emitting = true
+
+	var timer := get_tree().create_timer(p.lifetime + 0.1)
+	timer.timeout.connect(func(): if is_instance_valid(p): p.queue_free())
 
 func _find_damage_target(collider: Object) -> Node:
 	var node := collider as Node

@@ -1,0 +1,23 @@
+[gd_scene load_steps=4 format=3 uid="uid://chainsaw_scene_001"]
+
+[ext_resource type="Script" uid="uid://bcka80usfl4am" path="res://Weapons/Scripts/weapon_slot_script.gd" id="1_slot"]
+[ext_resource type="Resource" uid="uid://chainsaw_res_001" path="res://Weapons/Resources/chainsaw_weapon_resources.tres" id="2_res"]
+[ext_resource type="Script" path="res://scripts/chainsaw_model_3d.gd" id="3_model"]
+
+[node name="Chainsaw" type="Node3D" node_paths=PackedStringArray("model", "attack_point", "muzzle_flash_spawner")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.22, -0.22, -0.38)
+script = ExtResource("1_slot")
+resources = ExtResource("2_res")
+model = NodePath("ChainsawModel")
+attack_point = NodePath("ChainsawModel/AttackPoint")
+muzzle_flash_spawner = NodePath("ChainsawModel/MuzzleFlashSpawner")
+
+[node name="ChainsawModel" type="Node3D" parent="."]
+transform = Transform3D(0.9659258, 0.04494346, -0.254887, 0, 0.9848077, 0.1736482, 0.258819, -0.1677313, 0.9512513, 0, 0, 0)
+script = ExtResource("3_model")
+
+[node name="AttackPoint" type="Marker3D" parent="ChainsawModel"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.85)
+
+[node name="MuzzleFlashSpawner" type="Marker3D" parent="ChainsawModel"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.75)

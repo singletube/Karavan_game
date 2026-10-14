@@ -89,11 +89,17 @@ func display_play_char_properties() -> void:
 	camera_bob_vertical_offset_label_text.set_text(str(round_to_3_decimals(play_char.cam.v_offset)))
 	
 func update_weapon_stack_display() -> void:
-	weapon_stack_label_text.text = "1–5 / КОЛЕСО — СМЕНА"
+	weapon_stack_label_text.text = "1–6 / КОЛЕСО — СМЕНА"
 	
 func display_weapon_properties() -> void:
 	if weapon_manager.current_weapon:
 		var resource: WeaponResource = weapon_manager.current_weapon.resources
+		if resource.weapon_name == "Chainsaw":
+			weapon_name_label_text.text = "БЕНЗОПИЛА"
+			nb_ammo_in_mag_label_text.text = "∞"
+			nb_ammo_total_label_text.text = "ТОПЛИВО"
+			return
+
 		var ammo_per_shot := maxi(1, resource.nb_proj_shots_at_same_time)
 		var magazine := floori(float(resource.total_ammo_in_mag) / ammo_per_shot)
 		var reserve := floori(float(weapon_manager.ammo_manager.ammo_dict.get(resource.ammo_type, 0)) / ammo_per_shot)
@@ -111,10 +117,21 @@ func _localized_weapon_name(weapon_name: String) -> String:
 		"AssaultRifle": "АВТОМАТ",
 		"SniperRifle": "СНАЙПЕРКА",
 		"RocketLauncher": "РАКЕТНИЦА",
+		"Chainsaw": "БЕНЗОПИЛА",
 	}
 	return names.get(weapon_name, weapon_name)
 
+var blood_overlay: Control
+var _blood_textures: Array[ImageTexture] = []
+
 func _build_game_hud() -> void:
+	_init_blood_textures()
+	blood_overlay = Control.new()
+	blood_overlay.name = "ScreenBloodOverlay"
+	blood_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	blood_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(blood_overlay)
+
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.035, 0.045, 0.055, 0.88)
 	panel_style.border_color = Color(0.85, 0.62, 0.25, 0.85)
@@ -158,7 +175,7 @@ func _build_game_hud() -> void:
 	controls_hint.offset_bottom = -8.0
 	controls_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	controls_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	controls_hint.text = "1 Пистолет · 2 Автомат · 3 Дробовик · 4 Снайперка · 5 Ракетница\nЛКМ — огонь · R — перезарядка · колесо — смена · C/X — присесть"
+	controls_hint.text = "1 Пистолет · 2 Автомат · 3 Дробовик · 4 Снайперка · 5 Ракетница · 6 Бензопила\nЛКМ — огонь/пилить · R — перезарядка · колесо — смена · C/X — присесть"
 	controls_hint.add_theme_font_size_override("font_size", 13)
 	controls_hint.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.9))
 	controls_hint.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
@@ -321,6 +338,95 @@ func _on_caravan_destroyed() -> void:
 
 func _on_caravan_respawned() -> void:
 	death_overlay.hide()
+
+func _init_blood_textures() -> void:
+	_blood_textures.clear()
+	for pattern: int in range(5):
+		var size: int = 64
+		var img: Image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+		img.fill(Color(0.0, 0.0, 0.0, 0.0))
+		var center := Vector2(32.0, 32.0)
+		var base_radius: float = randf_range(11.0, 16.0)
+
+		# Основное неровное органическое пятно крови
+		for y: int in range(size):
+			for x: int in range(size):
+				var pos := Vector2(float(x), float(y))
+				var d: float = pos.distance_to(center)
+				var angle: float = (pos - center).angle()
+				var noise_r: float = base_radius * (1.0 + 0.35 * sin(angle * 5.0 + float(pattern)) + 0.22 * cos(angle * 3.0))
+				if d <= noise_r:
+					var edge_alpha: float = clampf((noise_r - d) / 2.5, 0.0, 1.0)
+					var col := Color(randf_range(0.72, 0.92), 0.02, 0.035, edge_alpha * 0.92)
+					img.set_pixel(x, y, col)
+
+		# Стекающая вниз струйка капли (на некоторых текстурах)
+		if pattern % 2 == 1:
+			var drip_len: int = randi_range(14, 24)
+			var drip_w: float = 2.8
+			for dy: int in range(drip_len):
+				var py: int = clampi(int(center.y) + int(base_radius * 0.5) + dy, 0, size - 1)
+				var px_center: int = int(center.x) + int(sin(float(dy) * 0.45) * 2.0)
+				for dx: int in range(-int(drip_w), int(drip_w) + 1):
+					var px: int = clampi(px_center + dx, 0, size - 1)
+					var d_tail: float = absf(float(dx)) / drip_w
+					if d_tail <= 1.0:
+						var a: float = (1.0 - d_tail) * (1.0 - (float(dy) / float(drip_len)) * 0.45)
+						img.set_pixel(px, py, Color(0.78, 0.02, 0.03, a * 0.9))
+
+		# Мелкие сателлитные брызги вокруг
+		for s: int in range(6):
+			var sat_angle: float = randf() * TAU
+			var sat_dist: float = base_radius + randf_range(5.0, 13.0)
+			var sat_pos: Vector2 = center + Vector2(cos(sat_angle), sin(sat_angle)) * sat_dist
+			var sat_r: float = randf_range(1.4, 3.2)
+			for sy: int in range(maxi(0, int(sat_pos.y - sat_r)), mini(size, int(sat_pos.y + sat_r + 1))):
+				for sx: int in range(maxi(0, int(sat_pos.x - sat_r)), mini(size, int(sat_pos.x + sat_r + 1))):
+					if Vector2(float(sx), float(sy)).distance_to(sat_pos) <= sat_r:
+						img.set_pixel(sx, sy, Color(0.82, 0.015, 0.03, 0.88))
+
+		_blood_textures.append(ImageTexture.create_from_image(img))
+
+func add_screen_blood_splatter(count: int = 3) -> void:
+	if not blood_overlay or _blood_textures.is_empty():
+		return
+
+	# Ограничение максимального количества брызг на экране
+	if blood_overlay.get_child_count() > 22:
+		var oldest: Node = blood_overlay.get_child(0)
+		if oldest:
+			oldest.queue_free()
+
+	var vp_size: Vector2 = get_viewport().get_visible_rect().size
+	if vp_size == Vector2.ZERO:
+		vp_size = Vector2(1280.0, 720.0)
+
+	for i in range(count):
+		var tex: ImageTexture = _blood_textures[randi() % _blood_textures.size()]
+		var splat := TextureRect.new()
+		splat.texture = tex
+		splat.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		splat.pivot_offset = Vector2(32.0, 32.0)
+		splat.rotation = randf() * TAU
+
+		var s: float = randf_range(1.0, 2.2)
+		splat.scale = Vector2(s, s)
+
+		# Расположение на экране: чаще ближе к центру и разлетается по сторонам
+		var rx: float = randf_range(vp_size.x * 0.15, vp_size.x * 0.85)
+		var ry: float = randf_range(vp_size.y * 0.15, vp_size.y * 0.85)
+		splat.position = Vector2(rx, ry)
+
+		splat.modulate = Color(1.0, 1.0, 1.0, randf_range(0.85, 1.0))
+		blood_overlay.add_child(splat)
+
+		# Плавное стекание капель вниз и постепенное высыхание / исчезновение
+		var fade_time: float = randf_range(2.0, 3.4)
+		var drip_offset: float = randf_range(18.0, 45.0)
+		var tween: Tween = create_tween().set_parallel(true)
+		tween.tween_property(splat, "modulate:a", 0.0, fade_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tween.tween_property(splat, "position:y", splat.position.y + drip_offset, fade_time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		tween.chain().tween_callback(Callable(splat, "queue_free"))
 	
 	
 	

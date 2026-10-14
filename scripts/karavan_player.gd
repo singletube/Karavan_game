@@ -80,6 +80,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_3: 2,
 		KEY_4: 3,
 		KEY_5: 4,
+		KEY_6: 5,
 	}
 	if event.keycode in weapon_key_to_index:
 		var manager := get_node_or_null("WeaponManager") as WeaponManager
