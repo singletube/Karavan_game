@@ -201,22 +201,6 @@ func _build_game_hud() -> void:
 	controls_hint.add_theme_constant_override("shadow_offset_y", 1)
 	add_child(controls_hint)
 
-	wave_label = Label.new()
-	wave_label.name = "WaveStatus"
-	wave_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	wave_label.offset_left = -260.0
-	wave_label.offset_top = 12.0
-	wave_label.offset_right = 260.0
-	wave_label.offset_bottom = 60.0
-	wave_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wave_label.text = "ОЖИДАНИЕ ВОЛНЫ"
-	wave_label.add_theme_font_size_override("font_size", 18)
-	wave_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.43, 1.0))
-	wave_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
-	wave_label.add_theme_constant_override("shadow_offset_x", 1)
-	wave_label.add_theme_constant_override("shadow_offset_y", 1)
-	add_child(wave_label)
-
 	var caravan_style := StyleBoxFlat.new()
 	caravan_style.bg_color = Color(0.04, 0.035, 0.02, 0.9)
 	caravan_style.border_color = Color(0.92, 0.72, 0.28, 0.9)
@@ -259,43 +243,21 @@ func _build_game_hud() -> void:
 	caravan_col.add_child(caravan_bar)
 	add_child(caravan_panel)
 
-	# Панель времени суток и статуса фонарика (в правом верхнем углу)
-	var time_style := StyleBoxFlat.new()
-	time_style.bg_color = Color(0.04, 0.035, 0.02, 0.88)
-	time_style.border_color = Color(0.85, 0.65, 0.25, 0.8)
-	time_style.set_border_width_all(1)
-	time_style.set_corner_radius_all(6)
-
-	time_panel = PanelContainer.new()
-	time_panel.name = "TimePanel"
-	time_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	time_panel.offset_left = -230.0
-	time_panel.offset_top = 16.0
-	time_panel.offset_right = -16.0
-	time_panel.offset_bottom = 68.0
-	time_panel.add_theme_stylebox_override("panel", time_style)
-
-	var time_vbox := VBoxContainer.new()
-	time_vbox.add_theme_constant_override("separation", 2)
-	time_panel.add_child(time_vbox)
-
-	time_label = Label.new()
-	time_label.name = "TimeLabel"
-	time_label.text = "☀️ 12:00 · ДЕНЬ"
-	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	time_label.add_theme_font_size_override("font_size", 14)
-	time_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.72, 1.0))
-	time_vbox.add_child(time_label)
-
-	flashlight_label = Label.new()
-	flashlight_label.name = "FlashlightStatusLabel"
-	flashlight_label.text = "🔦 [F] ФОНАРИК: ВЫКЛ"
-	flashlight_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	flashlight_label.add_theme_font_size_override("font_size", 12)
-	flashlight_label.add_theme_color_override("font_color", Color(0.65, 0.65, 0.65, 1.0))
-	time_vbox.add_child(flashlight_label)
-
-	add_child(time_panel)
+	wave_label = Label.new()
+	wave_label.name = "WaveStatus"
+	wave_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	wave_label.offset_left = -260.0
+	wave_label.offset_top = 112.0
+	wave_label.offset_right = 260.0
+	wave_label.offset_bottom = 160.0
+	wave_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	wave_label.text = "ОЖИДАНИЕ ВОЛНЫ"
+	wave_label.add_theme_font_size_override("font_size", 18)
+	wave_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.43, 1.0))
+	wave_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
+	wave_label.add_theme_constant_override("shadow_offset_x", 1)
+	wave_label.add_theme_constant_override("shadow_offset_y", 1)
+	add_child(wave_label)
 
 	# Панель подсказки взаимодействия [E] (по центру экрана под прицелом)
 	var interact_style := StyleBoxFlat.new()

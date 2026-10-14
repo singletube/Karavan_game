@@ -20,10 +20,9 @@ var tex_sand_puff: Texture2D
 
 # Звуки
 var snd_step: AudioStream
-var snd_wind: AudioStream
 
 # Аудио плееры
-var wind_player: AudioStreamPlayer
+var local_step_player: AudioStreamPlayer = null
 var step_players: Array[AudioStreamPlayer3D] = []
 var step_player_idx: int = 0
 const MAX_STEP_PLAYERS: int = 4
@@ -44,7 +43,6 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_init_resources()
 	_setup_containers()
-	_setup_wind_audio()
 	_setup_sand_clouds()
 	_setup_step_audio()
 
@@ -58,45 +56,33 @@ func _init_resources() -> void:
 
 	if ResourceLoader.exists("res://assets/audio/step_sand.wav"):
 		snd_step = load("res://assets/audio/step_sand.wav") as AudioStream
-	if ResourceLoader.exists("res://assets/audio/sand_wind_howl.wav"):
-		snd_wind = load("res://assets/audio/sand_wind_howl.wav") as AudioStream
 
 func _setup_containers() -> void:
 	marks_root = Node3D.new()
 	marks_root.name = "SandMarksRoot"
 	add_child(marks_root)
 
-func _setup_wind_audio() -> void:
-	if not snd_wind:
-		return
-
-	wind_player = AudioStreamPlayer.new()
-	wind_player.name = "DesertWindHowlPlayer"
-	wind_player.stream = snd_wind
-	wind_player.bus = "Master"
-	wind_player.volume_db = -10.5
-	add_child(wind_player)
-
-	# Бесшовное зацикливание песчаного завывания ветра
-	if snd_wind is AudioStreamWAV:
-		(snd_wind as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
-	wind_player.finished.connect(func():
-		if is_instance_valid(wind_player):
-			wind_player.play()
-	)
-	wind_player.play()
-
 func _setup_step_audio() -> void:
 	if not snd_step:
 		return
+
+	# Локальный плеер для шагов игрока (слышно прямо по центру в обоих наушниках)
+	local_step_player = AudioStreamPlayer.new()
+	local_step_player.name = "LocalSandStepAudio"
+	local_step_player.stream = snd_step
+	local_step_player.bus = "Master"
+	local_step_player.volume_db = -14.0 # В 2 раза тише (было -7.0)
+	add_child(local_step_player)
+
 	for i in range(MAX_STEP_PLAYERS):
 		var sp := AudioStreamPlayer3D.new()
 		sp.name = "SandStepAudio_%d" % i
 		sp.stream = snd_step
 		sp.bus = "Master"
-		sp.volume_db = -7.0
+		sp.volume_db = -14.0 # В 2 раза тише (было -7.0)
 		sp.max_distance = 25.0
-		sp.attenuation_filter_cutoff_hz = 6000.0
+		sp.panning_strength = 0.25 # Мягкое позиционирование без резкого перекоса в правое ухо
+		sp.attenuation_filter_cutoff_hz = 5000.0
 		add_child(sp)
 		step_players.append(sp)
 
@@ -153,12 +139,7 @@ func _setup_sand_clouds() -> void:
 func _process(delta: float) -> void:
 	anim_time += delta
 
-	# 1. Завывание ветра — живые порывы (громкость плавно дышит)
-	if wind_player and wind_player.playing:
-		var gust: float = sin(anim_time * 0.45) * 2.2 + cos(anim_time * 0.95) * 1.2
-		wind_player.volume_db = -10.5 + gust
-
-	# 2. Позиционирование летающих клубов песка рядом с игроком или караваном
+	# 1. Позиционирование летающих клубов песка рядом с игроком или караваном
 	if sand_cloud_particles:
 		var fpos := _get_active_focus_position()
 		sand_cloud_particles.global_position = Vector3(fpos.x, 1.4, fpos.z)
@@ -296,14 +277,21 @@ func add_bootprint(pos: Vector3, forward_dir: Vector3, is_left: bool) -> void:
 
 	_register_decal(dec, 20.0)
 
-func play_sand_step(pos: Vector3) -> void:
+func play_sand_step(pos: Vector3, is_local_player: bool = false) -> void:
+	if not snd_step:
+		return
+	if is_local_player and local_step_player:
+		local_step_player.pitch_scale = randf_range(0.92, 1.08)
+		local_step_player.play()
+		return
+
 	if step_players.is_empty():
 		return
 	var player: AudioStreamPlayer3D = step_players[step_player_idx]
 	step_player_idx = (step_player_idx + 1) % step_players.size()
 	if is_instance_valid(player):
 		player.global_position = pos
-		player.pitch_scale = randf_range(0.88, 1.15)
+		player.pitch_scale = randf_range(0.90, 1.10)
 		player.play()
 
 # =========================================================================

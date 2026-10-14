@@ -53,8 +53,8 @@ func _setup_wave_ui() -> void:
 	wave_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	wave_panel.offset_left = -220.0
 	wave_panel.offset_right = 220.0
-	wave_panel.offset_top = 18.0
-	wave_panel.offset_bottom = 85.0
+	wave_panel.offset_top = 112.0
+	wave_panel.offset_bottom = 168.0
 	wave_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 
 	var style: StyleBoxFlat = StyleBoxFlat.new()

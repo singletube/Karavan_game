@@ -175,12 +175,15 @@ def gen_step():
     dur = 0.16
     total = int(SAMPLE_RATE * dur)
     samples = []
+    prev_g = 0.0
     for i in range(total):
         t = i / SAMPLE_RATE
-        # Low frequency foot impact + gritty friction noise
-        thump = math.sin(2.0 * math.pi * 50.0 * t) * math.exp(-t * 25.0) * 0.5
-        grit = random.uniform(-1.0, 1.0) * math.exp(-t * 20.0) * 0.6
-        s = (thump + grit) * 0.6
+        # Low frequency foot impact + soft sand friction
+        thump = math.sin(2.0 * math.pi * 50.0 * t) * math.exp(-t * 26.0) * 0.4
+        raw_grit = random.uniform(-1.0, 1.0) * math.exp(-t * 22.0) * 0.35
+        prev_g += 0.22 * (raw_grit - prev_g)
+        # 2 times quieter overall (0.3 instead of 0.6)
+        s = (thump + prev_g) * 0.3
         samples.append(clamp(s))
     return samples
 
@@ -331,51 +334,8 @@ def gen_wave_win():
 
 # --- 16. Desert Wind Howl / Sandstorm (Песчаные завывания) ---
 def gen_wind_howl():
-    dur = 6.0
-    total = int(SAMPLE_RATE * dur)
-    # Low frequency noise filtered buffer
-    raw_noise = [random.uniform(-1.0, 1.0) for _ in range(total)]
-    # 2-pole lowpass filter for rumbling wind base
-    lp_noise = []
-    prev1 = 0.0
-    prev2 = 0.0
-    for n in raw_noise:
-        prev1 += 0.015 * (n - prev1)
-        prev2 += 0.015 * (prev1 - prev2)
-        lp_noise.append(prev2 * 4.5)
-
-    samples = []
-    for i in range(total):
-        t = i / SAMPLE_RATE
-        phase = (t / dur) * 2.0 * math.pi
-        # Looping gust envelopes using harmonics of 2*pi / dur
-        gust = 0.55 + 0.30 * math.sin(phase * 1.0) + 0.15 * math.sin(phase * 2.0 + 1.2) + 0.08 * math.cos(phase * 3.0)
-
-        # Resonant whistle / howling ("завывание ветра")
-        whistle_freq1 = 280.0 + 110.0 * math.sin(phase * 1.0 + 0.5) + 40.0 * math.cos(phase * 2.0)
-        whistle1 = math.sin(2.0 * math.pi * whistle_freq1 * t) * (0.16 + 0.10 * math.sin(phase * 1.0))
-
-        whistle_freq2 = 420.0 + 140.0 * math.cos(phase * 1.0)
-        whistle2 = math.sin(2.0 * math.pi * whistle_freq2 * t) * (0.09 + 0.07 * math.sin(phase * 2.0 + 0.8))
-
-        # Blowing sand granules friction hiss
-        sand_hiss = (random.uniform(-0.15, 0.15)) * (0.4 + 0.3 * gust)
-
-        # Mix rumble, gusts, whistles and sand
-        rumble = lp_noise[i] * gust * 1.8
-        mix = rumble + whistle1 + whistle2 + sand_hiss
-        samples.append(math.tanh(mix * 0.95))
-
-    # Crossfade ends (0.3s) for seamless looping
-    xfade_samples = int(SAMPLE_RATE * 0.3)
-    for i in range(xfade_samples):
-        alpha = i / float(xfade_samples)
-        tail_idx = total - xfade_samples + i
-        blended = samples[tail_idx] * (1.0 - alpha) + samples[i] * alpha
-        samples[tail_idx] = blended
-        samples[i] = blended
-
-    return samples
+    # Полностью бесшумный буфер (хрустящий шум ветра убран по просьбе игрока)
+    return [0.0] * int(SAMPLE_RATE * 1.0)
 
 
 if __name__ == "__main__":

@@ -54,6 +54,10 @@ func _ready() -> void:
 
 	if is_local():
 		cam.current = true
+		var listener := AudioListener3D.new()
+		listener.name = "PlayerAudioListener"
+		cam.add_child(listener)
+		listener.make_current()
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 		get_node_or_null("HUD").show()
 		health_changed.emit(health)
@@ -106,7 +110,7 @@ func _process_player_footsteps(delta: float) -> void:
 			SandEffects.add_bootprint(foot_pos, fwd_dir, footstep_left)
 			SandEffects.spawn_dust_puff(foot_pos, 0.35)
 
-		SandEffects.play_sand_step(foot_pos)
+		SandEffects.play_sand_step(foot_pos, true)
 
 func _process(delta: float) -> void:
 	if is_local() and not is_dead:
