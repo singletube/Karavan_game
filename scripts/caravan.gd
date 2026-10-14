@@ -9,12 +9,14 @@ const BASE_SPEED: float = 2.25 # 1/4 скорости ходьбы игрока 
 signal health_changed(current: int, max_hp: int)
 signal caravan_destroyed
 signal caravan_respawned
+signal caravan_blocked_status(blocked: bool, reason: String)
 
 @export var move_speed: float = BASE_SPEED
 @export var move_direction: Vector3 = Vector3(0.0, 0.0, -1.0) # Идет вперед вглубь пустыни
 
 var health: int = MAX_HEALTH
 var is_destroyed: bool = false
+var is_blocked: bool = false
 var walk_phase: float = 0.0
 
 @onready var model: CaravanModel3D = $CaravanModel3D
@@ -34,7 +36,12 @@ func _ready() -> void:
 		hit_sound.stream = snd_wood_hit
 
 func _physics_process(delta: float) -> void:
-	if is_destroyed:
+	var was_blocked := is_blocked
+	is_blocked = _check_road_obstacles()
+	if is_blocked != was_blocked:
+		caravan_blocked_status.emit(is_blocked, "ДОРОГА ЗАБЛОКИРОВАНА!" if is_blocked else "")
+
+	if is_destroyed or is_blocked:
 		if model:
 			model.update_animation(delta, false, 0.0, walk_phase)
 		return
@@ -46,6 +53,23 @@ func _physics_process(delta: float) -> void:
 
 	if model:
 		model.update_animation(delta, true, move_speed, walk_phase)
+
+func _check_road_obstacles() -> bool:
+	var obstacles := get_tree().get_nodes_in_group("road_obstacle")
+	if obstacles.is_empty():
+		return false
+
+	var fwd := move_direction.normalized()
+	for obs in obstacles:
+		if is_instance_valid(obs) and obs is Node3D:
+			var to_obs: Vector3 = (obs as Node3D).global_position - global_position
+			var forward_dist: float = to_obs.dot(fwd)
+			# Препятствие на расстоянии от 2.0 до 8.5м впереди и в пределах ширины дороги (< 3.8м)
+			if forward_dist > 2.0 and forward_dist < 8.5:
+				var side_dist: float = (to_obs - fwd * forward_dist).length()
+				if side_dist < 3.8:
+					return true
+	return false
 
 # Возвращает позицию спавна внутри кузова повозки (для игрока)
 func get_cargo_spawn_position() -> Vector3:

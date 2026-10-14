@@ -26,6 +26,9 @@ var flashlight_halo: SpotLight3D
 var flashlight_audio: AudioStreamPlayer
 var flashlight_enabled: bool = false
 
+var current_interactable: Node = null
+var interact_hold_time: float = 0.0
+
 func _enter_tree() -> void:
 	if name.is_valid_int():
 		set_multiplayer_authority(name.to_int())
@@ -74,9 +77,73 @@ func _physics_process(delta: float) -> void:
 	if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
 		rpc("sync_state", global_position, rotation.y)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if is_local() and not is_dead:
 		_publish_weapon_status(false)
+		_process_interaction(delta)
+
+func _process_interaction(delta: float) -> void:
+	var hud_node: HUD = get_node_or_null("HUD") as HUD
+	var interactive_nodes := get_tree().get_nodes_in_group("interactive")
+
+	var closest_node: Node3D = null
+	var closest_dist: float = 4.2
+
+	for node in interactive_nodes:
+		if is_instance_valid(node) and node is Node3D:
+			var d: float = global_position.distance_to((node as Node3D).global_position)
+			if d < closest_dist:
+				closest_dist = d
+				closest_node = node as Node3D
+
+	current_interactable = closest_node
+
+	if current_interactable == null:
+		interact_hold_time = 0.0
+		if hud_node:
+			hud_node.hide_interaction_prompt()
+		return
+
+	var prompt: String = str(current_interactable.get_meta("prompt_text", "[E] ВЗАИМОДЕЙСТВИЕ"))
+	var requires_hold: bool = bool(current_interactable.get_meta("requires_hold", false))
+	var hold_dur: float = float(current_interactable.get_meta("hold_duration", 2.2))
+
+	var is_e_pressed: bool = Input.is_key_pressed(KEY_E)
+
+	if requires_hold:
+		if is_e_pressed:
+			interact_hold_time += delta
+			var progress: float = clampf(interact_hold_time / hold_dur, 0.0, 1.0)
+			if hud_node:
+				hud_node.show_interaction_prompt("РАЗБОР ЗАВАЛА... %d%%" % int(progress * 100.0), progress, true)
+			if progress >= 1.0:
+				interact_hold_time = 0.0
+				if current_interactable.has_method("on_interact_completed"):
+					current_interactable.on_interact_completed(self)
+				current_interactable = null
+				if hud_node:
+					hud_node.hide_interaction_prompt()
+		else:
+			interact_hold_time = 0.0
+			if hud_node:
+				hud_node.show_interaction_prompt(prompt, 0.0, false)
+	else:
+		if hud_node:
+			hud_node.show_interaction_prompt(prompt, 0.0, false)
+		if is_e_pressed and interact_hold_time == 0.0:
+			interact_hold_time = 1.0
+			if current_interactable.has_method("on_interact"):
+				current_interactable.on_interact(self)
+			current_interactable = null
+			if hud_node:
+				hud_node.hide_interaction_prompt()
+		elif not is_e_pressed:
+			interact_hold_time = 0.0
+
+func notify_hud(msg: String, col: Color = Color.WHITE) -> void:
+	var hud_node: HUD = get_node_or_null("HUD") as HUD
+	if hud_node:
+		hud_node.show_toast(msg, col)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_local() or is_dead or not (event is InputEventKey and event.pressed and not event.echo):

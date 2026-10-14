@@ -41,6 +41,11 @@ var caravan_bar: ProgressBar
 var time_panel: PanelContainer
 var time_label: Label
 var flashlight_label: Label
+var interact_box: PanelContainer
+var interact_label: Label
+var interact_bar: ProgressBar
+var toast_label: Label
+var _is_caravan_blocked: bool = false
 
 func _ready() -> void:
 	weapon_manager.weapon_stack_updated.connect(Callable(self, "update_weapon_stack_display"))
@@ -179,7 +184,7 @@ func _build_game_hud() -> void:
 	controls_hint.offset_bottom = -8.0
 	controls_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	controls_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	controls_hint.text = "1–6 Оружие · ЛКМ огонь/пилить · R перезар · F фонарик · C/X присесть\nКолесо мыши — смена · Защищайте караван и осла!"
+	controls_hint.text = "1–6 Оружие · ЛКМ огонь/пилить · R перезар · F фонарик · E разобрать/лут\nКолесо мыши — смена · C/X присесть · Защищайте караван и осла!"
 	controls_hint.add_theme_font_size_override("font_size", 13)
 	controls_hint.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.9))
 	controls_hint.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
@@ -283,7 +288,69 @@ func _build_game_hud() -> void:
 
 	add_child(time_panel)
 
-	death_overlay = ColorRect.new()
+	# Панель подсказки взаимодействия [E] (по центру экрана под прицелом)
+	var interact_style := StyleBoxFlat.new()
+	interact_style.bg_color = Color(0.04, 0.04, 0.05, 0.88)
+	interact_style.border_color = Color(0.9, 0.75, 0.3, 0.9)
+	interact_style.set_border_width_all(1)
+	interact_style.set_corner_radius_all(6)
+
+	interact_box = PanelContainer.new()
+	interact_box.name = "InteractBox"
+	interact_box.set_anchors_preset(Control.PRESET_CENTER)
+	interact_box.offset_left = -170.0
+	interact_box.offset_top = 46.0
+	interact_box.offset_right = 170.0
+	interact_box.offset_bottom = 98.0
+	interact_box.add_theme_stylebox_override("panel", interact_style)
+
+	var interact_vbox := VBoxContainer.new()
+	interact_vbox.add_theme_constant_override("separation", 3)
+	interact_box.add_child(interact_vbox)
+
+	interact_label = Label.new()
+	interact_label.name = "InteractLabel"
+	interact_label.text = "[E] ВЗАИМОДЕЙСТВИЕ"
+	interact_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	interact_label.add_theme_font_size_override("font_size", 14)
+	interact_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.8, 1.0))
+	interact_vbox.add_child(interact_label)
+
+	interact_bar = ProgressBar.new()
+	interact_bar.name = "InteractProgressBar"
+	interact_bar.min_value = 0.0
+	interact_bar.max_value = 1.0
+	interact_bar.value = 0.0
+	interact_bar.show_percentage = false
+	interact_bar.custom_minimum_size = Vector2(280.0, 8.0)
+	var i_bg := StyleBoxFlat.new()
+	i_bg.bg_color = Color(0.12, 0.12, 0.14, 1.0)
+	var i_fill := StyleBoxFlat.new()
+	i_fill.bg_color = Color(0.3, 1.0, 0.45, 1.0)
+	interact_bar.add_theme_stylebox_override("background", i_bg)
+	interact_bar.add_theme_stylebox_override("fill", i_fill)
+	interact_vbox.add_child(interact_bar)
+
+	interact_box.hide()
+	add_child(interact_box)
+
+	# Всплывающее текстовое уведомление (Toast)
+	toast_label = Label.new()
+	toast_label.name = "ToastLabel"
+	toast_label.set_anchors_preset(Control.PRESET_CENTER)
+	toast_label.offset_left = -300.0
+	toast_label.offset_top = -120.0
+	toast_label.offset_right = 300.0
+	toast_label.offset_bottom = -80.0
+	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	toast_label.add_theme_font_size_override("font_size", 20)
+	toast_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.45, 1.0))
+	toast_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
+	toast_label.add_theme_constant_override("shadow_offset_x", 1)
+	toast_label.add_theme_constant_override("shadow_offset_y", 1)
+	toast_label.hide()
+	add_child(toast_label)
 	death_overlay.name = "DeathOverlay"
 	death_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	death_overlay.color = Color(0.08, 0.0, 0.0, 0.76)
@@ -362,7 +429,45 @@ func _connect_caravan() -> void:
 		caravan.connect("caravan_destroyed", _on_caravan_destroyed)
 	if caravan.has_signal("caravan_respawned"):
 		caravan.connect("caravan_respawned", _on_caravan_respawned)
+	if caravan.has_signal("caravan_blocked_status"):
+		caravan.connect("caravan_blocked_status", _on_caravan_blocked_status)
 	_on_caravan_health_changed(int(caravan.get("health")), int(caravan.get("MAX_HEALTH")))
+
+func _on_caravan_blocked_status(blocked: bool, _reason: String) -> void:
+	_is_caravan_blocked = blocked
+	if caravan_label:
+		if blocked:
+			caravan_label.text = "⚠️ КАРАВАН ОСТАНОВЛЕН: ЗАВАЛ НА ПУТИ!"
+			caravan_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.2, 1.0))
+		else:
+			var caravan = get_tree().get_first_node_in_group("caravan")
+			if caravan:
+				_on_caravan_health_changed(int(caravan.get("health")), int(caravan.get("MAX_HEALTH")))
+			caravan_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.75, 1.0))
+
+func show_interaction_prompt(prompt_text: String, progress: float = 0.0, show_bar: bool = false) -> void:
+	if not interact_box or not interact_label or not interact_bar:
+		return
+	interact_label.text = prompt_text
+	interact_bar.visible = show_bar
+	interact_bar.value = clampf(progress, 0.0, 1.0)
+	interact_box.show()
+
+func hide_interaction_prompt() -> void:
+	if interact_box:
+		interact_box.hide()
+
+func show_toast(msg: String, col: Color = Color(0.3, 1.0, 0.45), duration: float = 2.8) -> void:
+	if not toast_label:
+		return
+	toast_label.text = msg
+	toast_label.add_theme_color_override("font_color", col)
+	toast_label.modulate.a = 1.0
+	toast_label.show()
+	var tw := create_tween()
+	tw.tween_interval(duration * 0.6)
+	tw.tween_property(toast_label, "modulate:a", 0.0, duration * 0.4)
+	tw.chain().tween_callback(toast_label.hide)
 
 func _on_caravan_health_changed(current: int, max_hp: int) -> void:
 	if caravan_bar and caravan_label:
