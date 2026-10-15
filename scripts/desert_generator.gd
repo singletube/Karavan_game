@@ -18,6 +18,13 @@ var current_center_coord  : Vector2i   = Vector2i(999999, 999999)
 var update_timer          : float      = 0.0
 const UPDATE_INTERVAL     : float      = 0.20 # Частота проверки положения цели (сек)
 
+# История и параметры спавна редких точек интереса (POI)
+var spawned_gas_stations : Dictionary = {} # Vector2i -> Dictionary
+var spawned_oases        : Dictionary = {} # Vector2i -> Dictionary
+const MIN_GAS_STATION_CHUNK_DIST : int   = 9   # Минимум 8-10 чанков между любыми заправками (~1080м)
+const MIN_OASIS_CHUNK_DIST       : int   = 8   # Минимум 8 чанков между оазисами
+const MIN_GAS_OASIS_SEPARATION   : float = 3.5 # Минимум 3-4 чанка между заправкой и оазисом
+
 # Переиспользуемые ресурсы (Shared Meshes & Materials для максимальной производительности)
 var shared_floor_mesh     : BoxMesh
 var shared_floor_shape    : BoxShape3D
@@ -172,6 +179,36 @@ func _build_chunk_floor(chunk: Node3D) -> void:
 	body.add_child(col)
 	chunk.add_child(body)
 
+# Проверка дистанции до уже размещенных заправок (минимум min_dist чанков)
+func _is_far_enough_from_gas_stations(coord: Vector2i, min_dist: int = MIN_GAS_STATION_CHUNK_DIST) -> bool:
+	for g_coord: Vector2i in spawned_gas_stations.keys():
+		# На дороге (X=0) проверяем продольное расстояние по Z
+		if coord.x == 0 and g_coord.x == 0:
+			if abs(coord.y - g_coord.y) < min_dist:
+				return false
+		# В 2D пространстве чанков (включая боковые)
+		var d: float = Vector2(coord).distance_to(Vector2(g_coord))
+		if d < float(min_dist):
+			return false
+	return true
+
+# Проверка дистанции до оазисов (минимум min_dist чанков и разделение с заправками)
+func _is_far_enough_from_oases(coord: Vector2i, min_dist: int = MIN_OASIS_CHUNK_DIST) -> bool:
+	for o_coord: Vector2i in spawned_oases.keys():
+		if coord.x == 0 and o_coord.x == 0:
+			if abs(coord.y - o_coord.y) < min_dist:
+				return false
+		var d: float = Vector2(coord).distance_to(Vector2(o_coord))
+		if d < float(min_dist):
+			return false
+
+	# Оазис не должен спавниться прямо возле заправки (мин. 3.5 чанка)
+	for g_coord: Vector2i in spawned_gas_stations.keys():
+		var d: float = Vector2(coord).distance_to(Vector2(g_coord))
+		if d < MIN_GAS_OASIS_SEPARATION:
+			return false
+	return true
+
 func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGenerator) -> void:
 	var is_spawn_center: bool = (coord == Vector2i(0, 0))
 	var half: float = (chunk_size * 0.5) - 3.0
@@ -180,60 +217,135 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	if is_spawn_center:
 		exclusion_zones.append(Vector3(0.0, 0.0, 16.0))
 
-	# 0. Процедурные случайные события на центральном тракте каравана (coord.x == 0)
-	# Препятствия встречаются заметно чаще, чем ништяки (в соотношении ~3:1)
+	# 0. Процедурные события на центральном тракте каравана (coord.x == 0)
 	if coord.x == 0 and coord.y < 0:
-		# 75% вероятность наличия дорожного события в чанке
-		if rng.randf() < 0.75:
-			var event_roll: float = rng.randf()
-			if event_roll < 0.72:
-				# --- ПРЕПЯТСТВИЕ (Караван останавливается, игроку нужно расчистить!) ---
-				var obst_type: int = rng.randi() % 3
-				var obst_node: Node3D = null
-				match obst_type:
-					0:
-						# Баррикада с взрывоопасными бочками
-						obst_node = RoadEvents3D.create_road_barricade()
-					1:
-						# Автозавал из разбитых ржавых машин
-						obst_node = RoadEvents3D.create_wreck_blockade()
-					_:
-						# Каменный обвал со скалами и балками
-						obst_node = RoadEvents3D.create_rockfall_blockade()
+		# Если этот чанк уже был зафиксирован ранее при стриминге
+		if spawned_gas_stations.has(coord):
+			var data: Dictionary = spawned_gas_stations[coord]
+			var node := RoadEvents3D.create_gas_station()
+			node.rotation.y = data.get("rot", 0.0)
+			node.position = Vector3(data.get("side_x", 14.5), 0.0, data.get("z", 0.0))
+			chunk.add_child(node)
+			exclusion_zones.append(Vector3(data.get("side_x", 14.5), data.get("z", 0.0), 18.0))
 
-				# Случайное смещение по Z вдоль дороги (препятствия возникают на разном расстоянии!)
-				var obst_z: float = rng.randf_range(-32.0, 32.0)
-				obst_node.position = Vector3(0.0, 0.0, obst_z)
-				chunk.add_child(obst_node)
-				exclusion_zones.append(Vector3(0.0, obst_z, 14.0))
+		elif spawned_oases.has(coord):
+			var data: Dictionary = spawned_oases[coord]
+			var node := RoadEvents3D.create_oasis()
+			node.position = Vector3(data.get("side_x", 14.5), 0.0, data.get("z", 0.0))
+			chunk.add_child(node)
+			exclusion_zones.append(Vector3(data.get("side_x", 14.5), data.get("z", 0.0), 18.0))
 
-			else:
-				# --- НИШТЯК (Заброшенная заправка или оазис с лутом) ---
-				var goodie_type: int = rng.randi() % 2
-				var side_x: float = 14.5 if rng.randf() < 0.5 else -14.5
-				var goodie_z: float = rng.randf_range(-25.0, 25.0)
-				var goodie_node: Node3D = null
+		else:
+			# Новый чанк. Проверяем возможность спавна заправки или оазиса с ограничением в 8-10 чанков
+			var req_gas_dist: int = rng.randi_range(8, 10)
+			var can_gas: bool = (coord.y <= -8) and _is_far_enough_from_gas_stations(coord, req_gas_dist)
+			var can_oasis: bool = (coord.y <= -6) and _is_far_enough_from_oases(coord, rng.randi_range(8, 10))
 
-				if goodie_type == 0:
-					# Заброшенная заправка с ящиком патронов и топлива
-					goodie_node = RoadEvents3D.create_gas_station()
-					goodie_node.rotation.y = deg_to_rad(-90.0 if side_x > 0.0 else 90.0)
+			# 75% вероятность наличия дорожного события в чанке
+			if rng.randf() < 0.75:
+				var want_goodie := false
+				var pick_gas := false
+				var pick_oasis := false
+
+				# Ништяки могут появиться ТОЛЬКО если соблюдена минимальная дистанция (8-10 чанков)
+				if can_gas or can_oasis:
+					# Шанс ништяка при выполнении кулдауна дистанции (35%)
+					if rng.randf() < 0.35:
+						want_goodie = true
+						if can_gas and can_oasis:
+							# Оазисы реже заправок (30% оазис, 70% заправка)
+							if rng.randf() < 0.30:
+								pick_oasis = true
+							else:
+								pick_gas = true
+						elif can_gas:
+							pick_gas = true
+						elif can_oasis:
+							pick_oasis = true
+
+				if want_goodie and pick_gas:
+					# --- ЗАБРОШЕННАЯ ЗАПРАВКА ---
+					# Появляется не ближе 8-10 чанков от других заправок!
+					var side_x: float = 14.5 if rng.randf() < 0.5 else -14.5
+					var goodie_z: float = rng.randf_range(-22.0, 22.0)
+					var rot_y: float = deg_to_rad(-90.0 if side_x > 0.0 else 90.0)
+
+					var node := RoadEvents3D.create_gas_station()
+					node.rotation.y = rot_y
+					node.position = Vector3(side_x, 0.0, goodie_z)
+					chunk.add_child(node)
+					exclusion_zones.append(Vector3(side_x, goodie_z, 18.0))
+
+					spawned_gas_stations[coord] = { "side_x": side_x, "z": goodie_z, "rot": rot_y }
+
+				elif want_goodie and pick_oasis:
+					# --- ПУСТЫННЫЙ ОАЗИС ---
+					# Редкий оазис с пальмами, водоемом и древним сундуком
+					var side_x: float = 15.0 if rng.randf() < 0.5 else -15.0
+					var goodie_z: float = rng.randf_range(-22.0, 22.0)
+
+					var node := RoadEvents3D.create_oasis()
+					node.position = Vector3(side_x, 0.0, goodie_z)
+					chunk.add_child(node)
+					exclusion_zones.append(Vector3(side_x, goodie_z, 18.0))
+
+					spawned_oases[coord] = { "side_x": side_x, "z": goodie_z }
+
 				else:
-					# Пустынный оазис с пальмами, водоемом и древним сундуком
-					goodie_node = RoadEvents3D.create_oasis()
+					# --- ДОРОЖНОЕ ПРЕПЯТСТВИЕ ---
+					# Баррикада с взрывными бочками, автозавал или камнепад
+					var obst_type: int = rng.randi() % 3
+					var obst_node: Node3D = null
+					match obst_type:
+						0:
+							obst_node = RoadEvents3D.create_road_barricade()
+						1:
+							obst_node = RoadEvents3D.create_wreck_blockade()
+						_:
+							obst_node = RoadEvents3D.create_rockfall_blockade()
 
-				goodie_node.position = Vector3(side_x, 0.0, goodie_z)
-				chunk.add_child(goodie_node)
-				exclusion_zones.append(Vector3(side_x, goodie_z, 18.0))
+					var obst_z: float = rng.randf_range(-32.0, 32.0)
+					obst_node.position = Vector3(0.0, 0.0, obst_z)
+					chunk.add_child(obst_node)
+					exclusion_zones.append(Vector3(0.0, obst_z, 14.0))
 
-	# В диких боковых чанках (coord.x != 0) редкий оазис или заправка в глубине пустыни (7% шанс)
-	elif coord.x != 0 and abs(coord.y) > 0 and rng.randf() < 0.07:
-		var wild_z: float = rng.randf_range(-28.0, 28.0)
-		var wild_x: float = rng.randf_range(-28.0, 28.0)
-		var wild_node: Node3D = RoadEvents3D.create_oasis() if rng.randf() < 0.6 else RoadEvents3D.create_gas_station()
-		wild_node.position = Vector3(wild_x, 0.0, wild_z)
-		chunk.add_child(wild_node)
-		exclusion_zones.append(Vector3(wild_x, wild_z, 18.0))
+	# В диких боковых чанках (coord.x != 0) редкий оазис или заправка в глубине пустыни (1.2% шанс)
+	elif coord.x != 0 and abs(coord.y) > 0:
+		if spawned_gas_stations.has(coord):
+			var data: Dictionary = spawned_gas_stations[coord]
+			var node := RoadEvents3D.create_gas_station()
+			node.rotation.y = data.get("rot", 0.0)
+			node.position = Vector3(data.get("x", 0.0), 0.0, data.get("z", 0.0))
+			chunk.add_child(node)
+			exclusion_zones.append(Vector3(data.get("x", 0.0), data.get("z", 0.0), 18.0))
+
+		elif spawned_oases.has(coord):
+			var data: Dictionary = spawned_oases[coord]
+			var node := RoadEvents3D.create_oasis()
+			node.position = Vector3(data.get("x", 0.0), 0.0, data.get("z", 0.0))
+			chunk.add_child(node)
+			exclusion_zones.append(Vector3(data.get("x", 0.0), data.get("z", 0.0), 18.0))
+
+		elif rng.randf() < 0.012:
+			var can_gas_wild: bool = _is_far_enough_from_gas_stations(coord, 9)
+			var can_oasis_wild: bool = _is_far_enough_from_oases(coord, 8)
+			var wild_z: float = rng.randf_range(-28.0, 28.0)
+			var wild_x: float = rng.randf_range(-28.0, 28.0)
+
+			if can_oasis_wild and (rng.randf() < 0.70 or not can_gas_wild):
+				var wild_node := RoadEvents3D.create_oasis()
+				wild_node.position = Vector3(wild_x, 0.0, wild_z)
+				chunk.add_child(wild_node)
+				exclusion_zones.append(Vector3(wild_x, wild_z, 18.0))
+				spawned_oases[coord] = { "x": wild_x, "z": wild_z }
+			elif can_gas_wild:
+				var wild_node := RoadEvents3D.create_gas_station()
+				var rot_y: float = rng.randf_range(0.0, TAU)
+				wild_node.rotation.y = rot_y
+				wild_node.position = Vector3(wild_x, 0.0, wild_z)
+				chunk.add_child(wild_node)
+				exclusion_zones.append(Vector3(wild_x, wild_z, 18.0))
+				spawned_gas_stations[coord] = { "x": wild_x, "z": wild_z, "rot": rot_y }
 
 	# Вспомогательная лямбда проверки попадания в зону исключения
 	var is_in_exclusion := func(p: Vector3) -> bool:
