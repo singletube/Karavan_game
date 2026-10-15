@@ -56,6 +56,9 @@ func _ready() -> void:
 	_build_kick_audio()
 	if cam_holder:
 		cam_holder.position.y = 0.56
+	var wm: Node3D = get_node_or_null("WeaponManager") as Node3D
+	if wm:
+		wm.position.y = 0.56
 
 	var caravan: Node = get_tree().current_scene.get_node_or_null("Caravan")
 	if not caravan:

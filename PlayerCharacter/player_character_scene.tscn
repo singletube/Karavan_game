@@ -1550,12 +1550,13 @@ far = 1000.0
 
 [node name="WeaponManager" type="Node3D" parent="." unique_id=2009071400 node_paths=PackedStringArray("start_weapons")]
 unique_name_in_owner = true
-transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, 0, 0.715, 0)
+transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, 0, 0.56, 0)
 script = ExtResource("14_2pclp")
 start_weapons = [NodePath("WeaponContainer/Pistol"), NodePath("WeaponContainer/AssaultRifle"), NodePath("WeaponContainer/Shotgun"), NodePath("WeaponContainer/SniperRifle"), NodePath("WeaponContainer/RocketLauncher"), NodePath("WeaponContainer/Chainsaw")]
 
 [node name="WeaponContainer" type="Node3D" parent="WeaponManager" unique_id=1471997672]
 unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.06, 0)
 
 [node name="Pistol" type="Node3D" parent="WeaponManager/WeaponContainer" unique_id=328836073 node_paths=PackedStringArray("model", "attack_point", "muzzle_flash_spawner")]
 transform = Transform3D(-3.059797e-06, -70, -3.059797e-06, 0, -3.059797e-06, 70, -70, 3.059797e-06, 1.3374798e-13, 0.2009259, -0.12446213, -0.26282233)
