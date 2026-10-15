@@ -21,9 +21,9 @@ const UPDATE_INTERVAL     : float      = 0.20 # Частота проверки 
 # История и параметры спавна редких точек интереса (POI)
 var spawned_gas_stations : Dictionary = {} # Vector2i -> Dictionary
 var spawned_oases        : Dictionary = {} # Vector2i -> Dictionary
-const MIN_GAS_STATION_CHUNK_DIST : int   = 9   # Минимум 8-10 чанков между любыми заправками (~1080м)
-const MIN_OASIS_CHUNK_DIST       : int   = 8   # Минимум 8 чанков между оазисами
-const MIN_GAS_OASIS_SEPARATION   : float = 3.5 # Минимум 3-4 чанка между заправкой и оазисом
+const MIN_GAS_STATION_CHUNK_DIST : int   = 5   # Минимум 4-5 чанков между любыми заправками (~480-600м)
+const MIN_OASIS_CHUNK_DIST       : int   = 4   # Минимум 4 чанка между оазисами (~480м)
+const MIN_GAS_OASIS_SEPARATION   : float = 2.0 # Минимум 2 чанка между заправкой и оазисом
 
 # Переиспользуемые ресурсы (Shared Meshes & Materials для максимальной производительности)
 var shared_floor_mesh     : BoxMesh
@@ -236,10 +236,10 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			exclusion_zones.append(Vector3(data.get("side_x", 14.5), data.get("z", 0.0), 18.0))
 
 		else:
-			# Новый чанк. Проверяем возможность спавна заправки или оазиса с ограничением в 8-10 чанков
-			var req_gas_dist: int = rng.randi_range(8, 10)
-			var can_gas: bool = (coord.y <= -8) and _is_far_enough_from_gas_stations(coord, req_gas_dist)
-			var can_oasis: bool = (coord.y <= -6) and _is_far_enough_from_oases(coord, rng.randi_range(8, 10))
+			# Новый чанк. Проверяем возможность спавна заправки или оазиса с ограничением в 4-5 чанков
+			var req_gas_dist: int = rng.randi_range(4, 5)
+			var can_gas: bool = (coord.y <= -4) and _is_far_enough_from_gas_stations(coord, req_gas_dist)
+			var can_oasis: bool = (coord.y <= -3) and _is_far_enough_from_oases(coord, rng.randi_range(4, 5))
 
 			# 75% вероятность наличия дорожного события в чанке
 			if rng.randf() < 0.75:
@@ -247,14 +247,14 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 				var pick_gas := false
 				var pick_oasis := false
 
-				# Ништяки могут появиться ТОЛЬКО если соблюдена минимальная дистанция (8-10 чанков)
+				# Ништяки могут появиться ТОЛЬКО если соблюдена минимальная дистанция (4-5 чанков)
 				if can_gas or can_oasis:
-					# Шанс ништяка при выполнении кулдауна дистанции (35%)
-					if rng.randf() < 0.35:
+					# Шанс ништяка при выполнении кулдауна дистанции (60% — в 2 раза чаще)
+					if rng.randf() < 0.60:
 						want_goodie = true
 						if can_gas and can_oasis:
-							# Оазисы реже заправок (30% оазис, 70% заправка)
-							if rng.randf() < 0.30:
+							# Оазисы реже заправок (35% оазис, 65% заправка)
+							if rng.randf() < 0.35:
 								pick_oasis = true
 							else:
 								pick_gas = true
@@ -326,9 +326,9 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			chunk.add_child(node)
 			exclusion_zones.append(Vector3(data.get("x", 0.0), data.get("z", 0.0), 18.0))
 
-		elif rng.randf() < 0.012:
-			var can_gas_wild: bool = _is_far_enough_from_gas_stations(coord, 9)
-			var can_oasis_wild: bool = _is_far_enough_from_oases(coord, 8)
+		elif rng.randf() < 0.024:
+			var can_gas_wild: bool = _is_far_enough_from_gas_stations(coord, 5)
+			var can_oasis_wild: bool = _is_far_enough_from_oases(coord, 4)
 			var wild_z: float = rng.randf_range(-28.0, 28.0)
 			var wild_x: float = rng.randf_range(-28.0, 28.0)
 
