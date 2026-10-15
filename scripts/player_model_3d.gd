@@ -78,33 +78,33 @@ func _init_materials() -> void:
 	# 1. Лицо (глаза, усы, щетина, бандана)
 	mat_face = StandardMaterial3D.new()
 	mat_face.albedo_texture = tex_face
-	mat_face.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat_face.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	mat_face.roughness = 0.70
 
 	# 2. Торс (кожаный жилет + клетчатая рубашка)
 	mat_torso = StandardMaterial3D.new()
 	mat_torso.albedo_texture = tex_torso
-	mat_torso.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat_torso.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	mat_torso.roughness = 0.85
-	mat_torso.uv1_scale = Vector3(1.5, 1.5, 1.5)
+	mat_torso.uv1_scale = Vector3(1.0, 1.0, 1.0)
 
 	# 3. Джинсы (индиго деним с двойной строчкой)
 	mat_denim = StandardMaterial3D.new()
 	mat_denim.albedo_texture = tex_denim
-	mat_denim.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat_denim.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	mat_denim.roughness = 0.88
-	mat_denim.uv1_scale = Vector3(1.0, 2.0, 1.0)
+	mat_denim.uv1_scale = Vector3(1.0, 1.0, 1.0)
 
 	# 4. Кожа (плащ, сапоги, кобура, перчатки)
 	mat_leather = StandardMaterial3D.new()
 	mat_leather.albedo_texture = tex_leather
-	mat_leather.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat_leather.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	mat_leather.roughness = 0.75
 
 	# 5. Шляпа стетсон
 	mat_hat = StandardMaterial3D.new()
 	mat_hat.albedo_texture = tex_hat
-	mat_hat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat_hat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	mat_hat.roughness = 0.80
 
 	# 6. Кожа рук/шеи
@@ -176,10 +176,7 @@ func _build_model() -> void:
 	torso.name = "Torso"
 	torso.position = Vector3(0, 0.07, 0)
 	pelvis.add_child(torso)
-	_make_box(Vector3(0.42, 0.44, 0.28), mat_torso, torso, Vector3(0, 0.22, 0))
-
-	# Кожаный жилет/плащ поверх
-	_make_box(Vector3(0.45, 0.46, 0.30), mat_leather, torso, Vector3(0, 0.22, -0.01))
+	_make_box(Vector3(0.44, 0.44, 0.28), mat_torso, torso, Vector3(0, 0.22, 0))
 
 	# Шея и красная бандана
 	neck_mesh = _make_cyl(0.12, 0.10, 0.11, mat_skin, torso, Vector3(0, 0.48, 0))

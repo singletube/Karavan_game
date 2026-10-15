@@ -136,7 +136,7 @@ func set_hitbox_height(value: float) -> void:
 		hitbox.shape.height = value
 		hitbox.position.y = (-base_hitbox_height * 0.5) + (value * 0.5)
 	if cam_holder:
-		cam_holder.position.y = 0.715 - (base_hitbox_height - value) * 0.7
+		cam_holder.position.y = 0.56 - (base_hitbox_height - value) * 0.7
 		
 func tween_model_height(state_model_height : float) -> void:
 	var model_tween: Tween = create_tween()

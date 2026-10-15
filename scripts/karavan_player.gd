@@ -54,6 +54,8 @@ func _ready() -> void:
 	_build_flashlight()
 	_build_third_person_model()
 	_build_kick_audio()
+	if cam_holder:
+		cam_holder.position.y = 0.56
 
 	var caravan: Node = get_tree().current_scene.get_node_or_null("Caravan")
 	if not caravan:

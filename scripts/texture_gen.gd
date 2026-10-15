@@ -1502,7 +1502,7 @@ static func make_player_torso_texture() -> Texture2D:
 	return get_or_create("player_torso.png", _generate_player_torso_texture)
 
 static func _generate_player_torso_texture() -> Image:
-	var img: Image = Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	var img: Image = Image.create(64, 64, true, Image.FORMAT_RGBA8)
 	var leather_base := Color(0.32, 0.20, 0.12, 1.0)
 	var leather_dark := Color(0.20, 0.12, 0.07, 1.0)
 	var leather_st   := Color(0.56, 0.40, 0.24, 1.0)
@@ -1513,13 +1513,12 @@ static func _generate_player_torso_texture() -> Image:
 	var shirt_navy   := Color(0.14, 0.22, 0.34, 1.0)
 	var pearl_snap   := Color(0.95, 0.95, 0.98, 1.0)
 
-	# Кожаный жилет по бокам, рубашка по центру
-	for y in range(0, 32):
-		for x in range(0, 32):
-			if x >= 10 and x <= 21:
-				# Клетчатая ковбойская рубашка (Plaid shirt)
-				var is_h := (y % 4 == 0)
-				var is_v := (x % 4 == 0)
+	for y in range(0, 64):
+		for x in range(0, 64):
+			if x >= 20 and x <= 43:
+				# Клетчатая ковбойская рубашка (Plaid shirt) с мягкими 8-пиксельными полосами
+				var is_h := (y % 8 < 2)
+				var is_v := (x % 8 < 2)
 				var c := shirt_blue
 				if is_h and is_v:
 					c = shirt_navy
@@ -1527,28 +1526,31 @@ static func _generate_player_torso_texture() -> Image:
 					c = shirt_tan
 				img.set_pixel(x, y, c)
 			else:
-				# Коричневый кожаный жилет / плащ
-				var grain: float = ((x * 7 + y * 13) % 5) * 0.02
-				var l_col := Color(leather_base.r + grain, leather_base.g + grain * 0.8, leather_base.b + grain * 0.5, 1.0)
-				if x == 9 or x == 22:
+				# Коричневый кожаный жилет с мягким затемнением по контуру
+				var l_col := leather_base
+				if x == 18 or x == 19 or x == 44 or x == 45:
 					l_col = leather_dark
 				img.set_pixel(x, y, l_col)
 
 	# Строчка шва на кожаном жилете
-	for y in range(2, 30):
-		img.set_pixel(8, y, leather_st)
-		img.set_pixel(23, y, leather_st)
+	for y in range(4, 60):
+		img.set_pixel(16, y, leather_st)
+		img.set_pixel(47, y, leather_st)
 
 	# Перламутровые кнопки на планке рубашки
-	for y in [6, 12, 18, 24]:
-		img.set_pixel(15, y, pearl_snap)
-		img.set_pixel(16, y, pearl_snap)
+	for y in [12, 24, 36, 48]:
+		for dx in range(0, 2):
+			for dy in range(0, 2):
+				img.set_pixel(31 + dx, y + dy, pearl_snap)
 
 	# Латунные пуговицы на жилете
-	for y in [8, 16, 24]:
-		img.set_pixel(6, y, brass_btn)
-		img.set_pixel(25, y, brass_btn)
+	for y in [16, 32, 48]:
+		for dx in range(0, 2):
+			for dy in range(0, 2):
+				img.set_pixel(12 + dx, y + dy, brass_btn)
+				img.set_pixel(51 + dx, y + dy, brass_btn)
 
+	img.generate_mipmaps()
 	return img
 
 
@@ -1557,34 +1559,39 @@ static func make_player_denim_texture() -> Texture2D:
 	return get_or_create("player_denim.png", _generate_player_denim_texture)
 
 static func _generate_player_denim_texture() -> Image:
-	var img: Image = Image.create(32, 32, false, Image.FORMAT_RGBA8)
-	var denim_base := Color(0.18, 0.24, 0.35, 1.0)
-	var denim_fade := Color(0.26, 0.34, 0.46, 1.0)
-	var denim_dark := Color(0.12, 0.16, 0.25, 1.0)
-	var seam_gold  := Color(0.82, 0.56, 0.16, 1.0)
-	var rivet_cop  := Color(0.88, 0.50, 0.22, 1.0)
+	var img: Image = Image.create(64, 64, true, Image.FORMAT_RGBA8)
+	var denim_base := Color(0.20, 0.28, 0.40, 1.0)
+	var denim_fade := Color(0.28, 0.37, 0.50, 1.0)
+	var denim_dark := Color(0.14, 0.19, 0.29, 1.0)
+	var seam_gold  := Color(0.85, 0.60, 0.20, 1.0)
+	var rivet_cop  := Color(0.90, 0.55, 0.25, 1.0)
 
-	for y in range(0, 32):
-		for x in range(0, 32):
+	for y in range(0, 64):
+		for x in range(0, 64):
 			var d_col := denim_base
-			# Твилловое диагональное плетение джинсовой ткани
-			if (x + y) % 2 == 0:
-				d_col = denim_dark
-			# Потертость на коленях / бедрах
-			if (y >= 10 and y <= 22) and (x >= 8 and x <= 23):
-				d_col = denim_fade
+			var fold: float = sin(float(y) * 0.35) * 0.03
+			d_col = d_col.lerp(denim_dark, clampf(fold + 0.05, 0.0, 0.25))
+			# Мягкая естественная потертость ткани на бедрах и коленях
+			if (y >= 16 and y <= 48) and (x >= 12 and x <= 50):
+				var fade_factor: float = sin(float(x - 12) / 38.0 * PI) * sin(float(y - 16) / 32.0 * PI) * 0.40
+				d_col = d_col.lerp(denim_fade, fade_factor)
 			img.set_pixel(x, y, d_col)
 
 	# Оранжево-золотой двойной шов по бокам штанин
-	for y in range(0, 32):
-		img.set_pixel(2, y, seam_gold)
-		img.set_pixel(29, y, seam_gold)
+	for y in range(0, 64):
+		img.set_pixel(4, y, seam_gold)
+		img.set_pixel(5, y, seam_gold * 0.8)
+		img.set_pixel(58, y, seam_gold * 0.8)
+		img.set_pixel(59, y, seam_gold)
 
 	# Медные заклепки
-	for y in [3, 28]:
-		img.set_pixel(2, y, rivet_cop)
-		img.set_pixel(29, y, rivet_cop)
+	for y in [6, 56]:
+		for dx in range(0, 2):
+			for dy in range(0, 2):
+				img.set_pixel(4 + dx, y + dy, rivet_cop)
+				img.set_pixel(58 + dx, y + dy, rivet_cop)
 
+	img.generate_mipmaps()
 	return img
 
 
@@ -1593,33 +1600,33 @@ static func make_player_leather_texture() -> Texture2D:
 	return get_or_create("player_leather.png", _generate_player_leather_texture)
 
 static func _generate_player_leather_texture() -> Image:
-	var img: Image = Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	var img: Image = Image.create(64, 64, true, Image.FORMAT_RGBA8)
 	var l_dark := Color(0.20, 0.13, 0.08, 1.0)
 	var l_mid  := Color(0.28, 0.18, 0.12, 1.0)
 	var l_lite := Color(0.42, 0.28, 0.18, 1.0)
 	var metal  := Color(0.80, 0.82, 0.86, 1.0)
 
-	for y in range(0, 32):
-		for x in range(0, 32):
-			var grain: float = ((x * 11 + y * 17) % 7) * 0.015
-			var c := Color(l_mid.r + grain, l_mid.g + grain * 0.7, l_mid.b + grain * 0.4, 1.0)
-			if (x < 2 or x > 29 or y < 2 or y > 29):
+	for y in range(0, 64):
+		for x in range(0, 64):
+			var c := l_mid
+			if (x < 4 or x > 59 or y < 4 or y > 59):
 				c = l_dark
 			img.set_pixel(x, y, c)
 
 	# Прошивка светлой нитью
-	for i in range(2, 30, 2):
-		img.set_pixel(i, 3, l_lite)
-		img.set_pixel(i, 28, l_lite)
-		img.set_pixel(3, i, l_lite)
-		img.set_pixel(28, i, l_lite)
+	for i in range(4, 60, 4):
+		for d in range(0, 2):
+			img.set_pixel(i + d, 6, l_lite)
+			img.set_pixel(i + d, 57, l_lite)
+			img.set_pixel(6, i + d, l_lite)
+			img.set_pixel(57, i + d, l_lite)
 
 	# Металлические заклепки / пряжка
-	img.set_pixel(15, 15, metal)
-	img.set_pixel(16, 15, metal)
-	img.set_pixel(15, 16, metal)
-	img.set_pixel(16, 16, metal)
+	for dx in range(0, 4):
+		for dy in range(0, 4):
+			img.set_pixel(30 + dx, 30 + dy, metal)
 
+	img.generate_mipmaps()
 	return img
 
 
