@@ -41,13 +41,14 @@ const FRAME_DIE1       := 8
 const FRAME_DEAD       := 9
 
 # --- Состояние ---
-var health       := 75
-var attack_timer := 0.0
-var hurt_timer   := 0.0
-var walk_timer   := 0.0
-var walk_frame_i := 0
-var is_dead      := false
-var player       : Node3D = null
+var health          := 75
+var attack_timer    : float = 0.4 # Небольшая начальная пауза перед первой атакой
+var is_winding_up   : bool  = false
+var hurt_timer      := 0.0
+var walk_timer      := 0.0
+var walk_frame_i    := 0
+var is_dead         := false
+var player          : Node3D = null
 
 enum EnemyState { IDLE, CHASE, ATTACK, DEAD }
 var state : EnemyState = EnemyState.IDLE
@@ -143,6 +144,10 @@ func _physics_process(delta: float) -> void:
 			cyborg_model_3d.update_animation(delta, false, 0.0, false, false, true)
 		return
 
+	# Кулдаун удара плавно тикает каждый кадр независимо от состояния (бег/замах/покой)
+	if attack_timer > 0.0:
+		attack_timer = maxf(0.0, attack_timer - delta)
+
 	_apply_gravity(delta)
 	_update_target_and_state()
 	_process_movement_and_animation(delta)
@@ -156,7 +161,7 @@ func _physics_process(delta: float) -> void:
 				cyborg_model_3d.rotate_y(PI) # Разворот лицом вперед
 
 		var is_moving: bool = (state == EnemyState.CHASE and velocity.length_squared() > 0.1)
-		var is_atk: bool = (state == EnemyState.ATTACK)
+		var is_atk: bool = (state == EnemyState.ATTACK and (is_winding_up or attack_timer > 0.0))
 		var is_hurting: bool = (hurt_timer > 0.0)
 		cyborg_model_3d.update_animation(delta, is_moving, move_speed, is_atk, is_hurting, false)
 
@@ -190,6 +195,7 @@ func _update_target_and_state() -> void:
 	player = closest
 	if not player:
 		state = EnemyState.IDLE
+		is_winding_up = false
 		return
 
 	var is_caravan: bool = player.is_in_group("caravan")
@@ -198,8 +204,30 @@ func _update_target_and_state() -> void:
 		state = EnemyState.ATTACK
 	elif min_dist <= CHASE_RANGE:
 		state = EnemyState.CHASE
+		is_winding_up = false
 	else:
 		state = EnemyState.IDLE
+		is_winding_up = false
+
+func _get_attack_cooldown(is_caravan: bool) -> float:
+	if is_caravan:
+		# Ощутимый честный кулдаун удара по каравану, чтобы враги не ломали повозку за секунду
+		match zombie_type:
+			"Runner":
+				return 1.5
+			"Crawler":
+				return 1.6
+			"Brute":
+				return 2.5
+			"Spitter":
+				return 3.0
+			"Screamer":
+				return 3.5
+			"Exploder":
+				return 999.0
+			_: # Walker
+				return 1.8
+	return attack_cooldown
 
 func _process_movement_and_animation(delta: float) -> void:
 	if hurt_timer > 0.0:
@@ -259,12 +287,20 @@ func _process_movement_and_animation(delta: float) -> void:
 			velocity.x = move_toward(velocity.x, 0.0, move_speed * 6.0 * delta)
 			velocity.z = move_toward(velocity.z, 0.0, move_speed * 6.0 * delta)
 
-			attack_timer -= delta
-			if attack_timer <= 0.0:
-				_do_attack()
-				attack_timer = attack_cooldown
+			var is_caravan: bool = (player != null and is_instance_valid(player) and player.is_in_group("caravan"))
 
-			if attack_timer > attack_cooldown * 0.4:
+			if attack_timer <= 0.0:
+				if not is_winding_up:
+					# Замах перед ударом (0.35с) — анимация замаха перед нанесением урона
+					is_winding_up = true
+					attack_timer = 0.35
+				else:
+					# Нанесение удара и запуск полного честного кулдауна
+					is_winding_up = false
+					_do_attack()
+					attack_timer = _get_attack_cooldown(is_caravan)
+
+			if is_winding_up:
 				sprite.frame = FRAMES_ATTACK[0]
 			else:
 				sprite.frame = FRAMES_ATTACK[1]

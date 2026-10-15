@@ -26,6 +26,8 @@ var last_hoof_cycle: int = -1
 var _net_sync_timer: float = 0.0
 var _remote_target_pos: Vector3 = Vector3.ZERO
 var _has_remote_target: bool = false
+var _hit_grace_timer: float = 0.0
+const MIN_DAMAGE_INTERVAL: float = 0.18 # Кулдаун между тиками урона от толпы
 
 @onready var model: CaravanModel3D = $CaravanModel3D
 @onready var hit_sound: AudioStreamPlayer3D = $HitSound
@@ -44,6 +46,9 @@ func _ready() -> void:
 		hit_sound.stream = snd_wood_hit
 
 func _physics_process(delta: float) -> void:
+	if _hit_grace_timer > 0.0:
+		_hit_grace_timer = maxf(0.0, _hit_grace_timer - delta)
+
 	# Если мы клиент в мультиплеере — интерполируем к координатам сервера
 	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
 		if _has_remote_target:
@@ -150,12 +155,17 @@ func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_positio
 		rpc_id(1, "request_caravan_damage", amount, hit_direction, hit_position)
 		return
 
+	# Защита от спама одновременных тиков урона от толпы
+	if _hit_grace_timer > 0.0:
+		return
+	_hit_grace_timer = MIN_DAMAGE_INTERVAL
+
 	health = maxi(0, health - amount)
 	health_changed.emit(health, MAX_HEALTH)
 
 	_spawn_wood_splinters(hit_position if hit_position != Vector3.ZERO else global_position + Vector3(0.0, 1.0, 0.0), hit_direction)
 
-	if hit_sound:
+	if hit_sound and not hit_sound.playing:
 		hit_sound.pitch_scale = randf_range(0.65, 0.85)
 		hit_sound.play()
 
