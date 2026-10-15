@@ -46,6 +46,10 @@ var anim_time : float = 0.0
 var is_moving : bool = false
 var current_weapon_name: String = "Pistol"
 
+var is_first_person : bool = false
+var is_kicking      : bool = false
+var kick_progress   : float = 0.0
+
 func _ready() -> void:
 	_init_materials()
 	_init_sounds()
@@ -366,24 +370,76 @@ func play_shoot_effect(w_name: String = "") -> void:
 		tw_arm.tween_property(r_arm, "rotation:x", -0.2, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func set_flashlight(is_on: bool) -> void:
-	if chest_light:
+	if chest_light and not is_first_person:
 		chest_light.visible = is_on
 
-func update_animation(delta: float, moving: bool, velocity_length: float) -> void:
+func set_first_person_mode(enabled: bool) -> void:
+	is_first_person = enabled
+	if head:
+		head.visible = !enabled
+	if l_arm:
+		l_arm.visible = !enabled
+	if r_arm:
+		r_arm.visible = !enabled
+	if chest_light:
+		chest_light.visible = false
+
+func play_kick() -> void:
+	is_kicking = true
+	kick_progress = 0.0
+
+func update_animation(delta: float, moving: bool, velocity_length: float, is_crouching: bool = false) -> void:
 	is_moving = moving
+
+	# 1. Анимация мощного пинка ногой (Spartan Kick)
+	if is_kicking:
+		kick_progress += delta * 2.4
+		var k: float = sin(minf(kick_progress, 1.0) * PI)
+		# Правая нога резко взлетает вперед и вверх прямо перед взглядом игрока
+		r_leg.rotation.x = -k * 1.55
+		r_leg.position.z = k * 0.48
+		r_leg.position.y = -0.05 + k * 0.32
+		# Корпус отклоняется назад от силы и отдачи пинка
+		torso.rotation.x = k * 0.18
+
+		if not is_first_person and l_arm:
+			l_arm.rotation.x = k * 0.40
+
+		if kick_progress >= 1.0:
+			is_kicking = false
+			r_leg.position = Vector3(0.14, -0.05, 0)
+			torso.rotation.x = 0.0
+		return
+
+	# 2. Анимация приседания (Crouch)
+	var target_pelvis_y: float = 0.55 if is_crouching else 0.90
+	if is_crouching:
+		l_leg.rotation.x = lerpf(l_leg.rotation.x, -0.45, delta * 12.0)
+		r_leg.rotation.x = lerpf(r_leg.rotation.x, -0.45, delta * 12.0)
+		r_leg.position = r_leg.position.lerp(Vector3(0.14, -0.05, 0), delta * 12.0)
+		pelvis.position.y = lerpf(pelvis.position.y, target_pelvis_y, delta * 12.0)
+		torso.rotation.x = lerpf(torso.rotation.x, 0.15, delta * 12.0) # наклон вперед в приседе
+		return
+
+	# 3. Анимация ходьбы / бега
 	if is_moving and velocity_length > 0.1:
 		anim_time += delta * minf(velocity_length, 9.0) * 2.4
 		var leg_swing: float = sin(anim_time) * 0.55
 		l_leg.rotation.x = leg_swing
 		r_leg.rotation.x = -leg_swing
-		l_arm.rotation.x = -leg_swing * 0.6
-		# Правая рука держит оружие наготове и лишь слегка покачивается
-		r_arm.rotation.x = -0.25 + leg_swing * 0.25
+		r_leg.position = Vector3(0.14, -0.05, 0)
+		if not is_first_person:
+			l_arm.rotation.x = -leg_swing * 0.6
+			r_arm.rotation.x = -0.25 + leg_swing * 0.25
 		pelvis.position.y = 0.9 + abs(sin(anim_time * 2.0)) * 0.04
+		torso.rotation.x = lerpf(torso.rotation.x, 0.0, delta * 10.0)
 	else:
 		# Плавный возврат в спокойную стойку
 		l_leg.rotation.x = lerpf(l_leg.rotation.x, 0.0, delta * 10.0)
 		r_leg.rotation.x = lerpf(r_leg.rotation.x, 0.0, delta * 10.0)
-		l_arm.rotation.x = lerpf(l_arm.rotation.x, 0.0, delta * 10.0)
-		r_arm.rotation.x = lerpf(r_arm.rotation.x, -0.2, delta * 10.0) # оружие наготове
+		r_leg.position = r_leg.position.lerp(Vector3(0.14, -0.05, 0), delta * 10.0)
+		if not is_first_person:
+			l_arm.rotation.x = lerpf(l_arm.rotation.x, 0.0, delta * 10.0)
+			r_arm.rotation.x = lerpf(r_arm.rotation.x, -0.2, delta * 10.0) # оружие наготове
 		pelvis.position.y = lerpf(pelvis.position.y, 0.9, delta * 10.0)
+		torso.rotation.x = lerpf(torso.rotation.x, 0.0, delta * 10.0)

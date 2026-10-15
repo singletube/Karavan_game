@@ -107,7 +107,7 @@ func display_play_char_properties() -> void:
 	camera_bob_vertical_offset_label_text.set_text(str(round_to_3_decimals(play_char.cam.v_offset)))
 	
 func update_weapon_stack_display() -> void:
-	weapon_stack_label_text.text = "1–6 / КОЛЕСО — СМЕНА"
+	weapon_stack_label_text.text = "1–6 — ОРУЖИЕ  |  [V] — ПИНОК"
 	
 func display_weapon_properties() -> void:
 	if weapon_manager.current_weapon:

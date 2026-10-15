@@ -27,6 +27,14 @@ var flashlight_audio: AudioStreamPlayer
 var flashlight_enabled: bool = false
 
 var third_person_model: PlayerModel3D = null
+var target_is_crouching: bool = false
+
+var _kick_cooldown: float = 0.0
+const KICK_COOLDOWN_TIME: float = 0.55
+var _snd_kick_whoosh: AudioStream = null
+var _snd_kick_hit: AudioStream = null
+var _kick_audio_player: AudioStreamPlayer = null
+var _kick_hit_audio_player: AudioStreamPlayer = null
 
 var current_interactable: Node = null
 var interact_hold_time: float = 0.0
@@ -45,6 +53,7 @@ func _ready() -> void:
 	_build_legacy_muzzle_flash()
 	_build_flashlight()
 	_build_third_person_model()
+	_build_kick_audio()
 
 	var caravan: Node = get_tree().current_scene.get_node_or_null("Caravan")
 	if not caravan:
@@ -87,6 +96,7 @@ func _ready() -> void:
 func _build_third_person_model() -> void:
 	third_person_model = PlayerModel3D.new()
 	third_person_model.name = "ThirdPersonModel"
+	third_person_model.position = Vector3(0.0, -1.0, 0.0)
 	add_child(third_person_model)
 
 	var default_model: Node = get_node_or_null("Model")
@@ -94,10 +104,12 @@ func _build_third_person_model() -> void:
 		(default_model as VisualInstance3D).visible = false
 
 	if is_local():
-		# Локальный игрок видит только оружие от первого лица
-		third_person_model.visible = false
+		# Локальный игрок видит свое тело и ноги от первого лица (голова и руки скрыты, чтобы не мешать прицелу)
+		third_person_model.set_first_person_mode(true)
+		third_person_model.visible = true
 	else:
-		# Удаленный напарник отображается полной 3D моделью с текстурами
+		# Удаленный напарник отображается полной 3D моделью с текстурами, головой, шляпой и оружием
+		third_person_model.set_first_person_mode(false)
 		third_person_model.visible = true
 
 func is_local() -> bool:
@@ -111,7 +123,7 @@ func _physics_process(delta: float) -> void:
 		var move_dist: float = (global_position - prev_pos).length()
 		var spd: float = move_dist / maxf(delta, 0.001)
 		if third_person_model:
-			third_person_model.update_animation(delta, spd > 0.15, spd)
+			third_person_model.update_animation(delta, spd > 0.15, spd, target_is_crouching)
 		return
 
 	if is_dead:
@@ -120,12 +132,29 @@ func _physics_process(delta: float) -> void:
 	super(delta)
 	_process_player_footsteps(delta)
 
+	if _kick_cooldown > 0.0:
+		_kick_cooldown -= delta
+
+	var is_crouching: bool = (state_machine != null and (state_machine as StateMachine).curr_state_name == "Crouch")
+
+	if third_person_model:
+		var fwd := -cam.global_transform.basis.z if cam else -global_transform.basis.z
+		fwd.y = 0.0
+		if fwd.length_squared() > 0.001:
+			fwd = fwd.normalized()
+			var look_yaw: float = atan2(fwd.x, fwd.z)
+			third_person_model.global_rotation.y = lerp_angle(third_person_model.global_rotation.y, look_yaw, minf(delta * 24.0, 1.0))
+
+		var h_vel := Vector2(velocity.x, velocity.z)
+		var spd := h_vel.length()
+		third_person_model.update_animation(delta, spd > 0.15, spd, is_crouching)
+
 	if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
 		var fwd := -cam.global_transform.basis.z if cam else -global_transform.basis.z
 		fwd.y = 0.0
 		fwd = fwd.normalized()
 		var look_yaw: float = atan2(fwd.x, fwd.z)
-		rpc("sync_state", global_position, look_yaw, velocity.length())
+		rpc("sync_state", global_position, look_yaw, velocity.length(), is_crouching)
 
 func _process_player_footsteps(delta: float) -> void:
 	if not is_on_floor():
@@ -223,8 +252,22 @@ func notify_hud(msg: String, col: Color = Color.WHITE) -> void:
 		hud_node.show_toast(msg, col)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not is_local() or is_dead or not (event is InputEventKey and event.pressed and not event.echo):
+	if not is_local() or is_dead:
 		return
+
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_MIDDLE:
+		try_kick()
+		get_viewport().set_input_as_handled()
+		return
+
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+
+	if event.keycode == KEY_V:
+		try_kick()
+		get_viewport().set_input_as_handled()
+		return
+
 	var weapon_key_to_index := {
 		KEY_1: 0,
 		KEY_2: 1,
@@ -362,10 +405,11 @@ func sync_flashlight(is_on: bool) -> void:
 		third_person_model.set_flashlight(is_on)
 
 @rpc("any_peer", "unreliable_ordered")
-func sync_state(pos: Vector3, rot_y: float, _spd: float = 0.0) -> void:
+func sync_state(pos: Vector3, rot_y: float, _spd: float = 0.0, is_crouch: bool = false) -> void:
 	if not is_local():
 		target_pos = pos
 		target_rot_y = rot_y
+		target_is_crouching = is_crouch
 
 func _publish_weapon_status(force: bool) -> void:
 	var manager: WeaponManager = get_node_or_null("WeaponManager") as WeaponManager
@@ -432,7 +476,7 @@ func _die() -> void:
 	health = 100
 	is_dead = false
 
-	if third_person_model and not is_local():
+	if third_person_model:
 		third_person_model.visible = true
 	if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
 		rpc("sync_player_alive", true)
@@ -453,3 +497,196 @@ func sync_player_alive(alive: bool) -> void:
 	is_dead = not alive
 	if third_person_model:
 		third_person_model.visible = alive
+
+# =========================================================================
+# МЕХАНИКА ПИНКА НОГОЙ (Spartan Kick & Knockback)
+# =========================================================================
+
+func try_kick() -> void:
+	if is_dead or _kick_cooldown > 0.0:
+		return
+	_kick_cooldown = KICK_COOLDOWN_TIME
+
+	if third_person_model:
+		third_person_model.play_kick()
+
+	_play_kick_whoosh()
+	_camera_kick_punch()
+
+	if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
+		rpc("sync_remote_kick")
+
+	# Удар наносится на пике взмаха ноги (через 0.11 секунды)
+	get_tree().create_timer(0.11).timeout.connect(func():
+		if is_instance_valid(self) and not is_dead:
+			_execute_kick_hit()
+	)
+
+@rpc("any_peer", "call_remote")
+func sync_remote_kick() -> void:
+	if not is_local() and third_person_model:
+		third_person_model.play_kick()
+		_play_kick_whoosh()
+
+func _execute_kick_hit() -> void:
+	if not cam:
+		return
+	var kick_origin: Vector3 = cam.global_position
+	var kick_dir: Vector3 = -cam.global_transform.basis.z.normalized()
+	var kick_reach: float = 2.85
+	var did_hit: bool = false
+
+	# 1. Проверка врагов-зомби в секторе пинка
+	var enemies := get_tree().get_nodes_in_group("enemy")
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or not (enemy is Node3D):
+			continue
+		if enemy.has_method("is_dead_state") and enemy.is_dead_state():
+			continue
+		if "is_dead" in enemy and enemy.is_dead:
+			continue
+
+		var enemy_pos: Vector3 = (enemy as Node3D).global_position
+		var target_pt: Vector3 = enemy_pos + Vector3(0.0, 1.0, 0.0)
+		var to_target: Vector3 = target_pt - kick_origin
+		var dist: float = to_target.length()
+		if dist <= kick_reach:
+			var dot: float = kick_dir.dot(to_target.normalized())
+			if dot >= 0.50:
+				did_hit = true
+				var hit_dir := (to_target.normalized() + kick_dir).normalized()
+				if enemy.has_method("take_damage"):
+					enemy.take_damage(45, hit_dir, target_pt)
+				elif enemy.has_method("hitscan_hit"):
+					enemy.hitscan_hit(45.0, hit_dir, target_pt)
+
+				# Мощный отброс и сбивание атаки зомби
+				if enemy is CharacterBody3D:
+					(enemy as CharacterBody3D).velocity = hit_dir * 17.0 + Vector3.UP * 5.2
+				if "hurt_timer" in enemy:
+					enemy.hurt_timer = 0.65
+				if "attack_timer" in enemy:
+					enemy.attack_timer = 1.4
+				if "is_winding_up" in enemy:
+					enemy.is_winding_up = false
+
+				SandEffects.spawn_dust_puff(target_pt, 0.75)
+
+	# 2. Проверка интерактивных препятствий, бочек и завалов
+	var interactives := get_tree().get_nodes_in_group("interactive")
+	for obj in interactives:
+		if not is_instance_valid(obj) or not (obj is Node3D):
+			continue
+		var obj_pos: Vector3 = (obj as Node3D).global_position
+		var to_obj: Vector3 = obj_pos - kick_origin
+		var dist: float = to_obj.length()
+		if dist <= kick_reach and kick_dir.dot(to_obj.normalized()) >= 0.50:
+			did_hit = true
+			if obj.has_method("take_damage"):
+				obj.take_damage(45)
+			if obj.has_method("detonate"):
+				obj.detonate()
+			if obj is RigidBody3D:
+				(obj as RigidBody3D).apply_central_impulse(kick_dir * 32.0 + Vector3.UP * 4.5)
+
+	# 3. Физический луч для отталкивания произвольных физ-объектов
+	var space_state := get_world_3d().direct_space_state
+	if space_state:
+		var ray_query := PhysicsRayQueryParameters3D.create(kick_origin, kick_origin + kick_dir * kick_reach)
+		ray_query.exclude = [self]
+		var result := space_state.intersect_ray(ray_query)
+		if not result.is_empty():
+			var collider = result.collider
+			if collider is RigidBody3D:
+				did_hit = true
+				collider.apply_impulse(kick_dir * 32.0 + Vector3.UP * 4.0, result.position - collider.global_position)
+			elif collider and collider.has_method("take_damage"):
+				did_hit = true
+				collider.take_damage(45, kick_dir, result.position)
+
+	if did_hit:
+		_play_kick_hit()
+		_camera_impact_shake()
+
+func _camera_kick_punch() -> void:
+	if not cam:
+		return
+	var punch_tween := create_tween()
+	punch_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	punch_tween.tween_property(cam, "position:z", -0.06, 0.08)
+	punch_tween.parallel().tween_property(cam, "rotation:z", deg_to_rad(-1.6), 0.08)
+	punch_tween.tween_property(cam, "position:z", 0.0, 0.16)
+	punch_tween.parallel().tween_property(cam, "rotation:z", 0.0, 0.16)
+
+func _camera_impact_shake() -> void:
+	if not cam:
+		return
+	var shake_tween := create_tween()
+	shake_tween.tween_property(cam, "position:x", randf_range(-0.04, 0.04), 0.04)
+	shake_tween.parallel().tween_property(cam, "position:y", -0.04, 0.04)
+	shake_tween.tween_property(cam, "position:x", 0.0, 0.08)
+	shake_tween.parallel().tween_property(cam, "position:y", 0.0, 0.08)
+
+func _build_kick_audio() -> void:
+	_snd_kick_whoosh = _create_kick_whoosh_stream()
+	_snd_kick_hit = _create_kick_hit_stream()
+
+	_kick_audio_player = AudioStreamPlayer.new()
+	_kick_audio_player.name = "KickWhooshPlayer"
+	_kick_audio_player.stream = _snd_kick_whoosh
+	_kick_audio_player.volume_db = -2.0
+	add_child(_kick_audio_player)
+
+	_kick_hit_audio_player = AudioStreamPlayer.new()
+	_kick_hit_audio_player.name = "KickHitPlayer"
+	_kick_hit_audio_player.stream = _snd_kick_hit
+	_kick_hit_audio_player.volume_db = 1.0
+	add_child(_kick_hit_audio_player)
+
+func _play_kick_whoosh() -> void:
+	if _kick_audio_player:
+		_kick_audio_player.pitch_scale = randf_range(0.92, 1.08)
+		_kick_audio_player.play()
+
+func _play_kick_hit() -> void:
+	if _kick_hit_audio_player:
+		_kick_hit_audio_player.pitch_scale = randf_range(0.95, 1.05)
+		_kick_hit_audio_player.play()
+
+static func _create_kick_whoosh_stream() -> AudioStreamWAV:
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = 22050
+	wav.stereo = false
+	var samples_count := int(0.22 * 22050)
+	var data := PackedByteArray()
+	data.resize(samples_count * 2)
+	for i in range(samples_count):
+		var t: float = float(i) / 22050.0
+		var env: float = sin(t / 0.22 * PI)
+		var freq: float = lerpf(300.0, 85.0, t / 0.22)
+		var s: float = sin(t * freq * TAU) * env * 0.70
+		var val: int = clampi(int(s * 32767.0), -32768, 32767)
+		data.encode_s16(i * 2, val)
+	wav.data = data
+	return wav
+
+static func _create_kick_hit_stream() -> AudioStreamWAV:
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = 22050
+	wav.stereo = false
+	var samples_count := int(0.28 * 22050)
+	var data := PackedByteArray()
+	data.resize(samples_count * 2)
+	for i in range(samples_count):
+		var t: float = float(i) / 22050.0
+		var env: float = exp(-t * 16.0)
+		var low_thud: float = sin(t * lerpf(90.0, 35.0, minf(t * 12.0, 1.0)) * TAU)
+		var pop: float = (randf() * 2.0 - 1.0) * exp(-t * 55.0) * 0.65
+		var s: float = (low_thud * 0.85 + pop) * env
+		var val: int = clampi(int(s * 32767.0), -32768, 32767)
+		data.encode_s16(i * 2, val)
+	wav.data = data
+	return wav
+
