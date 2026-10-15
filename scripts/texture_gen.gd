@@ -25,6 +25,11 @@ static func preload_all_textures() -> void:
 	make_tumbleweed()
 	make_skull_bones()
 	make_player()
+	make_player_face_texture()
+	make_player_torso_texture()
+	make_player_denim_texture()
+	make_player_leather_texture()
+	make_player_hat_texture()
 	make_zombie_walker()
 	make_zombie_runner()
 	make_zombie_brute()
@@ -1395,8 +1400,260 @@ static func _generate_player_image() -> Image:
 
 
 # =========================================================================
-# ТЕКСТУРЫ ОРУЖИЯ ОТ 1-ГО ЛИЦА (DOOM STYLE)
+# ТЕКСТУРЫ ДЛЯ 3D МОДЕЛИ ИГРОКА / НАПАРНИКА (Third-Person Cowboy Model)
 # =========================================================================
+
+# 1. Текстура лица ковбоя (глаза, усы, щетина, бандана)
+static func make_player_face_texture() -> Texture2D:
+	return get_or_create("player_face.png", _generate_player_face_texture)
+
+static func _generate_player_face_texture() -> Image:
+	var img: Image = Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	var skin_base  := Color(0.78, 0.58, 0.44, 1.0)
+	var skin_dark  := Color(0.64, 0.46, 0.34, 1.0)
+	var skin_light := Color(0.86, 0.67, 0.52, 1.0)
+	var brow_col   := Color(0.20, 0.12, 0.08, 1.0)
+	var eye_white  := Color(0.92, 0.92, 0.94, 1.0)
+	var eye_iris   := Color(0.26, 0.16, 0.10, 1.0)
+	var stache_col := Color(0.22, 0.14, 0.08, 1.0)
+	var stache_hl  := Color(0.36, 0.24, 0.15, 1.0)
+	var stubble    := Color(0.56, 0.40, 0.30, 1.0)
+	var band_red   := Color(0.72, 0.16, 0.12, 1.0)
+	var band_dark  := Color(0.50, 0.10, 0.08, 1.0)
+	var band_dot   := Color(0.95, 0.90, 0.86, 1.0)
+
+	# Базовая кожа лица с естественным затенением по краям
+	for y in range(0, 24):
+		for x in range(0, 32):
+			var col := skin_base
+			if x < 4 or x > 27 or y < 3:
+				col = skin_dark
+			elif y >= 4 and y <= 8 and x >= 10 and x <= 21:
+				col = skin_light
+			img.set_pixel(x, y, col)
+
+	# Густые брови
+	for x in range(6, 13):
+		img.set_pixel(x, 8, brow_col)
+		img.set_pixel(x, 9, brow_col)
+	for x in range(19, 26):
+		img.set_pixel(x, 8, brow_col)
+		img.set_pixel(x, 9, brow_col)
+
+	# Глаза с бликами
+	for y in range(10, 13):
+		for x in range(7, 12):
+			img.set_pixel(x, y, eye_white)
+		for x in range(20, 25):
+			img.set_pixel(x, y, eye_white)
+	# Радужка и зрачок
+	img.set_pixel(9, 11, eye_iris)
+	img.set_pixel(10, 11, eye_iris)
+	img.set_pixel(9, 12, eye_iris)
+	img.set_pixel(10, 12, eye_iris)
+	img.set_pixel(22, 11, eye_iris)
+	img.set_pixel(23, 11, eye_iris)
+	img.set_pixel(22, 12, eye_iris)
+	img.set_pixel(23, 12, eye_iris)
+	# Блик в глазу
+	img.set_pixel(9, 11, Color(1.0, 1.0, 1.0, 1.0))
+	img.set_pixel(22, 11, Color(1.0, 1.0, 1.0, 1.0))
+
+	# Нос с ноздрями
+	for y in range(12, 17):
+		img.set_pixel(15, y, skin_light)
+		img.set_pixel(16, y, skin_light)
+	img.set_pixel(14, 16, skin_dark)
+	img.set_pixel(17, 16, skin_dark)
+
+	# Пышные ковбойские усы подковой
+	for x in range(8, 24):
+		img.set_pixel(x, 18, stache_col)
+		img.set_pixel(x, 19, stache_col)
+	for x in range(10, 22):
+		img.set_pixel(x, 17, stache_col)
+	# Кончики усов спускаются вниз
+	img.set_pixel(8, 20, stache_col)
+	img.set_pixel(8, 21, stache_hl)
+	img.set_pixel(23, 20, stache_col)
+	img.set_pixel(23, 21, stache_hl)
+
+	# Мужественная щетина на подбородке
+	for y in range(20, 24):
+		for x in range(10, 22):
+			if (x + y) % 2 == 0 and img.get_pixel(x, y) == skin_base:
+				img.set_pixel(x, y, stubble)
+
+	# Красная шейная бандана с узором
+	for y in range(24, 32):
+		for x in range(0, 32):
+			var b_col := band_red if (x + y) % 3 != 0 else band_dark
+			img.set_pixel(x, y, b_col)
+	# Мелкие узорные крапинки
+	for y in range(25, 31, 2):
+		for x in range(2, 30, 4):
+			img.set_pixel(x, y, band_dot)
+
+	return img
+
+
+# 2. Текстура кожаного жилета и рубашки
+static func make_player_torso_texture() -> Texture2D:
+	return get_or_create("player_torso.png", _generate_player_torso_texture)
+
+static func _generate_player_torso_texture() -> Image:
+	var img: Image = Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	var leather_base := Color(0.32, 0.20, 0.12, 1.0)
+	var leather_dark := Color(0.20, 0.12, 0.07, 1.0)
+	var leather_st   := Color(0.56, 0.40, 0.24, 1.0)
+	var brass_btn    := Color(0.85, 0.72, 0.28, 1.0)
+
+	var shirt_blue   := Color(0.24, 0.36, 0.52, 1.0)
+	var shirt_tan    := Color(0.72, 0.65, 0.52, 1.0)
+	var shirt_navy   := Color(0.14, 0.22, 0.34, 1.0)
+	var pearl_snap   := Color(0.95, 0.95, 0.98, 1.0)
+
+	# Кожаный жилет по бокам, рубашка по центру
+	for y in range(0, 32):
+		for x in range(0, 32):
+			if x >= 10 and x <= 21:
+				# Клетчатая ковбойская рубашка (Plaid shirt)
+				var is_h := (y % 4 == 0)
+				var is_v := (x % 4 == 0)
+				var c := shirt_blue
+				if is_h and is_v:
+					c = shirt_navy
+				elif is_h or is_v:
+					c = shirt_tan
+				img.set_pixel(x, y, c)
+			else:
+				# Коричневый кожаный жилет / плащ
+				var grain: float = ((x * 7 + y * 13) % 5) * 0.02
+				var l_col := Color(leather_base.r + grain, leather_base.g + grain * 0.8, leather_base.b + grain * 0.5, 1.0)
+				if x == 9 or x == 22:
+					l_col = leather_dark
+				img.set_pixel(x, y, l_col)
+
+	# Строчка шва на кожаном жилете
+	for y in range(2, 30):
+		img.set_pixel(8, y, leather_st)
+		img.set_pixel(23, y, leather_st)
+
+	# Перламутровые кнопки на планке рубашки
+	for y in [6, 12, 18, 24]:
+		img.set_pixel(15, y, pearl_snap)
+		img.set_pixel(16, y, pearl_snap)
+
+	# Латунные пуговицы на жилете
+	for y in [8, 16, 24]:
+		img.set_pixel(6, y, brass_btn)
+		img.set_pixel(25, y, brass_btn)
+
+	return img
+
+
+# 3. Текстура джинсов (Denim Jeans)
+static func make_player_denim_texture() -> Texture2D:
+	return get_or_create("player_denim.png", _generate_player_denim_texture)
+
+static func _generate_player_denim_texture() -> Image:
+	var img: Image = Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	var denim_base := Color(0.18, 0.24, 0.35, 1.0)
+	var denim_fade := Color(0.26, 0.34, 0.46, 1.0)
+	var denim_dark := Color(0.12, 0.16, 0.25, 1.0)
+	var seam_gold  := Color(0.82, 0.56, 0.16, 1.0)
+	var rivet_cop  := Color(0.88, 0.50, 0.22, 1.0)
+
+	for y in range(0, 32):
+		for x in range(0, 32):
+			var d_col := denim_base
+			# Твилловое диагональное плетение джинсовой ткани
+			if (x + y) % 2 == 0:
+				d_col = denim_dark
+			# Потертость на коленях / бедрах
+			if (y >= 10 and y <= 22) and (x >= 8 and x <= 23):
+				d_col = denim_fade
+			img.set_pixel(x, y, d_col)
+
+	# Оранжево-золотой двойной шов по бокам штанин
+	for y in range(0, 32):
+		img.set_pixel(2, y, seam_gold)
+		img.set_pixel(29, y, seam_gold)
+
+	# Медные заклепки
+	for y in [3, 28]:
+		img.set_pixel(2, y, rivet_cop)
+		img.set_pixel(29, y, rivet_cop)
+
+	return img
+
+
+# 4. Текстура темной кожи (для шляпы, сапог, кобуры и пояса)
+static func make_player_leather_texture() -> Texture2D:
+	return get_or_create("player_leather.png", _generate_player_leather_texture)
+
+static func _generate_player_leather_texture() -> Image:
+	var img: Image = Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	var l_dark := Color(0.20, 0.13, 0.08, 1.0)
+	var l_mid  := Color(0.28, 0.18, 0.12, 1.0)
+	var l_lite := Color(0.42, 0.28, 0.18, 1.0)
+	var metal  := Color(0.80, 0.82, 0.86, 1.0)
+
+	for y in range(0, 32):
+		for x in range(0, 32):
+			var grain: float = ((x * 11 + y * 17) % 7) * 0.015
+			var c := Color(l_mid.r + grain, l_mid.g + grain * 0.7, l_mid.b + grain * 0.4, 1.0)
+			if (x < 2 or x > 29 or y < 2 or y > 29):
+				c = l_dark
+			img.set_pixel(x, y, c)
+
+	# Прошивка светлой нитью
+	for i in range(2, 30, 2):
+		img.set_pixel(i, 3, l_lite)
+		img.set_pixel(i, 28, l_lite)
+		img.set_pixel(3, i, l_lite)
+		img.set_pixel(28, i, l_lite)
+
+	# Металлические заклепки / пряжка
+	img.set_pixel(15, 15, metal)
+	img.set_pixel(16, 15, metal)
+	img.set_pixel(15, 16, metal)
+	img.set_pixel(16, 16, metal)
+
+	return img
+
+
+# 5. Текстура ковбойской шляпы стетсон
+static func make_player_hat_texture() -> Texture2D:
+	return get_or_create("player_hat.png", _generate_player_hat_texture)
+
+static func _generate_player_hat_texture() -> Image:
+	var img: Image = Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	var hat_dark := Color(0.18, 0.12, 0.08, 1.0)
+	var hat_mid  := Color(0.26, 0.18, 0.12, 1.0)
+	var hat_band := Color(0.10, 0.06, 0.04, 1.0)
+	var concho   := Color(0.88, 0.88, 0.92, 1.0)
+
+	for y in range(0, 32):
+		for x in range(0, 32):
+			var c := hat_mid
+			if y < 4 or y > 27:
+				c = hat_dark
+			img.set_pixel(x, y, c)
+
+	# Кожаный шляпный ремешок (Hatband)
+	for y in range(13, 17):
+		for x in range(0, 32):
+			img.set_pixel(x, y, hat_band)
+
+	# Серебряные ковбойские кончо (бляхи) на ремешке
+	for x in [4, 12, 20, 28]:
+		img.set_pixel(x, 14, concho)
+		img.set_pixel(x + 1, 14, concho)
+		img.set_pixel(x, 15, concho)
+		img.set_pixel(x + 1, 15, concho)
+
+	return img
 
 # 1. РЕВОЛЬВЕР .44
 static func make_weapon_revolver() -> Texture2D:

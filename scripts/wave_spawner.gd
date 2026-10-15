@@ -43,8 +43,9 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_find_and_connect_hud()
 
-	# Стартовая передышка перед первой волной
-	_start_break(wave_break)
+	# Стартовая передышка перед первой волной (только на сервере / в одиночке)
+	if not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
+		_start_break(wave_break)
 
 func _setup_container() -> void:
 	var existing: Node = get_node_or_null("EnemiesContainer")
@@ -61,12 +62,18 @@ func _find_and_connect_hud() -> void:
 		hud.connect_spawner(self)
 
 func _process(delta: float) -> void:
+	# На клиенте волнами управляет хост/сервер
+	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+		return
+
 	if is_in_break:
 		break_timer -= delta
 		var sec_left: int = int(ceil(maxf(0.0, break_timer)))
 		if sec_left != last_countdown_sec:
 			last_countdown_sec = sec_left
 			wave_countdown.emit(sec_left)
+			if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+				sync_wave_countdown.rpc(sec_left)
 
 		if break_timer <= 0.0:
 			is_in_break = false
@@ -85,7 +92,10 @@ func _start_break(duration: float) -> void:
 	is_in_break = true
 	break_timer = duration
 	last_countdown_sec = -1
-	wave_countdown.emit(int(ceil(duration)))
+	var sec: int = int(ceil(duration))
+	wave_countdown.emit(sec)
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		sync_wave_countdown.rpc(sec)
 
 func _start_next_wave() -> void:
 	current_wave += 1
@@ -98,8 +108,12 @@ func _start_next_wave() -> void:
 	var list: Array[String] = (data["enemies"] as Array[String]).duplicate()
 	enemies_to_spawn = list
 
+	var rem: int = enemies_alive + enemies_to_spawn.size()
 	wave_started.emit(current_wave, wave_name)
-	enemies_remaining.emit(enemies_alive + enemies_to_spawn.size())
+	enemies_remaining.emit(rem)
+
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		sync_wave_started.rpc(current_wave, wave_name, rem)
 
 	if has_node("/root/MusicManager"):
 		get_node("/root/MusicManager").set_combat_mode(true)
@@ -307,6 +321,8 @@ func _on_enemy_died(_enemy: Node) -> void:
 	enemies_alive = maxi(0, enemies_alive - 1)
 	var remaining: int = enemies_alive + enemies_to_spawn.size()
 	enemies_remaining.emit(remaining)
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		sync_enemies_remaining.rpc(remaining)
 
 	if remaining <= 0 and wave_active:
 		_complete_wave()
@@ -314,6 +330,8 @@ func _on_enemy_died(_enemy: Node) -> void:
 func _complete_wave() -> void:
 	wave_active = false
 	wave_completed.emit(current_wave)
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		sync_wave_completed.rpc(current_wave)
 
 	if has_node("/root/MusicManager"):
 		get_node("/root/MusicManager").set_combat_mode(false)
@@ -335,7 +353,64 @@ func reset_to_wave_zero() -> void:
 	current_wave = 0
 	enemies_remaining.emit(0)
 
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		sync_reset_to_wave_zero.rpc()
+
 	if has_node("/root/MusicManager"):
 		get_node("/root/MusicManager").set_combat_mode(false)
 
 	_start_break(wave_break)
+
+# --- СЕТЕВАЯ СИНХРОНИЗАЦИЯ ВОЛН ---
+func send_full_sync_to_peer(peer_id: int) -> void:
+	var rem: int = enemies_alive + enemies_to_spawn.size()
+	rpc_id(peer_id, "sync_full_spawner_state", current_wave, wave_active, is_in_break, int(ceil(maxf(0.0, break_timer))), rem)
+
+@rpc("authority", "reliable")
+func sync_full_spawner_state(w_num: int, is_active: bool, in_break: bool, break_sec: int, rem: int) -> void:
+	current_wave = w_num
+	wave_active = is_active
+	is_in_break = in_break
+	if is_in_break:
+		wave_countdown.emit(break_sec)
+	elif wave_active:
+		var data: Dictionary = _get_wave_composition(current_wave)
+		wave_started.emit(current_wave, data.get("name", "Волна %d" % current_wave))
+		enemies_remaining.emit(rem)
+		if has_node("/root/MusicManager"):
+			get_node("/root/MusicManager").set_combat_mode(true)
+
+@rpc("authority", "reliable")
+func sync_wave_started(w_num: int, w_name: String, rem: int) -> void:
+	current_wave = w_num
+	wave_active = true
+	is_in_break = false
+	wave_started.emit(w_num, w_name)
+	enemies_remaining.emit(rem)
+	if has_node("/root/MusicManager"):
+		get_node("/root/MusicManager").set_combat_mode(true)
+	if audio_player and snd_wave_start:
+		audio_player.stream = snd_wave_start
+		audio_player.play()
+
+@rpc("authority", "reliable")
+func sync_wave_completed(w_num: int) -> void:
+	wave_active = false
+	wave_completed.emit(w_num)
+	if has_node("/root/MusicManager"):
+		get_node("/root/MusicManager").set_combat_mode(false)
+	if audio_player and snd_wave_win:
+		audio_player.stream = snd_wave_win
+		audio_player.play()
+
+@rpc("authority", "unreliable")
+func sync_enemies_remaining(count: int) -> void:
+	enemies_remaining.emit(count)
+
+@rpc("authority", "unreliable")
+func sync_wave_countdown(seconds: int) -> void:
+	wave_countdown.emit(seconds)
+
+@rpc("authority", "reliable")
+func sync_reset_to_wave_zero() -> void:
+	reset_to_wave_zero()

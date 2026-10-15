@@ -519,26 +519,48 @@ func _update_compass(delta: float) -> void:
 	if caravan_ref == null or not is_instance_valid(caravan_ref):
 		caravan_ref = get_tree().get_first_node_in_group("caravan") as Node3D
 
+	var caravan_str: String = "КАРАВАН: ПОИСК..."
+	var caravan_text_color: Color = Color(1.0, 0.85, 0.35, 1.0)
+
 	if caravan_ref and is_instance_valid(caravan_ref) and play_char:
 		var to_c: Vector3 = caravan_ref.global_position - play_char.global_position
 		to_c.y = 0.0
 		var dist: float = to_c.length()
 
 		if _caravan_hurt_timer > 0.0:
-			compass_caravan_label.text = "⚠️ КАРАВАН ПОД АТАКОЙ! %dм" % int(dist)
-			compass_caravan_label.add_theme_color_override("font_color", Color(1.0, 0.25, 0.2, 1.0))
+			caravan_str = "⚠️ КАРАВАН ПОД АТАКОЙ! %dм" % int(dist)
+			caravan_text_color = Color(1.0, 0.25, 0.2, 1.0)
 		elif _is_caravan_blocked:
-			compass_caravan_label.text = "🚫 КАРАВАН ОСТАНОВЛЕН (ЗАВАЛ): %dм" % int(dist)
-			compass_caravan_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.2, 1.0))
+			caravan_str = "🚫 КАРАВАН ОСТАНОВЛЕН (ЗАВАЛ): %dм" % int(dist)
+			caravan_text_color = Color(1.0, 0.45, 0.2, 1.0)
 		elif dist < 4.5:
-			compass_caravan_label.text = "🐫 ВЫ В КУЗОВЕ КАРАВАНА"
-			compass_caravan_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5, 1.0))
+			caravan_str = "🐫 ВЫ В КУЗОВЕ КАРАВАНА"
+			caravan_text_color = Color(0.4, 1.0, 0.5, 1.0)
 		elif dist < 12.0:
-			compass_caravan_label.text = "🐫 КАРАВАН РЯДОМ: %dм" % int(dist)
-			compass_caravan_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5, 1.0))
+			caravan_str = "🐫 КАРАВАН РЯДОМ: %dм" % int(dist)
+			caravan_text_color = Color(1.0, 0.92, 0.5, 1.0)
 		else:
-			compass_caravan_label.text = "🐫 КАРАВАН: %dм" % int(dist)
-			compass_caravan_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35, 1.0))
+			caravan_str = "🐫 КАРАВАН: %dм" % int(dist)
+			caravan_text_color = Color(1.0, 0.85, 0.35, 1.0)
+
+	# Поиск других игроков (напарников) для компаса
+	var nearest_mate_dist: float = -1.0
+	if play_char:
+		var all_players: Array = get_tree().get_nodes_in_group("player")
+		for p in all_players:
+			if p != play_char and is_instance_valid(p) and p is Node3D and not (p.get("is_dead") == true):
+				var to_m: Vector3 = (p as Node3D).global_position - play_char.global_position
+				to_m.y = 0.0
+				var m_dist: float = to_m.length()
+				if nearest_mate_dist < 0.0 or m_dist < nearest_mate_dist:
+					nearest_mate_dist = m_dist
+
+	if compass_caravan_label:
+		if nearest_mate_dist >= 0.0:
+			compass_caravan_label.text = "%s   |   🤠 НАПАРНИК: %dм" % [caravan_str, int(nearest_mate_dist)]
+		else:
+			compass_caravan_label.text = caravan_str
+		compass_caravan_label.add_theme_color_override("font_color", caravan_text_color)
 
 	if compass_tape:
 		compass_tape.queue_redraw()
@@ -612,7 +634,7 @@ func _draw_compass() -> void:
 	])
 	compass_tape.draw_colored_polygon(arrow_pts, Color(1.0, 0.85, 0.30, 1.0))
 
-	# Метка Каравана на компасе
+	# 1. Метка Каравана на компасе (золотой 🐫)
 	if caravan_ref and is_instance_valid(caravan_ref):
 		var to_c: Vector3 = caravan_ref.global_position - play_char.global_position
 		to_c.y = 0.0
@@ -642,6 +664,40 @@ func _draw_compass() -> void:
 					var right_str := "🐫 ▶"
 					var r_sz := font.get_string_size(right_str, HORIZONTAL_ALIGNMENT_RIGHT, -1, 12)
 					compass_tape.draw_string(font, Vector2(w - r_sz.x - 6.0, 15.0), right_str, HORIZONTAL_ALIGNMENT_RIGHT, -1, 12, marker_col)
+
+	# 2. Метки других игроков (напарников) на компасе (бирюзовый/циан 🤠)
+	var all_players: Array = get_tree().get_nodes_in_group("player")
+	for p in all_players:
+		if p != play_char and is_instance_valid(p) and p is Node3D and not (p.get("is_dead") == true):
+			var mate := p as Node3D
+			var to_m: Vector3 = mate.global_position - play_char.global_position
+			to_m.y = 0.0
+			if to_m.length_squared() > 0.001:
+				var m_dist: float = to_m.length()
+				var m_fwd := to_m.normalized()
+				var m_yaw_rad: float = atan2(m_fwd.x, -m_fwd.z)
+				var m_diff_deg: float = wrapf(rad_to_deg(m_yaw_rad - cam_yaw_rad), -180.0, 180.0)
+
+				var mate_col := Color(0.28, 0.95, 1.0, 1.0)
+
+				if abs(m_diff_deg) <= 56.0:
+					var marker_x: float = cx + m_diff_deg * pixels_per_deg
+					compass_tape.draw_circle(Vector2(marker_x, 15.0), 3.0, mate_col)
+					if font:
+						var m_icon := "🤠"
+						var icon_sz := font.get_string_size(m_icon, HORIZONTAL_ALIGNMENT_CENTER, -1, 13)
+						compass_tape.draw_string(font, Vector2(marker_x - icon_sz.x * 0.5, 12.0), m_icon, HORIZONTAL_ALIGNMENT_CENTER, -1, 13, mate_col)
+				elif m_diff_deg < -56.0:
+					if font:
+						var left_mate := "◀ 🤠"
+						# Смещено вправо (38px), чтобы не перекрывать стрелку каравана (6px)
+						compass_tape.draw_string(font, Vector2(38.0, 15.0), left_mate, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, mate_col)
+				else:
+					if font:
+						var right_mate := "🤠 ▶"
+						var rm_sz := font.get_string_size(right_mate, HORIZONTAL_ALIGNMENT_RIGHT, -1, 11)
+						# Смещено влево от края (38px), чтобы не перекрывать стрелку каравана
+						compass_tape.draw_string(font, Vector2(w - rm_sz.x - 38.0, 15.0), right_mate, HORIZONTAL_ALIGNMENT_RIGHT, -1, 11, mate_col)
 
 
 func _init_blood_textures() -> void:

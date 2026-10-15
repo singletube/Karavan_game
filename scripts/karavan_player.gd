@@ -26,6 +26,8 @@ var flashlight_halo: SpotLight3D
 var flashlight_audio: AudioStreamPlayer
 var flashlight_enabled: bool = false
 
+var third_person_model: PlayerModel3D = null
+
 var current_interactable: Node = null
 var interact_hold_time: float = 0.0
 
@@ -33,6 +35,7 @@ var footstep_dist: float = 0.0
 var footstep_left: bool = false
 
 func _enter_tree() -> void:
+	add_to_group("player")
 	if name.is_valid_int():
 		set_multiplayer_authority(name.to_int())
 
@@ -41,6 +44,7 @@ func _ready() -> void:
 	_add_crouch_key()
 	_build_legacy_muzzle_flash()
 	_build_flashlight()
+	_build_third_person_model()
 
 	var caravan: Node = get_tree().current_scene.get_node_or_null("Caravan")
 	if not caravan:
@@ -69,21 +73,59 @@ func _ready() -> void:
 		get_node_or_null("CameraHolder").set_process_unhandled_input(false)
 		get_node_or_null("WeaponManager").hide()
 		get_node_or_null("HUD").hide()
+		var sub_vp := get_node_or_null("SubViewportContainer")
+		if sub_vp and sub_vp is Control:
+			(sub_vp as Control).hide()
+		var input_comp := get_node_or_null("InputManagementComponent")
+		if input_comp:
+			input_comp.set_process(false)
+			input_comp.set_process_unhandled_input(false)
+		var link_comp := get_node_or_null("LinkComponent")
+		if link_comp:
+			link_comp.set_process(false)
+
+func _build_third_person_model() -> void:
+	third_person_model = PlayerModel3D.new()
+	third_person_model.name = "ThirdPersonModel"
+	add_child(third_person_model)
+
+	var default_model: Node = get_node_or_null("Model")
+	if default_model and default_model is VisualInstance3D:
+		(default_model as VisualInstance3D).visible = false
+
+	if is_local():
+		# Локальный игрок видит только оружие от первого лица
+		third_person_model.visible = false
+	else:
+		# Удаленный напарник отображается полной 3D моделью с текстурами
+		third_person_model.visible = true
 
 func is_local() -> bool:
 	return multiplayer.multiplayer_peer == null or is_multiplayer_authority()
 
 func _physics_process(delta: float) -> void:
 	if not is_local():
+		var prev_pos := global_position
 		global_position = global_position.lerp(target_pos, minf(delta * 18.0, 1.0))
 		rotation.y = lerp_angle(rotation.y, target_rot_y, minf(delta * 18.0, 1.0))
+		var move_dist: float = (global_position - prev_pos).length()
+		var spd: float = move_dist / maxf(delta, 0.001)
+		if third_person_model:
+			third_person_model.update_animation(delta, spd > 0.15, spd)
 		return
+
 	if is_dead:
 		return
+
 	super(delta)
 	_process_player_footsteps(delta)
+
 	if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
-		rpc("sync_state", global_position, rotation.y)
+		var fwd := -cam.global_transform.basis.z if cam else -global_transform.basis.z
+		fwd.y = 0.0
+		fwd = fwd.normalized()
+		var look_yaw: float = atan2(fwd.x, fwd.z)
+		rpc("sync_state", global_position, look_yaw, velocity.length())
 
 func _process_player_footsteps(delta: float) -> void:
 	if not is_on_floor():
@@ -246,6 +288,18 @@ func play_legacy_muzzle_flash(muzzle_transform: Transform3D) -> void:
 			_legacy_muzzle_flash.hide()
 	)
 
+	if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
+		var w_name: String = "Pistol"
+		var manager := get_node_or_null("WeaponManager") as WeaponManager
+		if manager and manager.current_weapon and manager.current_weapon.resources:
+			w_name = manager.current_weapon.resources.weapon_name
+		rpc("sync_remote_shoot", w_name)
+
+@rpc("any_peer", "call_remote")
+func sync_remote_shoot(w_name: String) -> void:
+	if not is_local() and third_person_model:
+		third_person_model.play_shoot_effect(w_name)
+
 func _build_flashlight() -> void:
 	if not is_local() or not cam:
 		return
@@ -296,8 +350,19 @@ func toggle_flashlight() -> void:
 		flashlight_audio.play()
 	flashlight_toggled.emit(flashlight_enabled)
 
+	if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
+		rpc("sync_flashlight", flashlight_enabled)
+
+@rpc("any_peer", "call_remote")
+func sync_flashlight(is_on: bool) -> void:
+	flashlight_enabled = is_on
+	if flashlight:
+		flashlight.visible = is_on
+	if third_person_model:
+		third_person_model.set_flashlight(is_on)
+
 @rpc("any_peer", "unreliable_ordered")
-func sync_state(pos: Vector3, rot_y: float) -> void:
+func sync_state(pos: Vector3, rot_y: float, _spd: float = 0.0) -> void:
 	if not is_local():
 		target_pos = pos
 		target_rot_y = rot_y
@@ -313,10 +378,17 @@ func _publish_weapon_status(force: bool) -> void:
 	if force or resource.weapon_id != _last_weapon_id:
 		_last_weapon_id = resource.weapon_id
 		weapon_changed.emit(resource.weapon_name, null, magazine, reserve)
+		if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
+			rpc("sync_weapon_change", resource.weapon_name)
 	if force or magazine != _last_magazine or reserve != _last_reserve:
 		_last_magazine = magazine
 		_last_reserve = reserve
 		ammo_changed.emit(magazine, reserve)
+
+@rpc("any_peer", "call_remote")
+func sync_weapon_change(w_name: String) -> void:
+	if not is_local() and third_person_model:
+		third_person_model.set_weapon(w_name)
 
 func get_combat_status() -> Dictionary:
 	var manager := get_node_or_null("WeaponManager") as WeaponManager
@@ -350,10 +422,20 @@ func apply_remote_damage(amount: int) -> void:
 func _die() -> void:
 	is_dead = true
 	player_died.emit()
+	if third_person_model:
+		third_person_model.visible = false
+	if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
+		rpc("sync_player_alive", false)
+
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	await get_tree().create_timer(3.0).timeout
 	health = 100
 	is_dead = false
+
+	if third_person_model and not is_local():
+		third_person_model.visible = true
+	if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
+		rpc("sync_player_alive", true)
 
 	var caravan: Node = get_tree().current_scene.get_node_or_null("Caravan")
 	if not caravan:
@@ -365,3 +447,9 @@ func _die() -> void:
 
 	health_changed.emit(health)
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+@rpc("any_peer", "call_remote")
+func sync_player_alive(alive: bool) -> void:
+	is_dead = not alive
+	if third_person_model:
+		third_person_model.visible = alive

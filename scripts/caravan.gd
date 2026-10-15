@@ -23,6 +23,10 @@ var track_dist: float = 0.0
 var wheel_dust_timer: float = 0.0
 var last_hoof_cycle: int = -1
 
+var _net_sync_timer: float = 0.0
+var _remote_target_pos: Vector3 = Vector3.ZERO
+var _has_remote_target: bool = false
+
 @onready var model: CaravanModel3D = $CaravanModel3D
 @onready var hit_sound: AudioStreamPlayer3D = $HitSound
 @onready var break_sound: AudioStreamPlayer3D = $BreakSound
@@ -40,10 +44,36 @@ func _ready() -> void:
 		hit_sound.stream = snd_wood_hit
 
 func _physics_process(delta: float) -> void:
+	# Если мы клиент в мультиплеере — интерполируем к координатам сервера
+	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+		if _has_remote_target:
+			var prev_pos := global_position
+			global_position = global_position.lerp(_remote_target_pos, delta * 14.0)
+			var moved_dist: float = global_position.distance_to(prev_pos)
+			var is_moving: bool = (not is_destroyed and not is_blocked and moved_dist > 0.001)
+
+			if is_moving:
+				walk_phase += delta * (move_speed * 1.5)
+				track_dist += moved_dist
+				if track_dist >= 0.85:
+					track_dist = 0.0
+					SandEffects.add_caravan_wheel_tracks(global_position, move_direction)
+
+			if model:
+				model.update_animation(delta, is_moving, move_speed if is_moving else 0.0, walk_phase)
+		return
+
 	var was_blocked := is_blocked
 	is_blocked = _check_road_obstacles()
 	if is_blocked != was_blocked:
 		caravan_blocked_status.emit(is_blocked, "ДОРОГА ЗАБЛОКИРОВАНА!" if is_blocked else "")
+
+	# Сетевая синхронизация состояния каравана (10 раз в сек)
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		_net_sync_timer += delta
+		if _net_sync_timer >= 0.1:
+			_net_sync_timer = 0.0
+			sync_caravan_state.rpc(global_position, health, is_blocked, is_destroyed)
 
 	if is_destroyed or is_blocked:
 		if model:
@@ -116,6 +146,10 @@ func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_positio
 	if is_destroyed:
 		return
 
+	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+		rpc_id(1, "request_caravan_damage", amount, hit_direction, hit_position)
+		return
+
 	health = maxi(0, health - amount)
 	health_changed.emit(health, MAX_HEALTH)
 
@@ -125,8 +159,16 @@ func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_positio
 		hit_sound.pitch_scale = randf_range(0.65, 0.85)
 		hit_sound.play()
 
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		sync_caravan_state.rpc(global_position, health, is_blocked, is_destroyed)
+
 	if health <= 0:
 		_on_caravan_destroyed()
+
+@rpc("any_peer", "reliable")
+func request_caravan_damage(amount: int, hit_direction: Vector3, hit_position: Vector3) -> void:
+	if multiplayer.is_server():
+		take_damage(amount, hit_direction, hit_position)
 
 func hitscan_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> void:
 	take_damage(int(damage), hit_direction, hit_position)
@@ -191,3 +233,38 @@ func _on_caravan_destroyed() -> void:
 	is_destroyed = false
 	health_changed.emit(health, MAX_HEALTH)
 	caravan_respawned.emit()
+
+# --- СЕТЕВАЯ СИНХРОНИЗАЦИЯ КАРАВАНА ---
+func send_full_sync_to_peer(peer_id: int) -> void:
+	rpc_id(peer_id, "sync_full_caravan_state", global_position, health, is_blocked, is_destroyed)
+
+@rpc("authority", "reliable")
+func sync_full_caravan_state(pos: Vector3, hp: int, blocked: bool, destroyed: bool) -> void:
+	global_position = pos
+	_remote_target_pos = pos
+	_has_remote_target = true
+	health = hp
+	health_changed.emit(health, MAX_HEALTH)
+	if is_blocked != blocked:
+		is_blocked = blocked
+		caravan_blocked_status.emit(is_blocked, "ДОРОГА ЗАБЛОКИРОВАНА!" if is_blocked else "")
+	is_destroyed = destroyed
+
+@rpc("authority", "unreliable")
+func sync_caravan_state(pos: Vector3, hp: int, blocked: bool, destroyed: bool) -> void:
+	if multiplayer.is_server():
+		return
+	_remote_target_pos = pos
+	_has_remote_target = true
+	if health != hp:
+		health = hp
+		health_changed.emit(health, MAX_HEALTH)
+	if is_blocked != blocked:
+		is_blocked = blocked
+		caravan_blocked_status.emit(is_blocked, "ДОРОГА ЗАБЛОКИРОВАНА!" if is_blocked else "")
+	if is_destroyed != destroyed:
+		is_destroyed = destroyed
+		if is_destroyed:
+			caravan_destroyed.emit()
+		else:
+			caravan_respawned.emit()

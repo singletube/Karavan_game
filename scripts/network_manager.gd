@@ -82,6 +82,20 @@ func _on_peer_connected(id: int) -> void:
 		# Всем остальным клиентам сообщаем о новом игроке
 		rpc("spawn_remote_player", id)
 
+		# Синхронизируем положение и состояние каравана для подключившегося клиента
+		var caravan: Node = get_tree().current_scene.get_node_or_null("Caravan")
+		if not caravan:
+			caravan = get_tree().get_first_node_in_group("caravan")
+		if caravan and caravan.has_method("send_full_sync_to_peer"):
+			caravan.send_full_sync_to_peer(id)
+
+		# Синхронизируем состояние волн для подключившегося клиента
+		var spawner: Node = get_tree().current_scene.get_node_or_null("WaveSpawner")
+		if not spawner:
+			spawner = get_tree().get_first_node_in_group("wave_spawner")
+		if spawner and spawner.has_method("send_full_sync_to_peer"):
+			spawner.send_full_sync_to_peer(id)
+
 func _on_peer_disconnected(id: int) -> void:
 	emit_signal("player_disconnected", id)
 	emit_signal("connection_status_changed", "Игрок #%d отключился." % id)
