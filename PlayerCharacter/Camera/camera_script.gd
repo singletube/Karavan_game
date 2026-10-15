@@ -7,8 +7,8 @@ class_name CameraHolder
 @export_group("Camera variables")
 @export_range(0.0, 0.5, 0.001) var x_axis_sensibility : float = 0.05
 @export_range(0.0, 0.5, 0.001) var y_axis_sensibility : float = 0.05
-@export_range(-360.0, 0.0, 0.01) var max_up_angle_view : float = -90.0 #in degrees
-@export_range(0.0, 360.0, 0.01) var max_down_angle_view : float = 90.0 #in degrees
+@export_range(-88.0, 0.0, 0.01) var max_up_angle_view : float = -88.0 #in degrees
+@export_range(0.0, 88.0, 0.01) var max_down_angle_view : float = 88.0 #in degrees
 @export_range(5.0, 175.0, 0.01) var fov : float = 90.0
 
 @export_group("fov variables")
@@ -72,19 +72,28 @@ var state : String
 @onready var hud : CanvasLayer = %HUD
 @onready var input_management_component: InputManagementComponent = %InputManagementComponent
 
+var _cam_pitch : float = 0.0
+
 func _ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED) #set mouse mode as captured
 	
 	camera.fov = fov
+	_cam_pitch = camera.rotation.x
 	
 func _unhandled_input(event : InputEvent) -> void:
-	#manage camera rotation (360 on x axis, blocked at specified values on y axis, to not having the character do a complete head turn, which will be kinda weird)
+	# manage camera rotation: 360 horizontal yaw on CameraHolder, strictly clamped vertical pitch on Camera3D
 	if event is InputEventMouseMotion:
 		var window_scale_factor : float = get_window().content_scale_factor #to have same camera sensibility, whatever the window size is
-		rotate_y(-event.relative.x * (x_axis_sensibility / 10) / window_scale_factor)
-		camera.rotate_x(-event.relative.y * (y_axis_sensibility / 10) / window_scale_factor)
-		#use of deg_to_rad, because we change the x axis rotation with rotation,x, which use radians instead of degrees
-		camera.rotation.x = clamp(camera.rotation.x, deg_to_rad(max_up_angle_view), deg_to_rad(max_down_angle_view))
+		rotate_y(-event.relative.x * (x_axis_sensibility / 10.0) / window_scale_factor)
+		
+		# Плавный и строго ограниченный угол наклона (Pitch) без переворота через 360 градусов и gimbal lock
+		var delta_pitch : float = -event.relative.y * (y_axis_sensibility / 10.0) / window_scale_factor
+		var min_pitch : float = deg_to_rad(clampf(max_up_angle_view, -88.0, -10.0))
+		var max_pitch : float = deg_to_rad(clampf(max_down_angle_view, 10.0, 88.0))
+		_cam_pitch = clampf(_cam_pitch + delta_pitch, min_pitch, max_pitch)
+		camera.rotation.x = _cam_pitch
+		camera.rotation.y = 0.0
+		camera.rotation.z = 0.0
 		
 		mouse_input = event.relative #get position of the mouse in a 2D sceen, so save it in a Vector2
 		

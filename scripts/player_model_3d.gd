@@ -10,6 +10,8 @@ var torso          : Node3D
 var head           : Node3D
 var hat            : Node3D
 var face_mesh      : MeshInstance3D
+var neck_mesh      : MeshInstance3D
+var bandana_mesh   : MeshInstance3D
 
 var l_leg          : Node3D
 var r_leg          : Node3D
@@ -180,8 +182,8 @@ func _build_model() -> void:
 	_make_box(Vector3(0.45, 0.46, 0.30), mat_leather, torso, Vector3(0, 0.22, -0.01))
 
 	# Шея и красная бандана
-	_make_cyl(0.12, 0.10, 0.11, mat_skin, torso, Vector3(0, 0.48, 0))
-	_make_box(Vector3(0.24, 0.10, 0.24), mat_bandana, torso, Vector3(0, 0.46, 0.02))
+	neck_mesh = _make_cyl(0.12, 0.10, 0.11, mat_skin, torso, Vector3(0, 0.48, 0))
+	bandana_mesh = _make_box(Vector3(0.24, 0.10, 0.24), mat_bandana, torso, Vector3(0, 0.46, 0.02))
 
 	# Тактический нагрудный фонарь
 	chest_light = SpotLight3D.new()
@@ -377,12 +379,20 @@ func set_first_person_mode(enabled: bool) -> void:
 	is_first_person = enabled
 	if head:
 		head.visible = !enabled
+	if neck_mesh:
+		neck_mesh.visible = !enabled
+	if bandana_mesh:
+		bandana_mesh.visible = !enabled
 	if l_arm:
 		l_arm.visible = !enabled
 	if r_arm:
 		r_arm.visible = !enabled
 	if chest_light:
 		chest_light.visible = false
+	if pelvis:
+		# Сильно сдвигаем тело назад относительно камеры (на 38 см),
+		# чтобы плечи и грудь не лезли в экран и не мешали обзору
+		pelvis.position.z = -0.38 if enabled else 0.0
 
 func play_kick() -> void:
 	is_kicking = true
@@ -397,8 +407,8 @@ func update_animation(delta: float, moving: bool, velocity_length: float, is_cro
 		var k: float = sin(minf(kick_progress, 1.0) * PI)
 		# Правая нога резко взлетает вперед и вверх прямо перед взглядом игрока
 		r_leg.rotation.x = -k * 1.55
-		r_leg.position.z = k * 0.48
-		r_leg.position.y = -0.05 + k * 0.32
+		r_leg.position.z = k * 0.78
+		r_leg.position.y = -0.05 + k * 0.38
 		# Корпус отклоняется назад от силы и отдачи пинка
 		torso.rotation.x = k * 0.18
 

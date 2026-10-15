@@ -555,10 +555,11 @@ func _execute_kick_hit() -> void:
 			if dot >= 0.50:
 				did_hit = true
 				var hit_dir := (to_target.normalized() + kick_dir).normalized()
+				var kick_dmg: int = randi_range(5, 10)
 				if enemy.has_method("take_damage"):
-					enemy.take_damage(45, hit_dir, target_pt)
+					enemy.take_damage(kick_dmg, hit_dir, target_pt)
 				elif enemy.has_method("hitscan_hit"):
-					enemy.hitscan_hit(45.0, hit_dir, target_pt)
+					enemy.hitscan_hit(float(kick_dmg), hit_dir, target_pt)
 
 				# Мощный отброс и сбивание атаки зомби
 				if enemy is CharacterBody3D:
@@ -582,8 +583,9 @@ func _execute_kick_hit() -> void:
 		var dist: float = to_obj.length()
 		if dist <= kick_reach and kick_dir.dot(to_obj.normalized()) >= 0.50:
 			did_hit = true
+			var kick_dmg: int = randi_range(5, 10)
 			if obj.has_method("take_damage"):
-				obj.take_damage(45)
+				obj.take_damage(kick_dmg)
 			if obj.has_method("detonate"):
 				obj.detonate()
 			if obj is RigidBody3D:
@@ -602,7 +604,7 @@ func _execute_kick_hit() -> void:
 				collider.apply_impulse(kick_dir * 32.0 + Vector3.UP * 4.0, result.position - collider.global_position)
 			elif collider and collider.has_method("take_damage"):
 				did_hit = true
-				collider.take_damage(45, kick_dir, result.position)
+				collider.take_damage(randi_range(5, 10), kick_dir, result.position)
 
 	if did_hit:
 		_play_kick_hit()
