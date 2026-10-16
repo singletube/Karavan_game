@@ -12,6 +12,10 @@ static var mat_tire     : StandardMaterial3D
 static var mat_bone     : StandardMaterial3D
 static var mat_horn     : StandardMaterial3D
 static var mat_straw    : StandardMaterial3D
+static var mat_sign_yellow : StandardMaterial3D
+static var mat_stone_cairn : StandardMaterial3D
+static var mat_scrub_bush  : StandardMaterial3D
+static var mat_insulator   : StandardMaterial3D
 
 static func _ensure_materials() -> void:
 	if mat_bark != null:
@@ -58,6 +62,26 @@ static func _ensure_materials() -> void:
 	mat_straw = StandardMaterial3D.new()
 	mat_straw.albedo_color = Color(0.68, 0.54, 0.35)
 	mat_straw.roughness = 0.95
+
+	# Выцветший желтый дорожный знак
+	mat_sign_yellow = StandardMaterial3D.new()
+	mat_sign_yellow.albedo_color = Color(0.85, 0.68, 0.15)
+	mat_sign_yellow.roughness = 0.60
+
+	# Каменные плиты тура караванщиков
+	mat_stone_cairn = StandardMaterial3D.new()
+	mat_stone_cairn.albedo_color = Color(0.55, 0.45, 0.34)
+	mat_stone_cairn.roughness = 0.92
+
+	# Сухой пустынный кустарник
+	mat_scrub_bush = StandardMaterial3D.new()
+	mat_scrub_bush.albedo_color = Color(0.48, 0.44, 0.24)
+	mat_scrub_bush.roughness = 0.90
+
+	# Белый керамический изолятор столба
+	mat_insulator = StandardMaterial3D.new()
+	mat_insulator.albedo_color = Color(0.88, 0.90, 0.92)
+	mat_insulator.roughness = 0.25
 
 # -------------------------------------------------------------------------
 # Вспомогательные функции построения
@@ -265,5 +289,123 @@ static func create_tumbleweed_3d() -> Node3D:
 
 	# Внутренний сгусток сухих веток в сердцевине
 	_add_box(root, Vector3(0.24, 0.24, 0.24), mat_straw, Vector3.ZERO, Vector3(0.4, 0.7, 0.2))
+
+	return root
+
+# =========================================================================
+# 6. КАМЕННЫЙ ТУР / ПИРАМИДКА ИЗ КАМНЕЙ (STONE CAIRN)
+# Древний каменный ориентир караванщиков в песках
+# =========================================================================
+static func create_stone_cairn_3d() -> Node3D:
+	_ensure_materials()
+	var root := Node3D.new()
+	root.name = "StoneCairn3D"
+
+	# 5 сложенных друг на друга плоских камней
+	_add_box(root, Vector3(1.1, 0.32, 1.0), mat_stone_cairn, Vector3(0.0, 0.16, 0.0), Vector3(0.0, deg_to_rad(12.0), 0.0))
+	_add_box(root, Vector3(0.92, 0.28, 0.88), mat_stone_cairn, Vector3(0.04, 0.46, -0.03), Vector3(0.04, deg_to_rad(-24.0), -0.03))
+	_add_box(root, Vector3(0.72, 0.25, 0.68), mat_stone_cairn, Vector3(-0.03, 0.72, 0.02), Vector3(-0.03, deg_to_rad(35.0), 0.04))
+	_add_box(root, Vector3(0.52, 0.22, 0.50), mat_stone_cairn, Vector3(0.02, 0.95, -0.02), Vector3(0.02, deg_to_rad(-12.0), -0.02))
+	_add_box(root, Vector3(0.34, 0.22, 0.32), mat_stone_cairn, Vector3(-0.01, 1.17, 0.01), Vector3(0.05, deg_to_rad(55.0), 0.03))
+
+	# Мелкие опорные камешки вокруг основания
+	for i in range(4):
+		var a: float = float(i) * (TAU / 4.0) + 0.3
+		_add_box(root, Vector3(0.3, 0.18, 0.28), mat_stone_cairn, Vector3(cos(a) * 0.7, 0.09, sin(a) * 0.7), Vector3(0.1, a, -0.1))
+
+	return root
+
+# =========================================================================
+# 7. ТЕЛЕГРАФНЫЙ СТОЛБ С ОБОРВАННЫМИ ПРОВОДАМИ (TELEGRAPH POLE)
+# =========================================================================
+static func create_telegraph_pole_3d() -> Node3D:
+	_ensure_materials()
+	var root := Node3D.new()
+	root.name = "TelegraphPole3D"
+
+	# Наклон столба от пустынного ветра
+	var pole_lean := Vector3(deg_to_rad(randf_range(-6.0, 6.0)), 0.0, deg_to_rad(randf_range(-6.0, 6.0)))
+	var pole := Node3D.new()
+	pole.rotation = pole_lean
+	root.add_child(pole)
+
+	# Деревянный ствол столба
+	_add_cyl(pole, 6.4, 0.11, 0.15, mat_bark, Vector3(0.0, 3.2, 0.0))
+
+	# Поперечина перекладины (траверса)
+	_add_box(pole, Vector3(1.8, 0.12, 0.12), mat_bark, Vector3(0.0, 5.8, 0.0))
+
+	# 4 керамических изолятора на траверсе
+	var ins_x: Array[float] = [-0.75, -0.25, 0.25, 0.75]
+	for ix in ins_x:
+		_add_cyl(pole, 0.16, 0.04, 0.05, mat_insulator, Vector3(ix, 5.94, 0.0))
+
+	# Оборванные свисающие провода
+	_add_cyl(pole, 2.8, 0.01, 0.01, mat_metal, Vector3(-0.75, 4.4, 0.25), Vector3(deg_to_rad(12.0), 0.0, deg_to_rad(-8.0)))
+	_add_cyl(pole, 3.6, 0.01, 0.01, mat_metal, Vector3(0.75, 4.0, -0.2), Vector3(deg_to_rad(-8.0), 0.0, deg_to_rad(14.0)))
+
+	return root
+
+# =========================================================================
+# 8. СУХОЙ ПУСТЫННЫЙ КУСТАРНИК (DESERT SCRUB BUSH)
+# =========================================================================
+static func create_desert_bush_3d() -> Node3D:
+	_ensure_materials()
+	var root := Node3D.new()
+	root.name = "DesertBush3D"
+
+	# Куст из нескольких переплетенных сухих веток и сферических шапок
+	for i in range(5):
+		var ang: float = float(i) * (TAU / 5.0) + randf_range(-0.2, 0.2)
+		var rad: float = randf_range(0.25, 0.45)
+		var b_pos := Vector3(cos(ang) * rad, randf_range(0.2, 0.45), sin(ang) * rad)
+		var b_sz := Vector3(randf_range(0.5, 0.75), randf_range(0.4, 0.6), randf_range(0.5, 0.75))
+		_add_box(root, b_sz, mat_scrub_bush, b_pos, Vector3(randf_range(-0.3, 0.3), ang, randf_range(-0.3, 0.3)))
+
+	# Центральный сухой стволик у земли
+	_add_cyl(root, 0.4, 0.05, 0.08, mat_bark, Vector3(0.0, 0.2, 0.0), Vector3(0.1, 0.2, 0.0))
+
+	return root
+
+# =========================================================================
+# 9. РЖАВЫЙ ДОРОЖНЫЙ ЗНАК / УКАЗАТЕЛЬ (RUSTY ROAD SIGN)
+# =========================================================================
+static func create_road_sign_3d() -> Node3D:
+	_ensure_materials()
+	var root := Node3D.new()
+	root.name = "RoadSign3D"
+
+	var lean := Vector3(deg_to_rad(randf_range(-7.0, 7.0)), randf_range(0.0, TAU), deg_to_rad(randf_range(-5.0, 5.0)))
+	var holder := Node3D.new()
+	holder.rotation = lean
+	root.add_child(holder)
+
+	# Стальной оцинкованный шест
+	_add_cyl(holder, 2.6, 0.035, 0.04, mat_metal, Vector3(0.0, 1.3, 0.0))
+
+	# Ромбовидный дорожный знак предупреждения
+	_add_box(holder, Vector3(0.85, 0.85, 0.03), mat_sign_yellow, Vector3(0.0, 2.2, 0.02), Vector3(0.0, 0.0, deg_to_rad(45.0)))
+	# Черная предупреждающая полоса в центре знака
+	_add_box(holder, Vector3(0.16, 0.75, 0.035), mat_rust, Vector3(0.0, 2.2, 0.025), Vector3(0.0, 0.0, deg_to_rad(45.0)))
+
+	return root
+
+# =========================================================================
+# 10. ГРУППА РЖАВЫХ БОЧЕК И БРОШЕННЫХ ШИН (OIL DRUMS & TIRES CLUSTER)
+# =========================================================================
+static func create_oil_drums_cluster_3d() -> Node3D:
+	_ensure_materials()
+	var root := Node3D.new()
+	root.name = "OilDrumsCluster3D"
+
+	# Стоящая наполовину в песке ржавая бочка
+	var b1 := _add_cyl(root, 0.95, 0.32, 0.32, mat_rust, Vector3(-0.35, 0.38, 0.0), Vector3(deg_to_rad(8.0), 0.0, deg_to_rad(6.0)))
+	_add_cyl(b1, 0.08, 0.33, 0.33, mat_metal, Vector3(0.0, 0.25, 0.0))
+
+	# Поваленная набок бочка
+	_add_cyl(root, 0.95, 0.32, 0.32, mat_rust, Vector3(0.42, 0.28, -0.15), Vector3(0.0, deg_to_rad(35.0), PI * 0.5 - deg_to_rad(10.0)))
+
+	# Старая покрышка грузовика, прислоненная к бочке
+	_add_cyl(root, 0.24, 0.42, 0.42, mat_tire, Vector3(-0.08, 0.34, 0.45), Vector3(deg_to_rad(22.0), deg_to_rad(-18.0), PI * 0.5))
 
 	return root

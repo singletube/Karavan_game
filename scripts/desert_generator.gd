@@ -417,6 +417,52 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			tw.position = pos + Vector3(0.0, 0.5, 0.0)
 			chunk.add_child(tw)
 
+	# 7. Сухие пустынные кустарники (2-5 на чанк)
+	var bush_count: int = rng.randi_range(2, 5)
+	for i in range(bush_count):
+		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, false)
+		if is_in_exclusion.call(pos):
+			continue
+		var s: float = rng.randf_range(0.8, 1.35)
+		var rot_y: float = rng.randf_range(0.0, TAU)
+		_create_bush(chunk, pos, s, rot_y)
+
+	# 8. Каменные туры / ориентиры караванщиков (40% шанс на чанк)
+	if rng.randf() < 0.40:
+		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, true, 1.5)
+		if not is_in_exclusion.call(pos):
+			var s: float = rng.randf_range(0.9, 1.3)
+			var rot_y: float = rng.randf_range(0.0, TAU)
+			_create_cairn(chunk, pos, s, rot_y)
+
+	# 9. Заброшенные телеграфные столбы вдоль обочины (35% шанс в придорожных чанках)
+	if abs(coord.x) <= 1 and rng.randf() < 0.35 and not is_spawn_center:
+		var pole_side: float = 7.0 if rng.randf() < 0.5 else -7.0
+		var pole_z: float = rng.randf_range(-half * 0.8, half * 0.8)
+		var pole_pos := Vector3(pole_side, 0.0, pole_z)
+		if not is_in_exclusion.call(pole_pos):
+			var s: float = rng.randf_range(0.95, 1.15)
+			var rot_y: float = rng.randf_range(0.0, TAU)
+			_create_telegraph_pole(chunk, pole_pos, s, rot_y)
+
+	# 10. Ржавые дорожные знаки (28% шанс у обочин дороги)
+	if abs(coord.x) <= 1 and rng.randf() < 0.28 and not is_spawn_center:
+		var sign_side: float = 6.0 if rng.randf() < 0.5 else -6.0
+		var sign_z: float = rng.randf_range(-half * 0.8, half * 0.8)
+		var sign_pos := Vector3(sign_side, 0.0, sign_z)
+		if not is_in_exclusion.call(sign_pos):
+			var s: float = rng.randf_range(0.9, 1.2)
+			var rot_y: float = deg_to_rad(90.0 if sign_side < 0.0 else -90.0) + rng.randf_range(-0.3, 0.3)
+			_create_road_sign(chunk, sign_pos, s, rot_y)
+
+	# 11. Скопления ржавых бочек и брошенных шин (25% шанс)
+	if rng.randf() < 0.25 and not is_spawn_center:
+		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, true, 2.0)
+		if not is_in_exclusion.call(pos):
+			var s: float = rng.randf_range(0.9, 1.25)
+			var rot_y: float = rng.randf_range(0.0, TAU)
+			_create_oil_drums(chunk, pos, s, rot_y)
+
 # Расчет позиции объекта с обязательной проверкой свободного коридора дороги каравана
 func _get_prop_pos(chunk_wx: float, half: float, rng: RandomNumberGenerator, is_obstacle: bool, extra_clearance: float = 0.0) -> Vector3:
 	var lx: float = rng.randf_range(-half, half)
@@ -535,3 +581,85 @@ func _setup_poi_loot_crate(poi_node: Node, coord: Vector2i) -> void:
 		if NetworkManager != null and NetworkManager.looted_crates.has(crate_id):
 			if crate.has_method("mark_already_looted"):
 				crate.mark_already_looted()
+
+func _create_bush(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
+	var model := DesertScenery3D.create_desert_bush_3d()
+	model.position = pos
+	model.rotation.y = rot_y
+	model.scale = Vector3(s, s, s)
+	parent.add_child(model)
+
+func _create_cairn(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
+	var cairn_body := StaticBody3D.new()
+	cairn_body.position = pos
+	cairn_body.rotation.y = rot_y
+
+	var model := DesertScenery3D.create_stone_cairn_3d()
+	model.scale = Vector3(s, s, s)
+
+	var col := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.height = 1.4 * s
+	cyl.radius = 0.55 * s
+	col.shape = cyl
+	col.position.y = 0.7 * s
+
+	cairn_body.add_child(model)
+	cairn_body.add_child(col)
+	parent.add_child(cairn_body)
+
+func _create_telegraph_pole(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
+	var pole_body := StaticBody3D.new()
+	pole_body.position = pos
+	pole_body.rotation.y = rot_y
+
+	var model := DesertScenery3D.create_telegraph_pole_3d()
+	model.scale = Vector3(s, s, s)
+
+	var col := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.height = 6.4 * s
+	cyl.radius = 0.22 * s
+	col.shape = cyl
+	col.position.y = 3.2 * s
+
+	pole_body.add_child(model)
+	pole_body.add_child(col)
+	parent.add_child(pole_body)
+
+func _create_road_sign(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
+	var sign_body := StaticBody3D.new()
+	sign_body.position = pos
+	sign_body.rotation.y = rot_y
+
+	var model := DesertScenery3D.create_road_sign_3d()
+	model.scale = Vector3(s, s, s)
+
+	var col := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.height = 2.4 * s
+	cyl.radius = 0.12 * s
+	col.shape = cyl
+	col.position.y = 1.2 * s
+
+	sign_body.add_child(model)
+	sign_body.add_child(col)
+	parent.add_child(sign_body)
+
+func _create_oil_drums(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
+	var drums_body := StaticBody3D.new()
+	drums_body.position = pos
+	drums_body.rotation.y = rot_y
+
+	var model := DesertScenery3D.create_oil_drums_cluster_3d()
+	model.scale = Vector3(s, s, s)
+
+	var col := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(1.6 * s, 1.0 * s, 1.4 * s)
+	col.shape = box
+	col.position.y = 0.5 * s
+
+	drums_body.add_child(model)
+	drums_body.add_child(col)
+	parent.add_child(drums_body)

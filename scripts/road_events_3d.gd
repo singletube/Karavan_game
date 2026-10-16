@@ -1101,8 +1101,8 @@ static func create_bunker_ruins() -> Node3D:
 	_add_collidable_box(body, root, Vector3(0.8, 3.0, 3.0), mat_bunker_wall, Vector3(-2.2, 1.5, 7.0))
 	_add_collidable_box(body, root, Vector3(0.8, 3.0, 3.0), mat_bunker_wall, Vector3(2.2, 1.5, 7.0))
 
-	# Сорванная взрывом гермодверь лежит на полу
-	_add_collidable_box(body, root, Vector3(2.6, 0.2, 3.0), mat_burnt_metal, Vector3(0.3, 0.12, 6.2), Vector3(deg_to_rad(6.0), deg_to_rad(-22.0), deg_to_rad(8.0)))
+	# Сорванная взрывом гермодверь лежит на полу (визуальный декор без зацепа коллизии)
+	_add_box(root, Vector3(2.6, 0.12, 3.0), mat_burnt_metal, Vector3(0.3, 0.04, 6.2), Vector3(deg_to_rad(4.0), deg_to_rad(-22.0), deg_to_rad(4.0)))
 	# Полосатая маркировка на пороге
 	_add_box(root, Vector3(4.4, 0.12, 0.3), mat_barrel_stripe, Vector3(0.0, 0.06, 8.2))
 
@@ -1253,43 +1253,43 @@ static func create_crawlspace_shelter_ruins() -> Node3D:
 	body.collision_mask = 1
 	root.add_child(body)
 
-	# 1. Песчаный холм/дюна, в которую наполовину вкопан бункер
-	_add_collidable_box(body, root, Vector3(13.0, 0.3, 15.0), mat_sandstone, Vector3(0.0, 0.15, 0.0))
+	# 1. Основание пола (заподлицо с поверхностью песка Y = 0.0 — никаких ступеней и порогов!)
+	_add_collidable_box(body, root, Vector3(14.0, 0.4, 16.0), mat_sandstone, Vector3(0.0, -0.2, 0.0))
 
-	# 2. ВНУТРЕННЯЯ ПОДЗЕМНАЯ КОМНАТА-СХРОН (Z от -1.0 до -6.0)
-	# Внутри комнаты высота потолка 2.3м — здесь игрок может встать в полный рост!
+	# 2. ВНУТРЕННЯЯ ПОДЗЕМНАЯ КОМНАТА-СХРОН (Z от -1.0 до -6.5)
+	# Внутри комнаты высота потолка 2.7м — здесь игрок может свободно встать во весь рост!
 	# Задняя стена комнаты:
-	_add_collidable_box(body, root, Vector3(8.5, 3.0, 1.0), mat_bunker_wall, Vector3(0.0, 1.5, -6.5))
+	_add_collidable_box(body, root, Vector3(8.8, 3.2, 1.0), mat_bunker_wall, Vector3(0.0, 1.6, -6.5))
 	# Левая стена комнаты:
-	_add_collidable_box(body, root, Vector3(1.0, 3.0, 6.0), mat_bunker_wall, Vector3(-4.2, 1.5, -3.5))
+	_add_collidable_box(body, root, Vector3(1.0, 3.2, 6.0), mat_bunker_wall, Vector3(-4.4, 1.6, -3.5))
 	# Правая стена комнаты:
-	_add_collidable_box(body, root, Vector3(1.0, 3.0, 6.0), mat_bunker_wall, Vector3(4.2, 1.5, -3.5))
+	_add_collidable_box(body, root, Vector3(1.0, 3.2, 6.0), mat_bunker_wall, Vector3(4.4, 1.6, -3.5))
 	# Потолок внутренней комнаты:
-	_add_collidable_box(body, root, Vector3(8.5, 0.6, 6.0), mat_bunker_wall, Vector3(0.0, 2.7, -3.5))
+	_add_collidable_box(body, root, Vector3(8.8, 0.6, 6.0), mat_bunker_wall, Vector3(0.0, 2.9, -3.5))
 
 	# Внутренняя передняя перегородка вокруг проема лаза:
-	_add_collidable_box(body, root, Vector3(3.2, 3.0, 1.0), mat_bunker_wall, Vector3(-2.6, 1.5, -0.5))
-	_add_collidable_box(body, root, Vector3(3.2, 3.0, 1.0), mat_bunker_wall, Vector3(2.6, 1.5, -0.5))
+	_add_collidable_box(body, root, Vector3(3.1, 3.2, 1.0), mat_bunker_wall, Vector3(-2.85, 1.6, -0.5))
+	_add_collidable_box(body, root, Vector3(3.1, 3.2, 1.0), mat_bunker_wall, Vector3(2.85, 1.6, -0.5))
 
-	# 3. НИЗКИЙ ТОННЕЛЬ-ЛАЗ (CRAWLWAY TUNNEL: Z от -0.5 до 4.5, длина 5.0м, ширина 1.6м)
+	# 3. ШИРОКИЙ НИЗКИЙ ТОННЕЛЬ-ЛАЗ (CRAWLWAY: Z от -0.5 до 4.2, ширина 2.6м)
 	# Левая стена тоннеля:
-	_add_collidable_box(body, root, Vector3(1.8, 2.6, 5.0), mat_bunker_wall, Vector3(-1.8, 1.3, 2.0))
+	_add_collidable_box(body, root, Vector3(1.6, 2.8, 4.7), mat_bunker_wall, Vector3(-2.1, 1.4, 1.85))
 	# Правая стена тоннеля:
-	_add_collidable_box(body, root, Vector3(1.8, 2.6, 5.0), mat_bunker_wall, Vector3(1.8, 1.3, 2.0))
+	_add_collidable_box(body, root, Vector3(1.6, 2.8, 4.7), mat_bunker_wall, Vector3(2.1, 1.4, 1.85))
 
-	# !!! КЛЮЧЕВАЯ КОЛЛИЗИЯ ЛАЗА: НИЗКОЕ ПЕРЕКРЫТИЕ (LINTEL & COLLAPSED CEILING) !!!
-	# Высота просвета от земли ровно 1.25м!
-	# Стоящий игрок (рост 1.8м) упирается лбом и НЕ МОЖЕТ пройти!
-	# Присевший игрок (рост 0.9м) свободно пролезает на четвереньках!
-	# Толщина перекрытия 0.8м, центр Y = 1.25 + 0.4 = 1.65м:
-	_add_collidable_box(body, root, Vector3(2.0, 0.8, 5.0), mat_bunker_wall, Vector3(0.0, 1.65, 2.0))
+	# !!! КЛЮЧЕВАЯ КОЛЛИЗИЯ ЛАЗА: НИЗКОЕ ПЕРЕКРЫТИЕ (LINTEL & CEILING) !!!
+	# Высота просвета ровно 1.45м от земли!
+	# Стоящий игрок (рост 1.8м) физически упирается и НЕ МОЖЕТ пройти!
+	# Присевший игрок (рост 0.9м) свободно и плавно пролезает на корточках (клавиша [C] или [Ctrl])!
+	# Толщина балки 0.8м, центр Y = 1.45 + 0.4 = 1.85м:
+	_add_collidable_box(body, root, Vector3(2.6, 0.8, 4.7), mat_bunker_wall, Vector3(0.0, 1.85, 1.85))
 
-	# Обваленные бетонные балки и обломки поверх перекрытия входа
-	_add_box(root, Vector3(3.6, 1.2, 2.4), mat_sandstone_dark, Vector3(0.0, 2.6, 3.2), Vector3(deg_to_rad(8.0), deg_to_rad(-15.0), deg_to_rad(6.0)))
-	_add_box(root, Vector3(2.8, 0.8, 3.2), mat_bunker_wall, Vector3(0.4, 2.4, 1.0), Vector3(deg_to_rad(-6.0), deg_to_rad(12.0), 0.0))
+	# Обваленные бетонные плиты и песок поверх перекрытия входа
+	_add_box(root, Vector3(3.8, 1.2, 2.6), mat_sandstone_dark, Vector3(0.0, 2.8, 2.8), Vector3(deg_to_rad(6.0), deg_to_rad(-12.0), deg_to_rad(4.0)))
+	_add_box(root, Vector3(3.0, 0.8, 3.0), mat_bunker_wall, Vector3(0.3, 2.6, 1.0), Vector3(deg_to_rad(-4.0), deg_to_rad(10.0), 0.0))
 
-	# Предупреждающая надпись и полосы на входе в лаз
-	_add_box(root, Vector3(1.8, 0.25, 0.1), mat_barrel_stripe, Vector3(0.0, 1.15, 4.52))
+	# Предупреждающая желто-черная полоса на перемычке лаза
+	_add_box(root, Vector3(2.6, 0.22, 0.1), mat_barrel_stripe, Vector3(0.0, 1.35, 4.22))
 
 	# 4. ДЕТАЛИ ВНУТРИ СЕКРЕТНОГО СХРОНА (SURVIVOR BUNKER INTERIOR):
 	# Подвесной аварийный фонарь с теплым оранжевым свечением
