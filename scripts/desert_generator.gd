@@ -59,37 +59,57 @@ static func get_normal(wx: float, wz: float) -> Vector3:
 # ВЫСОТА И РЕЛЬЕФ ПУСТЫНИ (PROCEDURAL DUNES & ELEVATION)
 # =========================================================================
 func get_raw_terrain_height(wx: float, wz: float) -> float:
-	# 1. Продольные волны песчаных дюн под углом ветра (28 градусов)
+	var seed_f: float = float(world_seed % 10000) * 0.05
+
+	# 1. Основной равномерный и пологий рельеф песчаных барханов (gentle rolling dunes)
 	var ang: float = deg_to_rad(28.0)
 	var wind_u: float = wx * cos(ang) + wz * sin(ang)
 	var wind_v: float = -wx * sin(ang) + wz * cos(ang)
 
-	var seed_f: float = float(world_seed % 10000) * 0.05
+	# Длинные пологие песчаные увалы (длина волны ~160м, перепад всего 1.6м)
+	var swell1: float = sin(wind_u * 0.038 + seed_f) * 1.6
+	# Мягкие поперечные волны (длина ~90м, перепад 0.85м)
+	var swell2: float = cos(wind_v * 0.068 + seed_f * 1.3) * 0.85
+	# Естественная легкая рябь бархана (длина ~45м, перепад 0.35м)
+	var swell3: float = sin((wind_u * 0.14 + wind_v * 0.09) + seed_f * 0.7) * 0.35
 
-	# Крупные песчаные барханы (длина волны ~135м, перепад 4.2м)
-	var wave1: float = sin(wind_u * 0.046 + seed_f) * 4.2
-	# Поперечные асимметричные гребни (длина волны ~65м, перепад 2.4м)
-	var wave2: float = cos(wind_v * 0.096 + seed_f * 1.3) * 2.4
-	# Средние волны барханов (длина ~32м, перепад 1.1м)
-	var wave3: float = sin((wind_u * 0.19 + wind_v * 0.13) + seed_f * 0.7) * 1.1
+	var gentle_dunes: float = swell1 + swell2 + swell3 # Общий перепад ±2.8м - пологий и равномерный
 
-	var wild_h: float = wave1 + wave2 + wave3
+	# 2. Редкие одиночные крупные песчаные горы / гряды в глубине пустыни (occasional large mountains)
+	# Масштаб 380-480м, появляются только изредка
+	var m1: float = sin(wx * 0.0078 + wz * 0.0052 + seed_f * 0.4)
+	var m2: float = cos(wx * 0.0061 - wz * 0.0094 + seed_f * 0.8)
+	var mount_sample: float = m1 * m2 # от -1.0 до 1.0
 
-	# 2. Сглаженный тракт каравана по центру дороги (|wx| < 5.0м)
-	# Дорога идет по мягким покатым перекатам (перепад ±1.5м), а в дикой пустыне барханы поднимаются на 5-8м
+	var big_mountain: float = 0.0
+	if mount_sample > 0.38:
+		var norm_peak: float = (mount_sample - 0.38) / 0.62 # от 0.0 до 1.0
+		# Формируем куполообразную вершину
+		norm_peak = norm_peak * norm_peak * (3.0 - 2.0 * norm_peak)
+		big_mountain = pow(norm_peak, 1.8) * 11.5 # Высота горы до ~11.5 метров
+
+	# Горы не загромождают дорогу каравана (|wx| < 18м), плавно вырастая в дикой пустыне
+	var road_mount_mask: float = clampf((absf(wx) - 18.0) / 24.0, 0.0, 1.0)
+	road_mount_mask = road_mount_mask * road_mount_mask * (3.0 - 2.0 * road_mount_mask)
+	big_mountain *= road_mount_mask
+
+	var wild_h: float = gentle_dunes + big_mountain
+
+	# 3. Сглаженный тракт каравана по центру дороги (|wx| < 4.5м)
+	# Дорога мягкая и пологая (перепад всего ±0.6м)
 	var road_dist: float = absf(wx)
-	var road_blend: float = clampf((road_dist - 3.8) / 10.0, 0.0, 1.0)
-	road_blend = road_blend * road_blend * (3.0 - 2.0 * road_blend) # Smoothstep
+	var road_blend: float = clampf((road_dist - 3.2) / 8.0, 0.0, 1.0)
+	road_blend = road_blend * road_blend * (3.0 - 2.0 * road_blend)
 
-	var road_wave: float = sin(wz * 0.050 + seed_f) * 1.5
+	var road_wave: float = sin(wz * 0.035 + seed_f) * 0.6
 
 	var h: float = lerpf(road_wave, wild_h, road_blend)
 
-	# 3. Стартовая площадка в точке высадки каравана (X=0, Z=0)
+	# 4. Стартовая площадка в точке высадки каравана (X=0, Z=0)
 	var start_dist: float = sqrt(wx * wx + wz * wz)
-	if start_dist < 26.0:
-		var start_blend: float = clampf(start_dist / 26.0, 0.0, 1.0)
-		start_blend = start_blend * start_blend
+	if start_dist < 28.0:
+		var start_blend: float = clampf(start_dist / 28.0, 0.0, 1.0)
+		start_blend = start_blend * start_blend * (3.0 - 2.0 * start_blend)
 		h = lerpf(0.0, h, start_blend)
 
 	return h

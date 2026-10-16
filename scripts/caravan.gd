@@ -39,6 +39,7 @@ func _enter_tree() -> void:
 	add_to_group("caravan")
 
 func _ready() -> void:
+	sync_to_physics = false
 	health = MAX_HEALTH
 	health_changed.emit(health, MAX_HEALTH)
 
