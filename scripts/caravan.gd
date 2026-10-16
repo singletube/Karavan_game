@@ -95,7 +95,7 @@ func _physics_process(delta: float) -> void:
 	global_position += step
 
 	# Следование рельефу песчаных дюн (высота и наклон повозки)
-	var target_y := DesertGenerator.get_height(global_position.x, global_position.z) + 0.2
+	var target_y := DesertGenerator.get_height(global_position.x, global_position.z)
 	global_position.y = lerpf(global_position.y, target_y, delta * 12.0)
 
 	var front_h := DesertGenerator.get_height(global_position.x, global_position.z - 2.5)

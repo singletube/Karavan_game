@@ -227,29 +227,29 @@ static func create_skull_bones_3d() -> Node3D:
 	var root := Node3D.new()
 	root.name = "Bones3D"
 
-	# Черепная коробка быка
-	_add_box(root, Vector3(0.35, 0.28, 0.45), mat_bone, Vector3(0, 0.18, 0))
+	# Черепная коробка быка (частично погружена в песок)
+	_add_box(root, Vector3(0.35, 0.28, 0.45), mat_bone, Vector3(0, 0.06, 0))
 	# Вытянутая челюсть/морда
-	_add_box(root, Vector3(0.24, 0.20, 0.35), mat_bone, Vector3(0, 0.12, 0.35))
+	_add_box(root, Vector3(0.24, 0.20, 0.35), mat_bone, Vector3(0, 0.02, 0.35))
 	# Глазницы (темные углубления)
-	_add_box(root, Vector3(0.08, 0.08, 0.08), mat_metal, Vector3(-0.14, 0.22, 0.10))
-	_add_box(root, Vector3(0.08, 0.08, 0.08), mat_metal, Vector3(0.14, 0.22, 0.10))
+	_add_box(root, Vector3(0.08, 0.08, 0.08), mat_metal, Vector3(-0.14, 0.10, 0.10))
+	_add_box(root, Vector3(0.08, 0.08, 0.08), mat_metal, Vector3(0.14, 0.10, 0.10))
 
 	# Левый рог (изогнутый наружу и вверх)
-	_add_cyl(root, 0.45, 0.05, 0.10, mat_horn, Vector3(-0.35, 0.28, -0.05), Vector3(0.2, 0.4, -1.0))
-	_add_cyl(root, 0.30, 0.02, 0.05, mat_horn, Vector3(-0.55, 0.42, 0.05), Vector3(-0.2, 0.6, -0.6))
+	_add_cyl(root, 0.45, 0.05, 0.10, mat_horn, Vector3(-0.35, 0.16, -0.05), Vector3(0.2, 0.4, -1.0))
+	_add_cyl(root, 0.30, 0.02, 0.05, mat_horn, Vector3(-0.55, 0.30, 0.05), Vector3(-0.2, 0.6, -0.6))
 
 	# Правый рог
-	_add_cyl(root, 0.45, 0.05, 0.10, mat_horn, Vector3(0.35, 0.28, -0.05), Vector3(0.2, -0.4, 1.0))
-	_add_cyl(root, 0.30, 0.02, 0.05, mat_horn, Vector3(0.55, 0.42, 0.05), Vector3(-0.2, -0.6, 0.6))
+	_add_cyl(root, 0.45, 0.05, 0.10, mat_horn, Vector3(0.35, 0.16, -0.05), Vector3(0.2, -0.4, 1.0))
+	_add_cyl(root, 0.30, 0.02, 0.05, mat_horn, Vector3(0.55, 0.30, 0.05), Vector3(-0.2, -0.6, 0.6))
 
-	# Рядом торчащие из песка ребра
+	# Рядом торчащие из песка ребра (выходят прямо из песчинок)
 	for r in range(4):
 		var rib_z: float = -0.3 - float(r) * 0.22
 		var rib_w: float = 0.55 - float(r) * 0.05
 		# Полудуга ребра
-		_add_cyl(root, 0.45, 0.04, 0.04, mat_bone, Vector3(-rib_w * 0.5, 0.18, rib_z), Vector3(0, 0, -0.7))
-		_add_cyl(root, 0.45, 0.04, 0.04, mat_bone, Vector3(rib_w * 0.5, 0.18, rib_z), Vector3(0, 0, 0.7))
+		_add_cyl(root, 0.45, 0.04, 0.04, mat_bone, Vector3(-rib_w * 0.5, 0.06, rib_z), Vector3(0, 0, -0.7))
+		_add_cyl(root, 0.45, 0.04, 0.04, mat_bone, Vector3(rib_w * 0.5, 0.06, rib_z), Vector3(0, 0, 0.7))
 
 	return root
 

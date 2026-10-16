@@ -452,7 +452,7 @@ func _populate_starting_location(chunk: Node3D, coord: Vector2i, rng: RandomNumb
 		var sx: float = data.get("side_x", 16.0)
 		var sz: float = data.get("z", 0.0)
 		var sy: float = get_terrain_height(chunk.position.x + sx, chunk.position.z + sz)
-		node.position = Vector3(sx, sy, sz)
+		node.position = Vector3(sx, sy - 0.06, sz)
 		chunk.add_child(node)
 		_setup_poi_loot_crate(node, coord)
 		exclusion_zones.append(Vector3(sx, sz, 18.0))
@@ -473,7 +473,7 @@ func _populate_starting_location(chunk: Node3D, coord: Vector2i, rng: RandomNumb
 		var node := _create_poi_node(p_type)
 		node.rotation.y = rot_y
 		var sy: float = get_terrain_height(chunk.position.x + side_x, chunk.position.z + goodie_z)
-		node.position = Vector3(side_x, sy, goodie_z)
+		node.position = Vector3(side_x, sy - 0.06, goodie_z)
 		chunk.add_child(node)
 		_setup_poi_loot_crate(node, coord)
 		exclusion_zones.append(Vector3(side_x, goodie_z, 18.0))
@@ -507,7 +507,7 @@ func _populate_starting_location(chunk: Node3D, coord: Vector2i, rng: RandomNumb
 		# Стартовый ящик с припасами на привале караванщиков
 		var starter_crate := RoadEvents3D._create_loot_crate("ЗАБРАТЬ СТАРТОВЫЕ ПРИПАСЫ [E]", true)
 		var crate_y: float = get_terrain_height(chunk.position.x + camp_side, chunk.position.z + camp_z)
-		starter_crate.position = Vector3(camp_side, crate_y, camp_z)
+		starter_crate.position = Vector3(camp_side, crate_y - 0.06, camp_z)
 		chunk.add_child(starter_crate)
 		_setup_poi_loot_crate(starter_crate, coord)
 
@@ -528,7 +528,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			var sx: float = data.get("side_x", 14.5)
 			var sz: float = data.get("z", 0.0)
 			var sy: float = get_terrain_height(chunk.position.x + sx, chunk.position.z + sz)
-			node.position = Vector3(sx, sy, sz)
+			node.position = Vector3(sx, sy - 0.06, sz)
 			chunk.add_child(node)
 			_setup_poi_loot_crate(node, coord)
 			exclusion_zones.append(Vector3(sx, sz, 18.0))
@@ -549,7 +549,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 					var node := _create_poi_node(p_type)
 					node.rotation.y = rot_y
 					var sy: float = get_terrain_height(chunk.position.x + side_x, chunk.position.z + goodie_z)
-					node.position = Vector3(side_x, sy, goodie_z)
+					node.position = Vector3(side_x, sy - 0.06, goodie_z)
 					chunk.add_child(node)
 					_setup_poi_loot_crate(node, coord)
 					exclusion_zones.append(Vector3(side_x, goodie_z, 18.0))
@@ -578,7 +578,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 						obst_node.set_meta("obstacle_id", obst_id)
 						var obst_z: float = rng.randf_range(-32.0, 32.0)
 						var obst_y: float = get_terrain_height(chunk.position.x, chunk.position.z + obst_z)
-						obst_node.position = Vector3(0.0, obst_y, obst_z)
+						obst_node.position = Vector3(0.0, obst_y - 0.06, obst_z)
 						chunk.add_child(obst_node)
 						exclusion_zones.append(Vector3(0.0, obst_z, 14.0))
 
@@ -592,7 +592,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			var wx: float = data.get("x", 0.0)
 			var wz: float = data.get("z", 0.0)
 			var wy: float = get_terrain_height(chunk.position.x + wx, chunk.position.z + wz)
-			node.position = Vector3(wx, wy, wz)
+			node.position = Vector3(wx, wy - 0.06, wz)
 			chunk.add_child(node)
 			_setup_poi_loot_crate(node, coord)
 			exclusion_zones.append(Vector3(wx, wz, 18.0))
@@ -607,7 +607,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			var wild_node := _create_poi_node(p_type)
 			wild_node.rotation.y = rot_y
 			var wild_y: float = get_terrain_height(chunk.position.x + wild_x, chunk.position.z + wild_z)
-			wild_node.position = Vector3(wild_x, wild_y, wild_z)
+			wild_node.position = Vector3(wild_x, wild_y - 0.06, wild_z)
 			chunk.add_child(wild_node)
 			_setup_poi_loot_crate(wild_node, coord)
 			exclusion_zones.append(Vector3(wild_x, wild_z, 18.0))
@@ -753,7 +753,7 @@ func _get_prop_pos(chunk_wx: float, chunk_wz: float, half: float, rng: RandomNum
 # =========================================================================
 func _create_tree(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
 	var tree_body := StaticBody3D.new()
-	tree_body.position = pos
+	tree_body.position = pos - Vector3(0.0, 0.25 * s, 0.0)
 	tree_body.rotation.y = rot_y
 
 	var model := DesertScenery3D.create_dead_tree_3d()
@@ -772,7 +772,7 @@ func _create_tree(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
 
 func _create_cactus(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
 	var cact_body := StaticBody3D.new()
-	cact_body.position = pos
+	cact_body.position = pos - Vector3(0.0, 0.18 * s, 0.0)
 	cact_body.rotation.y = rot_y
 
 	var model := DesertScenery3D.create_cactus_3d()
@@ -791,7 +791,7 @@ func _create_cactus(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> voi
 
 func _create_car(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
 	var car_body := StaticBody3D.new()
-	car_body.position = pos
+	car_body.position = pos - Vector3(0.0, 0.10 * s, 0.0)
 	car_body.rotation.y = rot_y
 
 	var model := DesertScenery3D.create_wrecked_car_3d()
@@ -822,7 +822,7 @@ func _create_rock(parent: Node3D, pos: Vector3, s: float, rot_y: float, rng: Ran
 	box.size = sz
 	mi.mesh = box
 	mi.material_override = mat_rock if rng.randf() > 0.4 else mat_rock_dark
-	mi.position.y = sz.y * 0.45
+	mi.position.y = sz.y * 0.32
 	mi.rotation = Vector3(rng.randf_range(-0.08, 0.08), 0.0, rng.randf_range(-0.08, 0.08))
 
 	var col := CollisionShape3D.new()
@@ -837,7 +837,7 @@ func _create_rock(parent: Node3D, pos: Vector3, s: float, rot_y: float, rng: Ran
 
 func _create_bones(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
 	var model := DesertScenery3D.create_skull_bones_3d()
-	model.position = pos
+	model.position = pos - Vector3(0.0, 0.04 * s, 0.0)
 	model.rotation.y = rot_y
 	model.scale = Vector3(s, s, s)
 	parent.add_child(model)
@@ -854,14 +854,14 @@ func _setup_poi_loot_crate(poi_node: Node, coord: Vector2i) -> void:
 
 func _create_bush(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
 	var model := DesertScenery3D.create_desert_bush_3d()
-	model.position = pos
+	model.position = pos - Vector3(0.0, 0.10 * s, 0.0)
 	model.rotation.y = rot_y
 	model.scale = Vector3(s, s, s)
 	parent.add_child(model)
 
 func _create_cairn(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
 	var cairn_body := StaticBody3D.new()
-	cairn_body.position = pos
+	cairn_body.position = pos - Vector3(0.0, 0.14 * s, 0.0)
 	cairn_body.rotation.y = rot_y
 
 	var model := DesertScenery3D.create_stone_cairn_3d()
@@ -880,7 +880,7 @@ func _create_cairn(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void
 
 func _create_telegraph_pole(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
 	var pole_body := StaticBody3D.new()
-	pole_body.position = pos
+	pole_body.position = pos - Vector3(0.0, 0.40 * s, 0.0)
 	pole_body.rotation.y = rot_y
 
 	var model := DesertScenery3D.create_telegraph_pole_3d()
@@ -899,7 +899,7 @@ func _create_telegraph_pole(parent: Node3D, pos: Vector3, s: float, rot_y: float
 
 func _create_road_sign(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
 	var sign_body := StaticBody3D.new()
-	sign_body.position = pos
+	sign_body.position = pos - Vector3(0.0, 0.25 * s, 0.0)
 	sign_body.rotation.y = rot_y
 
 	var model := DesertScenery3D.create_road_sign_3d()
@@ -918,7 +918,7 @@ func _create_road_sign(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> 
 
 func _create_oil_drums(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
 	var drums_body := StaticBody3D.new()
-	drums_body.position = pos
+	drums_body.position = pos - Vector3(0.0, 0.12 * s, 0.0)
 	drums_body.rotation.y = rot_y
 
 	var model := DesertScenery3D.create_oil_drums_cluster_3d()
