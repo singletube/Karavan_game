@@ -103,6 +103,13 @@ func _on_peer_connected(id: int) -> void:
 		if world_setup and world_setup.has_method("send_full_sync_to_peer"):
 			world_setup.send_full_sync_to_peer(id)
 
+		# Синхронизируем сид мира и процедурную генерацию пустыни (DesertGenerator)
+		var desert_gen: Node = get_tree().current_scene.get_node_or_null("DesertGenerator")
+		if not desert_gen:
+			desert_gen = get_tree().get_first_node_in_group("desert_generator")
+		if desert_gen and desert_gen.has_method("send_full_sync_to_peer"):
+			desert_gen.send_full_sync_to_peer(id)
+
 		# Синхронизируем списки уже расчищенных завалов и собранного лута
 		rpc_id(id, "sync_all_cleared_obstacles", cleared_obstacles.keys())
 		rpc_id(id, "sync_all_looted_crates", looted_crates.keys())

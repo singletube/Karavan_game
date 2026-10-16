@@ -377,6 +377,7 @@ func _setup_sand() -> void:
 	sand_material.set_shader_parameter("sand_mid",         Color(0.82, 0.66, 0.38))
 	sand_material.set_shader_parameter("sand_dark",        Color(0.62, 0.46, 0.22))
 	sand_material.set_shader_parameter("texture_scale",    0.20)
+	sand_material.set_shader_parameter("uv_offset",        Vector2(randf_range(-1000.0, 1000.0), randf_range(-1000.0, 1000.0)))
 	sand_material.set_shader_parameter("ripple_strength",  0.65)
 	sand_material.set_shader_parameter("roughness_base",   0.85)
 	sand_material.set_shader_parameter("specular_amt",     0.22)

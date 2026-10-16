@@ -8,6 +8,7 @@ uniform vec3 sand_dark   : source_color = vec3(0.62, 0.46, 0.22);
 
 // Масштаб: 1 единица мира = 1.0 / texture_scale тайлов
 uniform float texture_scale  : hint_range(0.01, 2.0) = 0.25;
+uniform vec2 uv_offset       = vec2(0.0, 0.0);
 uniform float ripple_strength: hint_range(0.0, 2.0)  = 0.55;
 uniform float roughness_base : hint_range(0.0, 1.0)  = 0.90;
 uniform float specular_amt   : hint_range(0.0, 1.0)  = 0.18;
@@ -64,8 +65,8 @@ vec3 ripple_normal(vec2 uv, float strength) {
 }
 
 void fragment() {
-	// UV из мировых координат — правильный тайлинг независимо от размера меша
-	vec2 uv = vec2(world_pos.x, world_pos.z) * texture_scale;
+	// UV из мировых координат со случайным смещением сида мира — правильный тайлинг независимо от размера меша
+	vec2 uv = (vec2(world_pos.x, world_pos.z) + uv_offset) * texture_scale;
 
 	// Крупный шум → цвет
 	float macro = fbm(uv * 0.14);
