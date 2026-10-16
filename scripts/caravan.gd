@@ -64,6 +64,11 @@ func _physics_process(delta: float) -> void:
 					track_dist = 0.0
 					SandEffects.add_caravan_wheel_tracks(global_position, move_direction)
 
+			var client_front_h := DesertGenerator.get_height(global_position.x, global_position.z - 2.5)
+			var client_back_h := DesertGenerator.get_height(global_position.x, global_position.z + 2.5)
+			var client_pitch := atan2(client_back_h - client_front_h, 5.0)
+			rotation.x = lerp_angle(rotation.x, client_pitch, delta * 6.0)
+
 			if model:
 				model.update_animation(delta, is_moving, move_speed if is_moving else 0.0, walk_phase)
 		return
@@ -87,6 +92,15 @@ func _physics_process(delta: float) -> void:
 
 	var step := move_direction.normalized() * (move_speed * delta)
 	global_position += step
+
+	# Следование рельефу песчаных дюн (высота и наклон повозки)
+	var target_y := DesertGenerator.get_height(global_position.x, global_position.z) + 0.2
+	global_position.y = lerpf(global_position.y, target_y, delta * 12.0)
+
+	var front_h := DesertGenerator.get_height(global_position.x, global_position.z - 2.5)
+	var back_h := DesertGenerator.get_height(global_position.x, global_position.z + 2.5)
+	var target_pitch := atan2(back_h - front_h, 5.0)
+	rotation.x = lerp_angle(rotation.x, target_pitch, delta * 6.0)
 
 	walk_phase += delta * (move_speed * 1.5)
 

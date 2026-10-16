@@ -272,8 +272,12 @@ func _spawn_wave_batch() -> void:
 
 	for i: int in range(group_size):
 		var z_type: String = enemies_to_spawn.pop_front()
-		var offset: Vector3 = Vector3(randf_range(-2.5, 2.5), 0.0, randf_range(-2.5, 2.5))
-		_spawn_single_enemy(z_type, center_pos + offset)
+		var offset_x: float = randf_range(-2.5, 2.5)
+		var offset_z: float = randf_range(-2.5, 2.5)
+		var ex: float = center_pos.x + offset_x
+		var ez: float = center_pos.z + offset_z
+		var ey: float = DesertGenerator.get_height(ex, ez) + 0.8
+		_spawn_single_enemy(z_type, Vector3(ex, ey, ez))
 
 	spawn_timer = next_delay
 
@@ -335,7 +339,8 @@ func _spawn_single_enemy(z_type: String, pos: Vector3, custom_name: String = "")
 	# Устанавливаем тип зомби ДО добавления в дерево сцены
 	enemy.zombie_type = z_type
 
-	var spawn_pos: Vector3 = Vector3(pos.x, 0.8, pos.z)
+	var spawn_y: float = DesertGenerator.get_height(pos.x, pos.z) + 0.8
+	var spawn_pos: Vector3 = Vector3(pos.x, spawn_y, pos.z)
 	enemy.global_position = spawn_pos
 
 	enemies_container.add_child(enemy)
@@ -385,8 +390,9 @@ func _get_random_spawn_point() -> Vector3:
 	var dist: float = randf_range(min_spawn_dist, max_spawn_dist)
 	var spawn_x: float = anchor_pos.x + cos(angle) * dist
 	var spawn_z: float = anchor_pos.z + sin(angle) * dist
+	var spawn_y: float = DesertGenerator.get_height(spawn_x, spawn_z) + 0.8
 
-	return Vector3(spawn_x, 0.8, spawn_z)
+	return Vector3(spawn_x, spawn_y, spawn_z)
 
 func _on_enemy_died(_enemy: Node) -> void:
 	enemies_alive = maxi(0, enemies_alive - 1)

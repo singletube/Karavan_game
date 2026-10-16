@@ -1,5 +1,7 @@
 extends Node3D
 
+class_name DesertGenerator
+
 # Бесконечный процедурный генератор мира чанками (Infinite Chunk-Based Desert & Scenery)
 # Генерирует бесшовные участки пустыни, песчаные дюны, мертвые деревья, кактусы Сагуаро,
 # остовы ржавых машин, скалы, черепа и перекати-поле вокруг движущегося каравана и игрока.
@@ -33,8 +35,94 @@ var sand_material         : ShaderMaterial
 var mat_rock              : StandardMaterial3D
 var mat_rock_dark         : StandardMaterial3D
 
+static var instance: DesertGenerator = null
+
 func _enter_tree() -> void:
+	instance = self
 	add_to_group("desert_generator")
+
+func _exit_tree() -> void:
+	if instance == self:
+		instance = null
+
+static func get_height(wx: float, wz: float) -> float:
+	if instance and is_instance_valid(instance):
+		return instance.get_terrain_height(wx, wz)
+	return 0.0
+
+static func get_normal(wx: float, wz: float) -> Vector3:
+	if instance and is_instance_valid(instance):
+		return instance.get_terrain_normal(wx, wz)
+	return Vector3.UP
+
+# =========================================================================
+# ВЫСОТА И РЕЛЬЕФ ПУСТЫНИ (PROCEDURAL DUNES & ELEVATION)
+# =========================================================================
+func get_raw_terrain_height(wx: float, wz: float) -> float:
+	# 1. Продольные волны песчаных дюн под углом ветра (28 градусов)
+	var ang: float = deg_to_rad(28.0)
+	var wind_u: float = wx * cos(ang) + wz * sin(ang)
+	var wind_v: float = -wx * sin(ang) + wz * cos(ang)
+
+	var seed_f: float = float(world_seed % 10000) * 0.05
+
+	# Крупные песчаные барханы (длина волны ~135м, перепад 4.2м)
+	var wave1: float = sin(wind_u * 0.046 + seed_f) * 4.2
+	# Поперечные асимметричные гребни (длина волны ~65м, перепад 2.4м)
+	var wave2: float = cos(wind_v * 0.096 + seed_f * 1.3) * 2.4
+	# Средние волны барханов (длина ~32м, перепад 1.1м)
+	var wave3: float = sin((wind_u * 0.19 + wind_v * 0.13) + seed_f * 0.7) * 1.1
+
+	var wild_h: float = wave1 + wave2 + wave3
+
+	# 2. Сглаженный тракт каравана по центру дороги (|wx| < 5.0м)
+	# Дорога идет по мягким покатым перекатам (перепад ±1.5м), а в дикой пустыне барханы поднимаются на 5-8м
+	var road_dist: float = absf(wx)
+	var road_blend: float = clampf((road_dist - 3.8) / 10.0, 0.0, 1.0)
+	road_blend = road_blend * road_blend * (3.0 - 2.0 * road_blend) # Smoothstep
+
+	var road_wave: float = sin(wz * 0.050 + seed_f) * 1.5
+
+	var h: float = lerpf(road_wave, wild_h, road_blend)
+
+	# 3. Стартовая площадка в точке высадки каравана (X=0, Z=0)
+	var start_dist: float = sqrt(wx * wx + wz * wz)
+	if start_dist < 26.0:
+		var start_blend: float = clampf(start_dist / 26.0, 0.0, 1.0)
+		start_blend = start_blend * start_blend
+		h = lerpf(0.0, h, start_blend)
+
+	return h
+
+func get_terrain_height(wx: float, wz: float) -> float:
+	var h: float = get_raw_terrain_height(wx, wz)
+
+	# Выравнивание фундамента под постройки (POI Foundation Leveling)
+	for p_coord in spawned_pois.keys():
+		var data: Dictionary = spawned_pois[p_coord]
+		var c_world_x: float = float(p_coord.x) * chunk_size
+		var c_world_z: float = float(p_coord.y) * chunk_size
+		var p_x: float = c_world_x + data.get("side_x", data.get("x", 0.0))
+		var p_z: float = c_world_z + data.get("z", 0.0)
+
+		var dx: float = wx - p_x
+		var dz: float = wz - p_z
+		var d: float = sqrt(dx * dx + dz * dz)
+		if d < 22.0:
+			var base_h: float = get_raw_terrain_height(p_x, p_z)
+			var blend: float = clampf((d - 10.0) / 12.0, 0.0, 1.0)
+			blend = blend * blend * (3.0 - 2.0 * blend)
+			h = lerpf(base_h, h, blend)
+
+	return h
+
+func get_terrain_normal(wx: float, wz: float) -> Vector3:
+	var eps: float = 0.5
+	var h_l: float = get_terrain_height(wx - eps, wz)
+	var h_r: float = get_terrain_height(wx + eps, wz)
+	var h_d: float = get_terrain_height(wx, wz - eps)
+	var h_u: float = get_terrain_height(wx, wz + eps)
+	return Vector3(h_l - h_r, 2.0 * eps, h_d - h_u).normalized()
 
 func _ready() -> void:
 	randomize()
@@ -184,8 +272,8 @@ func _spawn_chunk(coord: Vector2i) -> void:
 	add_child(chunk)
 	active_chunks[coord] = chunk
 
-	# 1. Секция пола чанка (бесшовный песок с коллизией)
-	_build_chunk_floor(chunk)
+	# 1. Секция пола чанка (бесшовный 3D рельеф песчаных дюн с физической коллизией)
+	_build_chunk_floor(chunk, coord)
 
 	# 2. Процедурные декорации чанка с детерминированным генератором
 	var rng := RandomNumberGenerator.new()
@@ -193,22 +281,74 @@ func _spawn_chunk(coord: Vector2i) -> void:
 
 	_populate_chunk_scenery(chunk, coord, rng)
 
-func _build_chunk_floor(chunk: Node3D) -> void:
+func _build_chunk_floor(chunk: Node3D, coord: Vector2i) -> void:
 	var body := StaticBody3D.new()
 	body.name = "ChunkFloor"
 
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	if sand_material:
+		st.set_material(sand_material)
+
+	var steps: int = 16
+	var step_sz: float = chunk_size / float(steps)
+	var half: float = chunk_size * 0.5
+	var chunk_origin_x: float = float(coord.x) * chunk_size
+	var chunk_origin_z: float = float(coord.y) * chunk_size
+
+	# 1. Генерация вершин песчаных дюн
+	for iz in range(steps + 1):
+		var local_z: float = float(iz) * step_sz - half
+		var world_z: float = chunk_origin_z + local_z
+		var v: float = float(iz) / float(steps)
+
+		for ix in range(steps + 1):
+			var local_x: float = float(ix) * step_sz - half
+			var world_x: float = chunk_origin_x + local_x
+			var u: float = float(ix) / float(steps)
+
+			var h: float = get_terrain_height(world_x, world_z)
+			var n: Vector3 = get_terrain_normal(world_x, world_z)
+
+			st.set_normal(n)
+			st.set_uv(Vector2(u, v))
+			st.add_vertex(Vector3(local_x, h, local_z))
+
+	# 2. Построение треугольников
+	for iz in range(steps):
+		var row_a: int = iz * (steps + 1)
+		var row_b: int = (iz + 1) * (steps + 1)
+		for ix in range(steps):
+			var i0: int = row_a + ix
+			var i1: int = row_a + ix + 1
+			var i2: int = row_b + ix
+			var i3: int = row_b + ix + 1
+
+			# Треугольник 1
+			st.add_index(i0)
+			st.add_index(i1)
+			st.add_index(i2)
+
+			# Треугольник 2
+			st.add_index(i1)
+			st.add_index(i3)
+			st.add_index(i2)
+
+	st.generate_tangents()
+	var mesh: ArrayMesh = st.commit()
+
 	var mi := MeshInstance3D.new()
-	mi.mesh = shared_floor_mesh
+	mi.mesh = mesh
 	if sand_material:
 		mi.material_override = sand_material
-	mi.position = Vector3(0.0, -0.2, 0.0)
-
-	var col := CollisionShape3D.new()
-	col.shape = shared_floor_shape
-	col.position = Vector3(0.0, -0.2, 0.0)
-
 	body.add_child(mi)
-	body.add_child(col)
+
+	var col_shape := mesh.create_trimesh_shape()
+	if col_shape:
+		var col := CollisionShape3D.new()
+		col.shape = col_shape
+		body.add_child(col)
+
 	chunk.add_child(body)
 
 # Создание экземпляра постройки по типу
@@ -291,7 +431,8 @@ func _populate_starting_location(chunk: Node3D, coord: Vector2i, rng: RandomNumb
 		node.rotation.y = data.get("rot", 0.0)
 		var sx: float = data.get("side_x", 16.0)
 		var sz: float = data.get("z", 0.0)
-		node.position = Vector3(sx, 0.0, sz)
+		var sy: float = get_terrain_height(chunk.position.x + sx, chunk.position.z + sz)
+		node.position = Vector3(sx, sy, sz)
 		chunk.add_child(node)
 		_setup_poi_loot_crate(node, coord)
 		exclusion_zones.append(Vector3(sx, sz, 18.0))
@@ -311,7 +452,8 @@ func _populate_starting_location(chunk: Node3D, coord: Vector2i, rng: RandomNumb
 
 		var node := _create_poi_node(p_type)
 		node.rotation.y = rot_y
-		node.position = Vector3(side_x, 0.0, goodie_z)
+		var sy: float = get_terrain_height(chunk.position.x + side_x, chunk.position.z + goodie_z)
+		node.position = Vector3(side_x, sy, goodie_z)
 		chunk.add_child(node)
 		_setup_poi_loot_crate(node, coord)
 		exclusion_zones.append(Vector3(side_x, goodie_z, 18.0))
@@ -329,18 +471,23 @@ func _populate_starting_location(chunk: Node3D, coord: Vector2i, rng: RandomNumb
 		exclusion_zones.append(Vector3(camp_side, camp_z, 14.0))
 
 		# Разбитая машина на обочине лагеря
-		_create_car(chunk, Vector3(camp_side, 0.0, camp_z - 3.5), rng.randf_range(0.95, 1.2), rng.randf_range(0.0, TAU))
+		var car_y: float = get_terrain_height(chunk.position.x + camp_side, chunk.position.z + camp_z - 3.5)
+		_create_car(chunk, Vector3(camp_side, car_y, camp_z - 3.5), rng.randf_range(0.95, 1.2), rng.randf_range(0.0, TAU))
 		# Склад топливных бочек
 		var drums_offset: float = -2.5 if camp_side > 0.0 else 2.5
-		_create_oil_drums(chunk, Vector3(camp_side + drums_offset, 0.0, camp_z + 2.5), 1.0, deg_to_rad(15.0))
+		var drums_y: float = get_terrain_height(chunk.position.x + camp_side + drums_offset, chunk.position.z + camp_z + 2.5)
+		_create_oil_drums(chunk, Vector3(camp_side + drums_offset, drums_y, camp_z + 2.5), 1.0, deg_to_rad(15.0))
 		# Дорожный указатель
-		_create_road_sign(chunk, Vector3(camp_side * 0.65, 0.0, camp_z), 1.0, deg_to_rad(180.0 if camp_side > 0.0 else 0.0))
+		var sign_y: float = get_terrain_height(chunk.position.x + camp_side * 0.65, chunk.position.z + camp_z)
+		_create_road_sign(chunk, Vector3(camp_side * 0.65, sign_y, camp_z), 1.0, deg_to_rad(180.0 if camp_side > 0.0 else 0.0))
 		# Каменный ориентир
-		_create_cairn(chunk, Vector3(camp_side, 0.0, camp_z + 4.5), 1.2, 0.0)
+		var cairn_y: float = get_terrain_height(chunk.position.x + camp_side, chunk.position.z + camp_z + 4.5)
+		_create_cairn(chunk, Vector3(camp_side, cairn_y, camp_z + 4.5), 1.2, 0.0)
 
 		# Стартовый ящик с припасами на привале караванщиков
 		var starter_crate := RoadEvents3D._create_loot_crate("ЗАБРАТЬ СТАРТОВЫЕ ПРИПАСЫ [E]", true)
-		starter_crate.position = Vector3(camp_side, 0.0, camp_z)
+		var crate_y: float = get_terrain_height(chunk.position.x + camp_side, chunk.position.z + camp_z)
+		starter_crate.position = Vector3(camp_side, crate_y, camp_z)
 		chunk.add_child(starter_crate)
 		_setup_poi_loot_crate(starter_crate, coord)
 
@@ -360,7 +507,8 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			node.rotation.y = data.get("rot", 0.0)
 			var sx: float = data.get("side_x", 14.5)
 			var sz: float = data.get("z", 0.0)
-			node.position = Vector3(sx, 0.0, sz)
+			var sy: float = get_terrain_height(chunk.position.x + sx, chunk.position.z + sz)
+			node.position = Vector3(sx, sy, sz)
 			chunk.add_child(node)
 			_setup_poi_loot_crate(node, coord)
 			exclusion_zones.append(Vector3(sx, sz, 18.0))
@@ -380,7 +528,8 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 
 					var node := _create_poi_node(p_type)
 					node.rotation.y = rot_y
-					node.position = Vector3(side_x, 0.0, goodie_z)
+					var sy: float = get_terrain_height(chunk.position.x + side_x, chunk.position.z + goodie_z)
+					node.position = Vector3(side_x, sy, goodie_z)
 					chunk.add_child(node)
 					_setup_poi_loot_crate(node, coord)
 					exclusion_zones.append(Vector3(side_x, goodie_z, 18.0))
@@ -408,7 +557,8 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 						obst_node.name = "RoadObstacle"
 						obst_node.set_meta("obstacle_id", obst_id)
 						var obst_z: float = rng.randf_range(-32.0, 32.0)
-						obst_node.position = Vector3(0.0, 0.0, obst_z)
+						var obst_y: float = get_terrain_height(chunk.position.x, chunk.position.z + obst_z)
+						obst_node.position = Vector3(0.0, obst_y, obst_z)
 						chunk.add_child(obst_node)
 						exclusion_zones.append(Vector3(0.0, obst_z, 14.0))
 
@@ -421,7 +571,8 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			node.rotation.y = data.get("rot", 0.0)
 			var wx: float = data.get("x", 0.0)
 			var wz: float = data.get("z", 0.0)
-			node.position = Vector3(wx, 0.0, wz)
+			var wy: float = get_terrain_height(chunk.position.x + wx, chunk.position.z + wz)
+			node.position = Vector3(wx, wy, wz)
 			chunk.add_child(node)
 			_setup_poi_loot_crate(node, coord)
 			exclusion_zones.append(Vector3(wx, wz, 18.0))
@@ -435,7 +586,8 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 
 			var wild_node := _create_poi_node(p_type)
 			wild_node.rotation.y = rot_y
-			wild_node.position = Vector3(wild_x, 0.0, wild_z)
+			var wild_y: float = get_terrain_height(chunk.position.x + wild_x, chunk.position.z + wild_z)
+			wild_node.position = Vector3(wild_x, wild_y, wild_z)
 			chunk.add_child(wild_node)
 			_setup_poi_loot_crate(wild_node, coord)
 			exclusion_zones.append(Vector3(wild_x, wild_z, 18.0))
@@ -458,7 +610,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	# 1. Засохшие деревья (1-3 на чанк)
 	var tree_count: int = rng.randi_range(1, 3)
 	for i in range(tree_count):
-		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, true)
+		var pos: Vector3 = _get_prop_pos(chunk.position.x, chunk.position.z, half, rng, true)
 		if is_in_exclusion.call(pos):
 			continue
 		var s: float = rng.randf_range(0.85, 1.35)
@@ -468,7 +620,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	# 2. Кактусы Сагуаро (2-4 на чанк)
 	var cactus_count: int = rng.randi_range(2, 4)
 	for i in range(cactus_count):
-		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, true)
+		var pos: Vector3 = _get_prop_pos(chunk.position.x, chunk.position.z, half, rng, true)
 		if is_in_exclusion.call(pos):
 			continue
 		var s: float = rng.randf_range(0.85, 1.35)
@@ -477,7 +629,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 
 	# 3. Разбитые ржавые машины на обочинах (35% шанс)
 	if rng.randf() < 0.35:
-		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, true, 2.0)
+		var pos: Vector3 = _get_prop_pos(chunk.position.x, chunk.position.z, half, rng, true, 2.0)
 		if not is_in_exclusion.call(pos):
 			var s: float = rng.randf_range(0.9, 1.25)
 			var rot_y: float = rng.randf_range(0.0, TAU)
@@ -487,7 +639,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	if rng.randf() < 0.50:
 		var rock_count: int = rng.randi_range(1, 2)
 		for i in range(rock_count):
-			var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, true, 4.0)
+			var pos: Vector3 = _get_prop_pos(chunk.position.x, chunk.position.z, half, rng, true, 4.0)
 			if is_in_exclusion.call(pos):
 				continue
 			var s: float = rng.randf_range(0.85, 1.4)
@@ -497,7 +649,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	# 5. Черепа и кости в песке (0-2 на чанк)
 	var bones_count: int = rng.randi_range(0, 2)
 	for i in range(bones_count):
-		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, false)
+		var pos: Vector3 = _get_prop_pos(chunk.position.x, chunk.position.z, half, rng, false)
 		if is_in_exclusion.call(pos):
 			continue
 		var s: float = rng.randf_range(0.9, 1.3)
@@ -506,7 +658,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 
 	# 6. Перекати-поле (12% шанс на чанк)
 	if rng.randf() < 0.12 and TUMBLEWEED_SCENE:
-		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, false)
+		var pos: Vector3 = _get_prop_pos(chunk.position.x, chunk.position.z, half, rng, false)
 		var tw := TUMBLEWEED_SCENE.instantiate() as Node3D
 		if tw:
 			tw.position = pos + Vector3(0.0, 0.5, 0.0)
@@ -515,7 +667,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	# 7. Сухие пустынные кустарники (2-5 на чанк)
 	var bush_count: int = rng.randi_range(2, 5)
 	for i in range(bush_count):
-		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, false)
+		var pos: Vector3 = _get_prop_pos(chunk.position.x, chunk.position.z, half, rng, false)
 		if is_in_exclusion.call(pos):
 			continue
 		var s: float = rng.randf_range(0.8, 1.35)
@@ -524,7 +676,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 
 	# 8. Каменные туры / ориентиры караванщиков (40% шанс на чанк)
 	if rng.randf() < 0.40:
-		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, true, 1.5)
+		var pos: Vector3 = _get_prop_pos(chunk.position.x, chunk.position.z, half, rng, true, 1.5)
 		if not is_in_exclusion.call(pos):
 			var s: float = rng.randf_range(0.9, 1.3)
 			var rot_y: float = rng.randf_range(0.0, TAU)
@@ -534,7 +686,8 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	if abs(coord.x) <= 1 and rng.randf() < 0.35:
 		var pole_side: float = 7.0 if rng.randf() < 0.5 else -7.0
 		var pole_z: float = rng.randf_range(-half * 0.8, half * 0.8)
-		var pole_pos := Vector3(pole_side, 0.0, pole_z)
+		var pole_y: float = get_terrain_height(chunk.position.x + pole_side, chunk.position.z + pole_z)
+		var pole_pos := Vector3(pole_side, pole_y, pole_z)
 		if not is_in_exclusion.call(pole_pos):
 			var s: float = rng.randf_range(0.95, 1.15)
 			var rot_y: float = rng.randf_range(0.0, TAU)
@@ -544,7 +697,8 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	if abs(coord.x) <= 1 and rng.randf() < 0.28:
 		var sign_side: float = 6.0 if rng.randf() < 0.5 else -6.0
 		var sign_z: float = rng.randf_range(-half * 0.8, half * 0.8)
-		var sign_pos := Vector3(sign_side, 0.0, sign_z)
+		var sign_y: float = get_terrain_height(chunk.position.x + sign_side, chunk.position.z + sign_z)
+		var sign_pos := Vector3(sign_side, sign_y, sign_z)
 		if not is_in_exclusion.call(sign_pos):
 			var s: float = rng.randf_range(0.9, 1.2)
 			var rot_y: float = deg_to_rad(90.0 if sign_side < 0.0 else -90.0) + rng.randf_range(-0.3, 0.3)
@@ -552,14 +706,14 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 
 	# 11. Скопления ржавых бочек и брошенных шин (25% шанс)
 	if rng.randf() < 0.25:
-		var pos: Vector3 = _get_prop_pos(chunk.position.x, half, rng, true, 2.0)
+		var pos: Vector3 = _get_prop_pos(chunk.position.x, chunk.position.z, half, rng, true, 2.0)
 		if not is_in_exclusion.call(pos):
 			var s: float = rng.randf_range(0.9, 1.25)
 			var rot_y: float = rng.randf_range(0.0, TAU)
 			_create_oil_drums(chunk, pos, s, rot_y)
 
 # Расчет позиции объекта с обязательной проверкой свободного коридора дороги каравана
-func _get_prop_pos(chunk_wx: float, half: float, rng: RandomNumberGenerator, is_obstacle: bool, extra_clearance: float = 0.0) -> Vector3:
+func _get_prop_pos(chunk_wx: float, chunk_wz: float, half: float, rng: RandomNumberGenerator, is_obstacle: bool, extra_clearance: float = 0.0) -> Vector3:
 	var lx: float = rng.randf_range(-half, half)
 	var lz: float = rng.randf_range(-half, half)
 
@@ -571,7 +725,8 @@ func _get_prop_pos(chunk_wx: float, half: float, rng: RandomNumberGenerator, is_
 			var shift: float = (required_clear + rng.randf_range(1.2, 5.0)) * side_sign
 			lx = clampf(shift - chunk_wx, -half, half)
 
-	return Vector3(lx, 0.0, lz)
+	var ly: float = get_terrain_height(chunk_wx + lx, chunk_wz + lz)
+	return Vector3(lx, ly, lz)
 
 # =========================================================================
 # ФАБРИКИ 3D ДЕКОРАЦИЙ
