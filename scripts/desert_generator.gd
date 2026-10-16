@@ -22,7 +22,7 @@ const UPDATE_INTERVAL     : float      = 0.20 # Частота проверки 
 var spawned_pois         : Dictionary = {} # Vector2i -> Dictionary { type, side_x, z, rot }
 var spawned_gas_stations : Dictionary = {} # Vector2i -> Dictionary
 var spawned_oases        : Dictionary = {} # Vector2i -> Dictionary
-const MIN_POI_CHUNK_DIST : int   = 3       # Минимум 3-4 чанка между любыми постройками с лутом (~360-480м)
+const MIN_POI_CHUNK_DIST : int   = 2       # Минимум 2 чанка между любыми постройками с лутом (~240м)
 
 # Переиспользуемые ресурсы (Shared Meshes & Materials для максимальной производительности)
 var shared_floor_mesh     : BoxMesh
@@ -185,6 +185,8 @@ func _create_poi_node(p_type: String) -> Node3D:
 			return RoadEvents3D.create_gas_station()
 		"oasis":
 			return RoadEvents3D.create_oasis()
+		"crawl_shelter":
+			return RoadEvents3D.create_crawlspace_shelter_ruins()
 		"ancient_ruins":
 			return RoadEvents3D.create_ancient_ruins()
 		"bunker_ruins":
@@ -214,29 +216,33 @@ func _pick_random_poi_type(rng: RandomNumberGenerator, is_road: bool) -> String:
 	var roll := rng.randf()
 	if is_road:
 		# На караванном тракте: разнообразные постройки
-		if roll < 0.22:
+		if roll < 0.18:
 			return "gas_station"
-		elif roll < 0.38:
+		elif roll < 0.32:
 			return "oasis"
-		elif roll < 0.54:
+		elif roll < 0.48:
+			return "crawl_shelter"
+		elif roll < 0.64:
 			return "ancient_ruins"
-		elif roll < 0.70:
+		elif roll < 0.78:
 			return "bunker_ruins"
-		elif roll < 0.85:
+		elif roll < 0.90:
 			return "plane_wreck"
 		else:
 			return "clay_ruins"
 	else:
 		# В глубине пустыни: загадочные развалины, обломки и тайники
-		if roll < 0.25:
+		if roll < 0.22:
+			return "crawl_shelter"
+		elif roll < 0.42:
 			return "ancient_ruins"
-		elif roll < 0.48:
+		elif roll < 0.60:
 			return "plane_wreck"
-		elif roll < 0.68:
+		elif roll < 0.76:
 			return "bunker_ruins"
-		elif roll < 0.84:
+		elif roll < 0.88:
 			return "clay_ruins"
-		elif roll < 0.94:
+		elif roll < 0.95:
 			return "oasis"
 		else:
 			return "gas_station"
@@ -264,16 +270,16 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			exclusion_zones.append(Vector3(sx, sz, 18.0))
 
 		else:
-			var can_poi: bool = (coord.y <= -3) and _is_far_enough_from_pois(coord, rng.randi_range(3, 5))
+			var can_poi: bool = (coord.y <= -2) and _is_far_enough_from_pois(coord, rng.randi_range(2, 4))
 
-			# 75% вероятность наличия дорожного события в чанке
-			if rng.randf() < 0.75:
-				if can_poi and rng.randf() < 0.62:
+			# 85% вероятность наличия дорожного события в чанке (было 75%)
+			if rng.randf() < 0.85:
+				if can_poi and rng.randf() < 0.82:
 					var p_type := _pick_random_poi_type(rng, true)
 					var side_x: float = 14.5 if rng.randf() < 0.5 else -14.5
 					var goodie_z: float = rng.randf_range(-22.0, 22.0)
 					var rot_y: float = deg_to_rad(-90.0 if side_x > 0.0 else 90.0)
-					if p_type == "oasis" or p_type == "ancient_ruins" or p_type == "clay_ruins":
+					if p_type == "oasis" or p_type == "ancient_ruins" or p_type == "clay_ruins" or p_type == "crawl_shelter":
 						rot_y += deg_to_rad(randf_range(-15.0, 15.0))
 
 					var node := _create_poi_node(p_type)
@@ -310,7 +316,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 						chunk.add_child(obst_node)
 						exclusion_zones.append(Vector3(0.0, obst_z, 14.0))
 
-	# В диких боковых чанках (coord.x != 0) развалины и постройки в глубине пустыни (4.5% шанс)
+	# В диких боковых чанках (coord.x != 0) развалины и постройки в глубине пустыни (шанс увеличен в 1.5 раза: 4.5% -> 6.8%)
 	elif coord.x != 0 and abs(coord.y) > 0:
 		if spawned_pois.has(coord):
 			var data: Dictionary = spawned_pois[coord]
@@ -324,8 +330,8 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			_setup_poi_loot_crate(node, coord)
 			exclusion_zones.append(Vector3(wx, wz, 18.0))
 
-		elif rng.randf() < 0.045 and _is_far_enough_from_pois(coord, 3):
-			# В дикой пустыне спавнятся развалины храмов, обломки самолетов, бункеры, караван-сараи
+		elif rng.randf() < 0.068 and _is_far_enough_from_pois(coord, 2):
+			# В дикой пустыне спавнятся развалины храмов, обломки самолетов, бункеры, караван-сараи, засыпанные схроны
 			var p_type := _pick_random_poi_type(rng, false)
 			var wild_z: float = rng.randf_range(-26.0, 26.0)
 			var wild_x: float = rng.randf_range(-26.0, 26.0)

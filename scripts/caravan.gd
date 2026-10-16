@@ -55,7 +55,7 @@ func _physics_process(delta: float) -> void:
 			var prev_pos := global_position
 			global_position = global_position.lerp(_remote_target_pos, delta * 14.0)
 			var moved_dist: float = global_position.distance_to(prev_pos)
-			var is_moving: bool = (not is_destroyed and not is_blocked and moved_dist > 0.001)
+			var is_moving: bool = (not is_destroyed and not is_blocked)
 
 			if is_moving:
 				walk_phase += delta * (move_speed * 1.5)
@@ -78,7 +78,7 @@ func _physics_process(delta: float) -> void:
 		_net_sync_timer += delta
 		if _net_sync_timer >= 0.1:
 			_net_sync_timer = 0.0
-			sync_caravan_state.rpc(global_position, health, is_blocked, is_destroyed)
+			sync_caravan_state.rpc(global_position, health, is_blocked, is_destroyed, walk_phase)
 
 	if is_destroyed or is_blocked:
 		if model:
@@ -170,7 +170,7 @@ func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_positio
 		hit_sound.play()
 
 	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
-		sync_caravan_state.rpc(global_position, health, is_blocked, is_destroyed)
+		sync_caravan_state.rpc(global_position, health, is_blocked, is_destroyed, walk_phase)
 
 	if health <= 0:
 		_on_caravan_destroyed()
@@ -246,13 +246,14 @@ func _on_caravan_destroyed() -> void:
 
 # --- СЕТЕВАЯ СИНХРОНИЗАЦИЯ КАРАВАНА ---
 func send_full_sync_to_peer(peer_id: int) -> void:
-	rpc_id(peer_id, "sync_full_caravan_state", global_position, health, is_blocked, is_destroyed)
+	rpc_id(peer_id, "sync_full_caravan_state", global_position, health, is_blocked, is_destroyed, walk_phase)
 
 @rpc("authority", "reliable")
-func sync_full_caravan_state(pos: Vector3, hp: int, blocked: bool, destroyed: bool) -> void:
+func sync_full_caravan_state(pos: Vector3, hp: int, blocked: bool, destroyed: bool, s_walk_phase: float = 0.0) -> void:
 	global_position = pos
 	_remote_target_pos = pos
 	_has_remote_target = true
+	walk_phase = s_walk_phase
 	health = hp
 	health_changed.emit(health, MAX_HEALTH)
 	if is_blocked != blocked:
@@ -261,11 +262,13 @@ func sync_full_caravan_state(pos: Vector3, hp: int, blocked: bool, destroyed: bo
 	is_destroyed = destroyed
 
 @rpc("authority", "unreliable")
-func sync_caravan_state(pos: Vector3, hp: int, blocked: bool, destroyed: bool) -> void:
+func sync_caravan_state(pos: Vector3, hp: int, blocked: bool, destroyed: bool, s_walk_phase: float = 0.0) -> void:
 	if multiplayer.is_server():
 		return
 	_remote_target_pos = pos
 	_has_remote_target = true
+	if absf(walk_phase - s_walk_phase) > 1.2:
+		walk_phase = s_walk_phase
 	if health != hp:
 		health = hp
 		health_changed.emit(health, MAX_HEALTH)
