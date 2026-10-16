@@ -20,6 +20,7 @@ var moon: DirectionalLight3D
 
 var current_phase: String = "ДЕНЬ"
 var _last_phase: String = ""
+var _net_sync_timer: float = 0.0
 
 func _enter_tree() -> void:
 	add_to_group("world_setup")
@@ -46,6 +47,27 @@ func _process(delta: float) -> void:
 		phase_changed.emit(new_phase)
 
 	time_changed.emit(time_of_day, get_clock_time(), current_phase)
+
+	# Сервер периодически синхронизирует время суток со всеми подключенными клиентами (каждые 2 сек)
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		_net_sync_timer += delta
+		if _net_sync_timer >= 2.0:
+			_net_sync_timer = 0.0
+			sync_time_of_day.rpc(time_of_day)
+
+func send_full_sync_to_peer(peer_id: int) -> void:
+	rpc_id(peer_id, "sync_full_time", time_of_day)
+
+@rpc("authority", "reliable")
+func sync_full_time(server_time: float) -> void:
+	time_of_day = server_time
+	_update_lighting_and_sky()
+
+@rpc("authority", "unreliable")
+func sync_time_of_day(server_time: float) -> void:
+	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+		# Мягкая синхронизация времени суток
+		time_of_day = server_time
 
 # =====================================================================
 # ПУБЛИЧНЫЕ МЕТОДЫ ДЛЯ HUD И ДРУГИХ СИСТЕМ

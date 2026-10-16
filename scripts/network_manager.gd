@@ -96,6 +96,17 @@ func _on_peer_connected(id: int) -> void:
 		if spawner and spawner.has_method("send_full_sync_to_peer"):
 			spawner.send_full_sync_to_peer(id)
 
+		# Синхронизируем время суток (WorldSetup)
+		var world_setup: Node = get_tree().current_scene.get_node_or_null("WorldSetup")
+		if not world_setup:
+			world_setup = get_tree().get_first_node_in_group("world_setup")
+		if world_setup and world_setup.has_method("send_full_sync_to_peer"):
+			world_setup.send_full_sync_to_peer(id)
+
+		# Синхронизируем списки уже расчищенных завалов и собранного лута
+		rpc_id(id, "sync_all_cleared_obstacles", cleared_obstacles.keys())
+		rpc_id(id, "sync_all_looted_crates", looted_crates.keys())
+
 func _on_peer_disconnected(id: int) -> void:
 	emit_signal("player_disconnected", id)
 	emit_signal("connection_status_changed", "Игрок #%d отключился." % id)
@@ -145,7 +156,7 @@ func _remove_player(id: int) -> void:
 	if container.has_node(node_name):
 		container.get_node(node_name).queue_free()
 
-# === RPC СИНХРОНИЗАЦИЯ ===
+# === RPC СИНХРОНИЗАЦИЯ ИГРОКОВ ===
 @rpc("authority", "reliable")
 func sync_all_players(all_ids: Array) -> void:
 	for id in all_ids:
@@ -158,3 +169,85 @@ func spawn_remote_player(id: int) -> void:
 @rpc("authority", "reliable")
 func remove_remote_player(id: int) -> void:
 	_remove_player(id)
+
+# === СИНХРОНИЗАЦИЯ ДОРОЖНЫХ ПРЕПЯТСТВИЙ (ОБВАЛЫ, БОЧКИ, МАШИНЫ) ===
+var cleared_obstacles: Dictionary = {}
+
+func request_clear_obstacle(obst_id: String, is_detonation: bool) -> void:
+	if obst_id.is_empty():
+		return
+	if not multiplayer.has_multiplayer_peer():
+		_apply_clear_obstacle(obst_id, is_detonation)
+		return
+	rpc("sync_clear_obstacle", obst_id, is_detonation)
+
+@rpc("any_peer", "call_local", "reliable")
+func sync_clear_obstacle(obst_id: String, is_detonation: bool) -> void:
+	_apply_clear_obstacle(obst_id, is_detonation)
+
+func _apply_clear_obstacle(obst_id: String, is_detonation: bool) -> void:
+	cleared_obstacles[obst_id] = true
+	var obst := _find_obstacle_by_id(obst_id)
+	if obst and is_instance_valid(obst):
+		if obst.has_method("clear_local"):
+			obst.clear_local(is_detonation)
+		else:
+			obst.queue_free()
+
+func _find_obstacle_by_id(obst_id: String) -> Node:
+	var list := get_tree().get_nodes_in_group("road_obstacle")
+	for node in list:
+		if is_instance_valid(node) and node.has_meta("obstacle_id") and str(node.get_meta("obstacle_id")) == obst_id:
+			return node
+	return null
+
+@rpc("authority", "reliable")
+func sync_all_cleared_obstacles(all_ids: Array) -> void:
+	for id in all_ids:
+		var s_id: String = str(id)
+		cleared_obstacles[s_id] = true
+		var obst := _find_obstacle_by_id(s_id)
+		if obst and is_instance_valid(obst):
+			obst.queue_free()
+
+# === СИНХРОНИЗАЦИЯ ЛУТА (ПРИПАСЫ НА ЗАПРАВКАХ И В ОАЗИСАХ) ===
+var looted_crates: Dictionary = {}
+
+func request_loot_crate(crate_id: String, player_id: int) -> void:
+	if crate_id.is_empty():
+		return
+	if not multiplayer.has_multiplayer_peer():
+		_apply_loot_crate(crate_id, player_id)
+		return
+	rpc("sync_loot_crate", crate_id, player_id)
+
+@rpc("any_peer", "call_local", "reliable")
+func sync_loot_crate(crate_id: String, player_id: int) -> void:
+	_apply_loot_crate(crate_id, player_id)
+
+func _apply_loot_crate(crate_id: String, player_id: int) -> void:
+	looted_crates[crate_id] = true
+	var crate := _find_crate_by_id(crate_id)
+	if crate and is_instance_valid(crate) and crate.has_method("apply_loot_local"):
+		crate.apply_loot_local(player_id)
+
+func _find_crate_by_id(crate_id: String) -> Node:
+	var list := get_tree().get_nodes_in_group("loot_crate")
+	for node in list:
+		if is_instance_valid(node) and node.has_meta("crate_id") and str(node.get_meta("crate_id")) == crate_id:
+			return node
+	# Резервный поиск среди интерактивных
+	var interactives := get_tree().get_nodes_in_group("interactive")
+	for node in interactives:
+		if is_instance_valid(node) and node.has_meta("crate_id") and str(node.get_meta("crate_id")) == crate_id:
+			return node
+	return null
+
+@rpc("authority", "reliable")
+func sync_all_looted_crates(all_ids: Array) -> void:
+	for id in all_ids:
+		var s_id: String = str(id)
+		looted_crates[s_id] = true
+		var crate := _find_crate_by_id(s_id)
+		if crate and is_instance_valid(crate) and crate.has_method("mark_already_looted"):
+			crate.mark_already_looted()

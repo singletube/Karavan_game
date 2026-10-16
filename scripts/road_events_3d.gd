@@ -87,11 +87,11 @@ var snd_explosion: AudioStream = preload("res://assets/audio/explosion.wav")
 func on_interact_completed(player: Node) -> void:
 	if is_cleared:
 		return
-	is_cleared = true
-	_spawn_debris_particles()
-	if player and player.has_method("notify_hud"):
-		player.notify_hud("ЗАВАЛ РАЗОБРАН! ПУТЬ СВОБОДЕН", Color(0.3, 1.0, 0.4))
-	queue_free()
+	var obst_id: String = str(get_meta("obstacle_id", ""))
+	if NetworkManager != null and NetworkManager.has_method("request_clear_obstacle") and not obst_id.is_empty():
+		NetworkManager.request_clear_obstacle(obst_id, false)
+	else:
+		clear_local(false)
 
 func hitscan_hit(damage: float, _hit_dir: Vector3 = Vector3.ZERO, _hit_pos: Vector3 = Vector3.ZERO) -> void:
 	take_damage(int(damage))
@@ -109,37 +109,53 @@ func take_damage(amt: int) -> void:
 func detonate() -> void:
 	if is_cleared:
 		return
+	var obst_id: String = str(get_meta("obstacle_id", ""))
+	if NetworkManager != null and NetworkManager.has_method("request_clear_obstacle") and not obst_id.is_empty():
+		NetworkManager.request_clear_obstacle(obst_id, true)
+	else:
+		clear_local(true)
+
+func clear_local(is_detonation: bool) -> void:
+	if is_cleared:
+		return
 	is_cleared = true
 
-	# Звук мощного взрыва
-	var ap := AudioStreamPlayer3D.new()
-	ap.stream = snd_explosion
-	ap.pitch_scale = randf_range(0.9, 1.1)
-	ap.max_distance = 60.0
-	get_parent().add_child(ap)
-	ap.global_position = global_position
-	ap.play()
-	ap.finished.connect(ap.queue_free)
+	if is_detonation:
+		# Звук мощного взрыва
+		var ap := AudioStreamPlayer3D.new()
+		ap.stream = snd_explosion
+		ap.pitch_scale = randf_range(0.9, 1.1)
+		ap.max_distance = 60.0
+		get_parent().add_child(ap)
+		ap.global_position = global_position
+		ap.play()
+		ap.finished.connect(ap.queue_free)
 
-	# Сноп огня и искр
-	_spawn_explosion_fx()
+		# Сноп огня и искр
+		_spawn_explosion_fx()
 
-	# Урон всем врагам вокруг от взрыва бочек (радиус 7.5м, урон 130)
-	var enemies := get_tree().get_nodes_in_group("Enemies")
-	for e in enemies:
-		if is_instance_valid(e) and e is CharacterBody3D:
-			var dist: float = global_position.distance_to(e.global_position)
-			if dist <= 7.5:
-				var falloff: float = 1.0 - (dist / 7.5)
-				var dmg: int = int(130.0 * falloff)
-				if e.has_method("take_damage"):
-					e.take_damage(dmg, (e.global_position - global_position).normalized(), global_position)
+		# Урон всем врагам вокруг от взрыва бочек (радиус 7.5м, урон 130)
+		var enemies := get_tree().get_nodes_in_group("Enemies")
+		for e in enemies:
+			if is_instance_valid(e) and e is CharacterBody3D:
+				var dist: float = global_position.distance_to(e.global_position)
+				if dist <= 7.5:
+					var falloff: float = 1.0 - (dist / 7.5)
+					var dmg: int = int(130.0 * falloff)
+					if e.has_method("take_damage"):
+						e.take_damage(dmg, (e.global_position - global_position).normalized(), global_position)
 
-	# Уведомление игроку
-	var players := get_tree().get_nodes_in_group("player")
-	for p in players:
-		if is_instance_valid(p) and p.has_method("notify_hud"):
-			p.notify_hud("БОЧКИ ВЗОРВАНЫ! ДОРОГА РАСЧИЩЕНА", Color(1.0, 0.6, 0.2))
+		# Уведомление игрокам
+		var players := get_tree().get_nodes_in_group("player")
+		for p in players:
+			if is_instance_valid(p) and p.has_method("notify_hud"):
+				p.notify_hud("БОЧКИ ВЗОРВАНЫ! ДОРОГА РАСЧИЩЕНА", Color(1.0, 0.6, 0.2))
+	else:
+		_spawn_debris_particles()
+		var players := get_tree().get_nodes_in_group("player")
+		for p in players:
+			if is_instance_valid(p) and p.has_method("notify_hud"):
+				p.notify_hud("ЗАВАЛ РАЗОБРАН! ПУТЬ СВОБОДЕН", Color(0.3, 1.0, 0.4))
 
 	queue_free()
 
@@ -363,6 +379,7 @@ static func _create_loot_crate(prompt: String, is_gas_station: bool) -> Node3D:
 	var crate_root := Node3D.new()
 	crate_root.name = "LootCrate"
 	crate_root.add_to_group("interactive")
+	crate_root.add_to_group("loot_crate")
 	crate_root.set_meta("prompt_text", prompt)
 	crate_root.set_meta("requires_hold", false)
 
@@ -376,43 +393,21 @@ var snd_pickup: AudioStream = preload("res://assets/audio/wave_win.wav")
 func on_interact(player: Node) -> void:
 	if is_looted:
 		return
+	var crate_id: String = str(get_meta("crate_id", ""))
+	var p_id: int = 1
+	if player and player.name.is_valid_int():
+		p_id = player.name.to_int()
+	elif multiplayer.has_multiplayer_peer():
+		p_id = multiplayer.get_unique_id()
+
+	if NetworkManager != null and NetworkManager.has_method("request_loot_crate") and not crate_id.is_empty():
+		NetworkManager.request_loot_crate(crate_id, p_id)
+	else:
+		apply_loot_local(p_id)
+
+func mark_already_looted() -> void:
 	is_looted = true
-
-	# Звук подбора припасов
-	var ap := AudioStreamPlayer.new()
-	ap.stream = snd_pickup
-	ap.volume_db = -4.0
-	get_tree().root.add_child(ap)
-	ap.play()
-	ap.finished.connect(ap.queue_free)
-
-	# Восстановление игрока и каравана
-	if player and is_instance_valid(player):
-		player.health = 100
-		if player.has_signal("health_changed"):
-			player.health_changed.emit(100)
-
-		# Пополнение всех патронов до максимума
-		var wm = player.get_node_or_null("WeaponManager")
-		if wm and wm.get("ammo_manager"):
-			var am = wm.ammo_manager
-			if am.get("ammo_dict") and am.get("max_nb_per_ammo_dict"):
-				for a_type in am.max_nb_per_ammo_dict:
-					am.ammo_dict[a_type] = am.max_nb_per_ammo_dict[a_type]
-
-		# Ремонт каравана (+150 HP)
-		var caravan = get_tree().get_first_node_in_group("caravan")
-		if caravan and is_instance_valid(caravan) and not caravan.get("is_destroyed"):
-			var cur_hp: int = int(caravan.get("health"))
-			var max_hp: int = int(caravan.get("MAX_HEALTH"))
-			caravan.health = mini(max_hp, cur_hp + 150)
-			if caravan.has_signal("health_changed"):
-				caravan.health_changed.emit(caravan.health, max_hp)
-
-		if player.has_method("notify_hud"):
-			player.notify_hud("+150 ХП КАРАВАНА · БОЕЗАПАС ПОПОЛНЕН!", Color(0.25, 1.0, 0.45))
-
-	# Изменение визуала после сбора (крышка открывается, свет затухает)
+	remove_from_group("interactive")
 	var glow = get_node_or_null("CrateGlow")
 	if glow:
 		glow.light_energy = 0.3
@@ -420,7 +415,55 @@ func on_interact(player: Node) -> void:
 	if lid:
 		lid.rotation.x = deg_to_rad(-65.0)
 
-	remove_from_group("interactive")
+func apply_loot_local(looter_peer_id: int) -> void:
+	if is_looted:
+		return
+	mark_already_looted()
+
+	# Звук подбора припасов для всех
+	var ap := AudioStreamPlayer.new()
+	ap.stream = snd_pickup
+	ap.volume_db = -4.0
+	get_tree().root.add_child(ap)
+	ap.play()
+	ap.finished.connect(ap.queue_free)
+
+	# Ремонт каравана (+150 HP) на сервере или локально
+	if not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
+		var caravan = get_tree().get_first_node_in_group("caravan")
+		if caravan and is_instance_valid(caravan) and not caravan.get("is_destroyed"):
+			var cur_hp: int = int(caravan.get("health"))
+			var max_hp: int = int(caravan.get("MAX_HEALTH"))
+			caravan.health = mini(max_hp, cur_hp + 150)
+			if caravan.has_signal("health_changed"):
+				caravan.health_changed.emit(caravan.health, max_hp)
+			if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+				caravan.sync_caravan_state.rpc(caravan.global_position, caravan.health, caravan.is_blocked, caravan.is_destroyed)
+
+	# Пополнение здоровья и патронов игроку, открывшему ящик, и уведомление остальным
+	var my_id: int = 1
+	if multiplayer.has_multiplayer_peer():
+		my_id = multiplayer.get_unique_id()
+
+	var players := get_tree().get_nodes_in_group("player")
+	for p in players:
+		if is_instance_valid(p):
+			var pid: int = p.name.to_int() if p.name.is_valid_int() else 1
+			if pid == looter_peer_id:
+				p.health = 100
+				if p.has_signal("health_changed"):
+					p.health_changed.emit(100)
+				var wm = p.get_node_or_null("WeaponManager")
+				if wm and wm.get("ammo_manager"):
+					var am = wm.ammo_manager
+					if am.get("ammo_dict") and am.get("max_nb_per_ammo_dict"):
+						for a_type in am.max_nb_per_ammo_dict:
+							am.ammo_dict[a_type] = am.max_nb_per_ammo_dict[a_type]
+				if p.has_method("notify_hud"):
+					p.notify_hud("+150 ХП КАРАВАНА · БОЕЗАПАС ПОПОЛНЕН!", Color(0.25, 1.0, 0.45))
+			elif pid == my_id:
+				if p.has_method("notify_hud"):
+					p.notify_hud("НАПАРНИК НАШЕЛ ПРИПАСЫ! КАРАВАН ОТРЕМОНТИРОВАН", Color(0.3, 0.85, 1.0))
 """
 	var c_script := GDScript.new()
 	c_script.source_code = script_text
@@ -473,11 +516,11 @@ var snd_explosion: AudioStream = preload("res://assets/audio/explosion.wav")
 func on_interact_completed(player: Node) -> void:
 	if is_cleared:
 		return
-	is_cleared = true
-	_spawn_debris_particles()
-	if player and player.has_method("notify_hud"):
-		player.notify_hud("АВТОЗАВАЛ РАСЧИЩЕН! ПУТЬ СВОБОДЕН", Color(0.3, 1.0, 0.4))
-	queue_free()
+	var obst_id: String = str(get_meta("obstacle_id", ""))
+	if NetworkManager != null and NetworkManager.has_method("request_clear_obstacle") and not obst_id.is_empty():
+		NetworkManager.request_clear_obstacle(obst_id, false)
+	else:
+		clear_local(false)
 
 func hitscan_hit(damage: float, _hit_dir: Vector3 = Vector3.ZERO, _hit_pos: Vector3 = Vector3.ZERO) -> void:
 	take_damage(int(damage))
@@ -495,32 +538,48 @@ func take_damage(amt: int) -> void:
 func detonate() -> void:
 	if is_cleared:
 		return
+	var obst_id: String = str(get_meta("obstacle_id", ""))
+	if NetworkManager != null and NetworkManager.has_method("request_clear_obstacle") and not obst_id.is_empty():
+		NetworkManager.request_clear_obstacle(obst_id, true)
+	else:
+		clear_local(true)
+
+func clear_local(is_detonation: bool) -> void:
+	if is_cleared:
+		return
 	is_cleared = true
 
-	var ap := AudioStreamPlayer3D.new()
-	ap.stream = snd_explosion
-	ap.pitch_scale = randf_range(0.85, 1.05)
-	ap.max_distance = 65.0
-	get_parent().add_child(ap)
-	ap.global_position = global_position
-	ap.play()
-	ap.finished.connect(ap.queue_free)
+	if is_detonation:
+		var ap := AudioStreamPlayer3D.new()
+		ap.stream = snd_explosion
+		ap.pitch_scale = randf_range(0.85, 1.05)
+		ap.max_distance = 65.0
+		get_parent().add_child(ap)
+		ap.global_position = global_position
+		ap.play()
+		ap.finished.connect(ap.queue_free)
 
-	_spawn_explosion_fx()
+		_spawn_explosion_fx()
 
-	var enemies := get_tree().get_nodes_in_group("Enemies")
-	for e in enemies:
-		if is_instance_valid(e) and e is CharacterBody3D:
-			var dist: float = global_position.distance_to(e.global_position)
-			if dist <= 8.0:
-				var dmg: int = int(140.0 * (1.0 - dist / 8.0))
-				if e.has_method("take_damage"):
-					e.take_damage(dmg, (e.global_position - global_position).normalized(), global_position)
+		var enemies := get_tree().get_nodes_in_group("Enemies")
+		for e in enemies:
+			if is_instance_valid(e) and e is CharacterBody3D:
+				var dist: float = global_position.distance_to(e.global_position)
+				if dist <= 8.0:
+					var dmg: int = int(140.0 * (1.0 - dist / 8.0))
+					if e.has_method("take_damage"):
+						e.take_damage(dmg, (e.global_position - global_position).normalized(), global_position)
 
-	var players := get_tree().get_nodes_in_group("player")
-	for p in players:
-		if is_instance_valid(p) and p.has_method("notify_hud"):
-			p.notify_hud("МАШИНЫ ВЗОРВАНЫ! ПРОЕЗД ОТКРЫТ", Color(1.0, 0.6, 0.2))
+		var players := get_tree().get_nodes_in_group("player")
+		for p in players:
+			if is_instance_valid(p) and p.has_method("notify_hud"):
+				p.notify_hud("МАШИНЫ ВЗОРВАНЫ! ПРОЕЗД ОТКРЫТ", Color(1.0, 0.6, 0.2))
+	else:
+		_spawn_debris_particles()
+		var players := get_tree().get_nodes_in_group("player")
+		for p in players:
+			if is_instance_valid(p) and p.has_method("notify_hud"):
+				p.notify_hud("АВТОЗАВАЛ РАСЧИЩЕН! ПУТЬ СВОБОДЕН", Color(0.3, 1.0, 0.4))
 
 	queue_free()
 
@@ -642,11 +701,11 @@ var snd_explosion: AudioStream = preload("res://assets/audio/explosion.wav")
 func on_interact_completed(player: Node) -> void:
 	if is_cleared:
 		return
-	is_cleared = true
-	_spawn_debris_particles()
-	if player and player.has_method("notify_hud"):
-		player.notify_hud("КАМНИ РАЗОБРАНЫ! ПУТЬ СВОБОДЕН", Color(0.3, 1.0, 0.4))
-	queue_free()
+	var obst_id: String = str(get_meta("obstacle_id", ""))
+	if NetworkManager != null and NetworkManager.has_method("request_clear_obstacle") and not obst_id.is_empty():
+		NetworkManager.request_clear_obstacle(obst_id, false)
+	else:
+		clear_local(false)
 
 func hitscan_hit(damage: float, _hit_dir: Vector3 = Vector3.ZERO, _hit_pos: Vector3 = Vector3.ZERO) -> void:
 	take_damage(int(damage))
@@ -664,23 +723,39 @@ func take_damage(amt: int) -> void:
 func detonate() -> void:
 	if is_cleared:
 		return
+	var obst_id: String = str(get_meta("obstacle_id", ""))
+	if NetworkManager != null and NetworkManager.has_method("request_clear_obstacle") and not obst_id.is_empty():
+		NetworkManager.request_clear_obstacle(obst_id, true)
+	else:
+		clear_local(true)
+
+func clear_local(is_detonation: bool) -> void:
+	if is_cleared:
+		return
 	is_cleared = true
 
-	var ap := AudioStreamPlayer3D.new()
-	ap.stream = snd_explosion
-	ap.pitch_scale = randf_range(0.75, 0.95)
-	ap.max_distance = 60.0
-	get_parent().add_child(ap)
-	ap.global_position = global_position
-	ap.play()
-	ap.finished.connect(ap.queue_free)
+	if is_detonation:
+		var ap := AudioStreamPlayer3D.new()
+		ap.stream = snd_explosion
+		ap.pitch_scale = randf_range(0.75, 0.95)
+		ap.max_distance = 60.0
+		get_parent().add_child(ap)
+		ap.global_position = global_position
+		ap.play()
+		ap.finished.connect(ap.queue_free)
 
-	_spawn_debris_particles()
+		_spawn_debris_particles()
 
-	var players := get_tree().get_nodes_in_group("player")
-	for p in players:
-		if is_instance_valid(p) and p.has_method("notify_hud"):
-			p.notify_hud("СКАЛЫ РАЗБИТЫ! КАРАВАН ИДЕТ ДАЛЬШЕ", Color(1.0, 0.8, 0.3))
+		var players := get_tree().get_nodes_in_group("player")
+		for p in players:
+			if is_instance_valid(p) and p.has_method("notify_hud"):
+				p.notify_hud("СКАЛЫ РАЗБИТЫ! КАРАВАН ИДЕТ ДАЛЬШЕ", Color(1.0, 0.8, 0.3))
+	else:
+		_spawn_debris_particles()
+		var players := get_tree().get_nodes_in_group("player")
+		for p in players:
+			if is_instance_valid(p) and p.has_method("notify_hud"):
+				p.notify_hud("КАМНИ РАЗОБРАНЫ! ПУТЬ СВОБОДЕН", Color(0.3, 1.0, 0.4))
 
 	queue_free()
 

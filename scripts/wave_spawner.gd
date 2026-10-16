@@ -277,10 +277,60 @@ func _spawn_wave_batch() -> void:
 
 	spawn_timer = next_delay
 
-func _spawn_single_enemy(z_type: String, pos: Vector3) -> void:
+var _enemy_id_counter: int = 0
+var _enemy_sync_timer: float = 0.0
+const ENEMY_SYNC_INTERVAL: float = 0.05
+
+func _next_enemy_id() -> int:
+	_enemy_id_counter += 1
+	return _enemy_id_counter
+
+func _physics_process(delta: float) -> void:
+	# На сервере периодически транслируем позиции и анимацию врагов клиентам
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		_enemy_sync_timer += delta
+		if _enemy_sync_timer >= ENEMY_SYNC_INTERVAL:
+			_enemy_sync_timer = 0.0
+			_broadcast_enemies_batch()
+
+func _broadcast_enemies_batch() -> void:
+	if not enemies_container:
+		return
+	var batch: Array = []
+	for child in enemies_container.get_children():
+		if is_instance_valid(child) and child is CharacterBody3D and not child.get("is_dead"):
+			var is_atk: bool = (child.get("state") == 2 and (child.get("is_winding_up") == true or child.get("attack_timer") > 0.0))
+			var is_hurt: bool = (child.get("hurt_timer") > 0.0)
+			batch.append([
+				child.name,
+				child.global_position,
+				child.rotation.y,
+				child.velocity.length(),
+				is_atk,
+				is_hurt
+			])
+	if not batch.is_empty():
+		sync_enemies_batch.rpc(batch)
+
+@rpc("authority", "unreliable")
+func sync_enemies_batch(batch: Array) -> void:
+	if not enemies_container:
+		return
+	for item in batch:
+		var e_name: String = item[0]
+		var e_node: Node = enemies_container.get_node_or_null(e_name)
+		if e_node and is_instance_valid(e_node) and e_node.has_method("net_sync"):
+			e_node.net_sync(item[1], item[2], item[3], item[4], item[5])
+
+func _spawn_single_enemy(z_type: String, pos: Vector3, custom_name: String = "") -> void:
 	var enemy: CharacterBody3D = ENEMY_SCENE.instantiate() as CharacterBody3D
 	if not enemy:
 		return
+
+	if custom_name.is_empty():
+		enemy.name = "Enemy_%d" % _next_enemy_id()
+	else:
+		enemy.name = custom_name
 
 	# Устанавливаем тип зомби ДО добавления в дерево сцены
 	enemy.zombie_type = z_type
@@ -292,6 +342,27 @@ func _spawn_single_enemy(z_type: String, pos: Vector3) -> void:
 	enemy.global_position = spawn_pos
 	enemies_alive += 1
 
+	if enemy.has_signal("enemy_died"):
+		enemy.enemy_died.connect(_on_enemy_died.bind(enemy))
+
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		sync_spawn_enemy.rpc(enemy.name, z_type, spawn_pos)
+
+@rpc("authority", "reliable")
+func sync_spawn_enemy(e_name: String, z_type: String, spawn_pos: Vector3) -> void:
+	if enemies_container == null:
+		_setup_container()
+	if enemies_container.has_node(e_name):
+		return
+	var enemy: CharacterBody3D = ENEMY_SCENE.instantiate() as CharacterBody3D
+	if not enemy:
+		return
+	enemy.name = e_name
+	enemy.zombie_type = z_type
+	enemy.global_position = spawn_pos
+	enemies_container.add_child(enemy)
+	enemy.global_position = spawn_pos
+	enemies_alive += 1
 	if enemy.has_signal("enemy_died"):
 		enemy.enemy_died.connect(_on_enemy_died.bind(enemy))
 
@@ -365,6 +436,45 @@ func reset_to_wave_zero() -> void:
 func send_full_sync_to_peer(peer_id: int) -> void:
 	var rem: int = enemies_alive + enemies_to_spawn.size()
 	rpc_id(peer_id, "sync_full_spawner_state", current_wave, wave_active, is_in_break, int(ceil(maxf(0.0, break_timer))), rem)
+
+	# Отправляем список всех живых врагов новому клиенту
+	var existing_enemies: Array = []
+	if enemies_container:
+		for child in enemies_container.get_children():
+			if is_instance_valid(child) and child is CharacterBody3D and not child.get("is_dead"):
+				existing_enemies.append({
+					"name": child.name,
+					"type": child.get("zombie_type"),
+					"pos": child.global_position,
+					"rot_y": child.rotation.y,
+					"hp": child.get("health")
+				})
+	rpc_id(peer_id, "sync_all_existing_enemies", existing_enemies)
+
+@rpc("authority", "reliable")
+func sync_all_existing_enemies(enemies_list: Array) -> void:
+	if enemies_container == null:
+		_setup_container()
+	for data in enemies_list:
+		var e_name: String = str(data.get("name", ""))
+		if e_name.is_empty() or enemies_container.has_node(e_name):
+			continue
+		var z_type: String = str(data.get("type", "Walker"))
+		var spawn_pos: Vector3 = data.get("pos", Vector3.ZERO)
+		var enemy: CharacterBody3D = ENEMY_SCENE.instantiate() as CharacterBody3D
+		if not enemy:
+			continue
+		enemy.name = e_name
+		enemy.zombie_type = z_type
+		enemy.global_position = spawn_pos
+		enemy.rotation.y = float(data.get("rot_y", 0.0))
+		if data.has("hp"):
+			enemy.health = int(data["hp"])
+		enemies_container.add_child(enemy)
+		enemy.global_position = spawn_pos
+		enemies_alive += 1
+		if enemy.has_signal("enemy_died"):
+			enemy.enemy_died.connect(_on_enemy_died.bind(enemy))
 
 @rpc("authority", "reliable")
 func sync_full_spawner_state(w_num: int, is_active: bool, in_break: bool, break_sec: int, rem: int) -> void:

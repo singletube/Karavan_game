@@ -50,8 +50,22 @@ var walk_frame_i    := 0
 var is_dead         := false
 var player          : Node3D = null
 
+# --- Сетевая интерполяция для клиентов ---
+var target_pos      : Vector3 = Vector3.ZERO
+var target_rot_y    : float = 0.0
+var remote_spd      : float = 0.0
+var remote_is_atk   : bool = false
+var remote_is_hurt  : bool = false
+
 enum EnemyState { IDLE, CHASE, ATTACK, DEAD }
 var state : EnemyState = EnemyState.IDLE
+
+func net_sync(pos: Vector3, rot_y: float, spd: float, is_atk: bool, is_hurt: bool) -> void:
+	target_pos = pos
+	target_rot_y = rot_y
+	remote_spd = spd
+	remote_is_atk = is_atk
+	remote_is_hurt = is_hurt
 
 func _ready() -> void:
 	if cyborg_model_3d:
@@ -142,6 +156,17 @@ func _physics_process(delta: float) -> void:
 	if is_dead:
 		if cyborg_model_3d and cyborg_model_3d.visible:
 			cyborg_model_3d.update_animation(delta, false, 0.0, false, false, true)
+		return
+
+	# На клиентах мультиплеера врагами управляет сервер (интерполяция)
+	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+		if target_pos != Vector3.ZERO:
+			global_position = global_position.lerp(target_pos, minf(delta * 16.0, 1.0))
+			rotation.y = lerp_angle(rotation.y, target_rot_y, minf(delta * 16.0, 1.0))
+
+		if cyborg_model_3d and cyborg_model_3d.visible:
+			cyborg_model_3d.update_animation(delta, remote_spd > 0.1, remote_spd, remote_is_atk, remote_is_hurt, false)
+
 		return
 
 	# Кулдаун удара плавно тикает каждый кадр независимо от состояния (бег/замах/покой)
@@ -400,11 +425,51 @@ func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_positio
 	if is_dead:
 		return
 
-	health -= amount
-	hurt_timer = 0.22
-	sprite.frame = FRAME_HURT
+	# Если урон нанес клиент в мультиплеере, перенаправляем запрос на авторитетный сервер
+	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+		rpc_id(1, "request_take_damage", amount, hit_direction, hit_position)
+		_play_hit_flinch(hit_direction, hit_position)
+		return
 
-	# 1. Кинетический отброс (Knockback) назад от пули
+	health -= amount
+	_play_hit_flinch(hit_direction, hit_position)
+
+	if health <= 0:
+		_die()
+		if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+			rpc("sync_die", hit_direction)
+	else:
+		if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+			rpc("sync_hurt", hit_direction, hit_position)
+
+@rpc("any_peer", "reliable")
+func request_take_damage(amount: int, hit_direction: Vector3, hit_position: Vector3) -> void:
+	if multiplayer.is_server():
+		take_damage(amount, hit_direction, hit_position)
+
+@rpc("authority", "reliable")
+func sync_die(hit_direction: Vector3) -> void:
+	if not is_dead:
+		if hit_direction.length_squared() > 0.01:
+			velocity += hit_direction.normalized() * 5.5
+		_die()
+
+@rpc("authority", "unreliable")
+func sync_hurt(hit_direction: Vector3, hit_position: Vector3) -> void:
+	if not is_dead:
+		_play_hit_flinch(hit_direction, hit_position)
+
+func _play_hit_flinch(hit_direction: Vector3, hit_position: Vector3) -> void:
+	hurt_timer = 0.22
+	if sprite:
+		sprite.frame = FRAME_HURT
+		var hit_tween: Tween = create_tween().set_parallel(true)
+		sprite.modulate = Color(2.5, 0.4, 0.3, 1.0)
+		hit_tween.tween_property(sprite, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.18)
+		sprite.scale = Vector3(1.22, 0.82, 1.22)
+		hit_tween.tween_property(sprite, "scale", Vector3(1.0, 1.0, 1.0), 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+	# Кинетический отброс (Knockback) назад
 	if hit_direction.length_squared() > 0.01:
 		velocity += hit_direction.normalized() * 5.5
 	elif player:
@@ -412,31 +477,15 @@ func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_positio
 		away.y = 0.0
 		velocity += away * 4.8
 
-	# 2. Анимация содрогания спрайта (Hit flinch / Squash & Stretch)
-	var orig_scale: Vector3 = scale
-	var hit_tween: Tween = create_tween().set_parallel(true)
-	# Вспышка урона с электрической кибер-искрой (бирюзово-алый киберпанк/стимпанк глитч)
-	sprite.modulate = Color(2.5, 0.4, 0.3, 1.0)
-	hit_tween.tween_property(sprite, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.18)
-
-	# Сжатие по вертикали и расширение по бокам от силы удара
-	sprite.scale = Vector3(1.22, 0.82, 1.22)
-	hit_tween.tween_property(sprite, "scale", Vector3(1.0, 1.0, 1.0), 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-	# Кровь появляется прямо в точке попадания и разлетается против направления пули.
+	# Кровь в точке попадания
 	var blood_position := hit_position
 	if blood_position == Vector3.ZERO:
 		blood_position = global_position + Vector3(0.0, 0.9, 0.0)
 	_spawn_hit_blood(blood_position, hit_direction)
-
-	# Оставляем брызги крови на песке
 	SandEffects.add_blood_splatter(global_position, hit_direction)
 
-	if hit_sound:
+	if hit_sound and not hit_sound.playing:
 		hit_sound.play()
-
-	if health <= 0:
-		_die()
 
 func hitscan_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> void:
 	take_damage(int(damage), hit_direction, hit_position)

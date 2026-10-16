@@ -217,7 +217,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	if is_spawn_center:
 		exclusion_zones.append(Vector3(0.0, 0.0, 16.0))
 
-	# 0. Процедурные события на центральном тракте каравана (coord.x == 0)
+		# 0. Процедурные события на центральном тракте каравана (coord.x == 0)
 	if coord.x == 0 and coord.y < 0:
 		# Если этот чанк уже был зафиксирован ранее при стриминге
 		if spawned_gas_stations.has(coord):
@@ -226,6 +226,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			node.rotation.y = data.get("rot", 0.0)
 			node.position = Vector3(data.get("side_x", 14.5), 0.0, data.get("z", 0.0))
 			chunk.add_child(node)
+			_setup_poi_loot_crate(node, coord)
 			exclusion_zones.append(Vector3(data.get("side_x", 14.5), data.get("z", 0.0), 18.0))
 
 		elif spawned_oases.has(coord):
@@ -233,6 +234,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			var node := RoadEvents3D.create_oasis()
 			node.position = Vector3(data.get("side_x", 14.5), 0.0, data.get("z", 0.0))
 			chunk.add_child(node)
+			_setup_poi_loot_crate(node, coord)
 			exclusion_zones.append(Vector3(data.get("side_x", 14.5), data.get("z", 0.0), 18.0))
 
 		else:
@@ -274,6 +276,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 					node.rotation.y = rot_y
 					node.position = Vector3(side_x, 0.0, goodie_z)
 					chunk.add_child(node)
+					_setup_poi_loot_crate(node, coord)
 					exclusion_zones.append(Vector3(side_x, goodie_z, 18.0))
 
 					spawned_gas_stations[coord] = { "side_x": side_x, "z": goodie_z, "rot": rot_y }
@@ -287,6 +290,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 					var node := RoadEvents3D.create_oasis()
 					node.position = Vector3(side_x, 0.0, goodie_z)
 					chunk.add_child(node)
+					_setup_poi_loot_crate(node, coord)
 					exclusion_zones.append(Vector3(side_x, goodie_z, 18.0))
 
 					spawned_oases[coord] = { "side_x": side_x, "z": goodie_z }
@@ -294,20 +298,24 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 				else:
 					# --- ДОРОЖНОЕ ПРЕПЯТСТВИЕ ---
 					# Баррикада с взрывными бочками, автозавал или камнепад
-					var obst_type: int = rng.randi() % 3
-					var obst_node: Node3D = null
-					match obst_type:
-						0:
-							obst_node = RoadEvents3D.create_road_barricade()
-						1:
-							obst_node = RoadEvents3D.create_wreck_blockade()
-						_:
-							obst_node = RoadEvents3D.create_rockfall_blockade()
+					var obst_id: String = "%d_%d" % [coord.x, coord.y]
+					if NetworkManager == null or not NetworkManager.cleared_obstacles.has(obst_id):
+						var obst_type: int = rng.randi() % 3
+						var obst_node: Node3D = null
+						match obst_type:
+							0:
+								obst_node = RoadEvents3D.create_road_barricade()
+							1:
+								obst_node = RoadEvents3D.create_wreck_blockade()
+							_:
+								obst_node = RoadEvents3D.create_rockfall_blockade()
 
-					var obst_z: float = rng.randf_range(-32.0, 32.0)
-					obst_node.position = Vector3(0.0, 0.0, obst_z)
-					chunk.add_child(obst_node)
-					exclusion_zones.append(Vector3(0.0, obst_z, 14.0))
+						obst_node.name = "RoadObstacle"
+						obst_node.set_meta("obstacle_id", obst_id)
+						var obst_z: float = rng.randf_range(-32.0, 32.0)
+						obst_node.position = Vector3(0.0, 0.0, obst_z)
+						chunk.add_child(obst_node)
+						exclusion_zones.append(Vector3(0.0, obst_z, 14.0))
 
 	# В диких боковых чанках (coord.x != 0) редкий оазис или заправка в глубине пустыни (1.2% шанс)
 	elif coord.x != 0 and abs(coord.y) > 0:
@@ -317,6 +325,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			node.rotation.y = data.get("rot", 0.0)
 			node.position = Vector3(data.get("x", 0.0), 0.0, data.get("z", 0.0))
 			chunk.add_child(node)
+			_setup_poi_loot_crate(node, coord)
 			exclusion_zones.append(Vector3(data.get("x", 0.0), data.get("z", 0.0), 18.0))
 
 		elif spawned_oases.has(coord):
@@ -324,6 +333,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			var node := RoadEvents3D.create_oasis()
 			node.position = Vector3(data.get("x", 0.0), 0.0, data.get("z", 0.0))
 			chunk.add_child(node)
+			_setup_poi_loot_crate(node, coord)
 			exclusion_zones.append(Vector3(data.get("x", 0.0), data.get("z", 0.0), 18.0))
 
 		elif rng.randf() < 0.024:
@@ -336,6 +346,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 				var wild_node := RoadEvents3D.create_oasis()
 				wild_node.position = Vector3(wild_x, 0.0, wild_z)
 				chunk.add_child(wild_node)
+				_setup_poi_loot_crate(wild_node, coord)
 				exclusion_zones.append(Vector3(wild_x, wild_z, 18.0))
 				spawned_oases[coord] = { "x": wild_x, "z": wild_z }
 			elif can_gas_wild:
@@ -344,6 +355,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 				wild_node.rotation.y = rot_y
 				wild_node.position = Vector3(wild_x, 0.0, wild_z)
 				chunk.add_child(wild_node)
+				_setup_poi_loot_crate(wild_node, coord)
 				exclusion_zones.append(Vector3(wild_x, wild_z, 18.0))
 				spawned_gas_stations[coord] = { "x": wild_x, "z": wild_z, "rot": rot_y }
 
@@ -522,3 +534,13 @@ func _create_bones(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void
 	model.rotation.y = rot_y
 	model.scale = Vector3(s, s, s)
 	parent.add_child(model)
+
+func _setup_poi_loot_crate(poi_node: Node, coord: Vector2i) -> void:
+	var crate := poi_node.find_child("LootCrate", true, false)
+	if crate:
+		var crate_id: String = "%d_%d" % [coord.x, coord.y]
+		crate.name = "LootCrate_%s" % crate_id
+		crate.set_meta("crate_id", crate_id)
+		if NetworkManager != null and NetworkManager.looted_crates.has(crate_id):
+			if crate.has_method("mark_already_looted"):
+				crate.mark_already_looted()
