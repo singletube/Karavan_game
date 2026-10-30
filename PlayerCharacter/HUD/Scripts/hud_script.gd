@@ -177,7 +177,8 @@ func display_weapon_properties() -> void:
 		weapon_name_label_text.text = _localized_weapon_name(resource.weapon_name)
 		
 		# Динамическая предупреждающая подсветка, если в обойме мало патронов
-		var low_mag := magazine <= maxi(1, int(resource.mag_capacity * 0.25))
+		var ref_mag := maxi(1, int(resource.total_ammo_in_mag_ref / ammo_per_shot)) if resource.total_ammo_in_mag_ref > 0 else 30
+		var low_mag := magazine <= maxi(1, int(ref_mag * 0.25))
 		if low_mag:
 			nb_ammo_in_mag_label_text.add_theme_color_override("font_color", Color(1.0, 0.32, 0.25, 1.0))
 		else:
