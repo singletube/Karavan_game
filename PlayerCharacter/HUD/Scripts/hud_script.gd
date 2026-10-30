@@ -64,6 +64,13 @@ func _ready() -> void:
 	weapon_manager.weapon_stack_updated.connect(Callable(self, "update_weapon_stack_display"))
 	$PlayerCharacterProperties.hide()
 	$FPSProperties.hide()
+	var crosshair := get_node_or_null("Crosshair") as Control
+	if crosshair:
+		crosshair.modulate = Color(1.0, 1.0, 1.0, 0.75)
+		crosshair.offset_left = -12.0
+		crosshair.offset_top = -12.0
+		crosshair.offset_right = 12.0
+		crosshair.offset_bottom = 12.0
 	_style_weapon_properties()
 	_build_game_hud()
 	if play_char.has_signal("health_changed"):
@@ -244,32 +251,32 @@ func _build_game_hud() -> void:
 
 	# --- 2. МИНИМАЛИСТИЧНЫЙ ВИДЖЕТ КАРАВАНА (ВЕРХНИЙ ЦЕНТР, ПОД КОМПАСОМ) ---
 	var caravan_style := StyleBoxFlat.new()
-	caravan_style.bg_color = Color(0.04, 0.035, 0.025, 0.70)
-	caravan_style.border_color = Color(0.85, 0.70, 0.30, 0.35)
+	caravan_style.bg_color = Color(0.02, 0.02, 0.02, 0.55)
+	caravan_style.border_color = Color(0.85, 0.70, 0.30, 0.25)
 	caravan_style.set_border_width_all(1)
-	caravan_style.set_corner_radius_all(8)
-	caravan_style.content_margin_left = 14.0
-	caravan_style.content_margin_right = 14.0
-	caravan_style.content_margin_top = 4.0
-	caravan_style.content_margin_bottom = 5.0
+	caravan_style.set_corner_radius_all(6)
+	caravan_style.content_margin_left = 12.0
+	caravan_style.content_margin_right = 12.0
+	caravan_style.content_margin_top = 3.0
+	caravan_style.content_margin_bottom = 4.0
 
 	caravan_panel = PanelContainer.new()
 	caravan_panel.name = "CaravanPanel"
 	caravan_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	caravan_panel.offset_left = -140.0
-	caravan_panel.offset_top = 54.0
-	caravan_panel.offset_right = 140.0
-	caravan_panel.offset_bottom = 86.0
+	caravan_panel.offset_left = -130.0
+	caravan_panel.offset_top = 50.0
+	caravan_panel.offset_right = 130.0
+	caravan_panel.offset_bottom = 76.0
 	caravan_panel.add_theme_stylebox_override("panel", caravan_style)
 
 	var caravan_col := VBoxContainer.new()
-	caravan_col.add_theme_constant_override("separation", 3)
+	caravan_col.add_theme_constant_override("separation", 2)
 	caravan_panel.add_child(caravan_col)
 
 	caravan_label = Label.new()
 	caravan_label.text = "КАРАВАН  500 / 500"
 	caravan_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	caravan_label.add_theme_font_size_override("font_size", 11)
+	caravan_label.add_theme_font_size_override("font_size", 10)
 	caravan_label.add_theme_color_override("font_color", Color(0.95, 0.88, 0.75, 0.95))
 	caravan_col.add_child(caravan_label)
 
@@ -278,10 +285,10 @@ func _build_game_hud() -> void:
 	caravan_bar.max_value = 500.0
 	caravan_bar.value = 500.0
 	caravan_bar.show_percentage = false
-	caravan_bar.custom_minimum_size = Vector2(240.0, 4.0)
+	caravan_bar.custom_minimum_size = Vector2(220.0, 3.0)
 
 	var c_bar_bg := StyleBoxFlat.new()
-	c_bar_bg.bg_color = Color(0.12, 0.09, 0.05, 0.85)
+	c_bar_bg.bg_color = Color(0.10, 0.08, 0.05, 0.85)
 	c_bar_bg.set_corner_radius_all(2)
 
 	var c_bar_fill := StyleBoxFlat.new()
@@ -295,22 +302,22 @@ func _build_game_hud() -> void:
 
 	# --- 3. СТИЛЬНАЯ КАРТОЧКА СТАТУСА ВОЛНЫ (ВСПЛЫВАЕТ ПОД КАРАВАНОМ) ---
 	var wave_box_style := StyleBoxFlat.new()
-	wave_box_style.bg_color = Color(0.04, 0.03, 0.02, 0.65)
-	wave_box_style.border_color = Color(0.85, 0.65, 0.25, 0.30)
+	wave_box_style.bg_color = Color(0.02, 0.02, 0.02, 0.50)
+	wave_box_style.border_color = Color(0.85, 0.65, 0.25, 0.25)
 	wave_box_style.set_border_width_all(1)
 	wave_box_style.set_corner_radius_all(6)
 	wave_box_style.content_margin_left = 12.0
 	wave_box_style.content_margin_right = 12.0
-	wave_box_style.content_margin_top = 4.0
-	wave_box_style.content_margin_bottom = 4.0
+	wave_box_style.content_margin_top = 3.0
+	wave_box_style.content_margin_bottom = 3.0
 
 	wave_panel = PanelContainer.new()
 	wave_panel.name = "WavePanel"
 	wave_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	wave_panel.offset_left = -160.0
-	wave_panel.offset_top = 92.0
-	wave_panel.offset_right = 160.0
-	wave_panel.offset_bottom = 132.0
+	wave_panel.offset_left = -140.0
+	wave_panel.offset_top = 82.0
+	wave_panel.offset_right = 140.0
+	wave_panel.offset_bottom = 118.0
 	wave_panel.add_theme_stylebox_override("panel", wave_box_style)
 
 	var wave_vbox := VBoxContainer.new()
@@ -611,29 +618,33 @@ func _on_caravan_respawned() -> void:
 # =========================================================================
 func _build_compass() -> void:
 	var c_style := StyleBoxFlat.new()
-	c_style.bg_color = Color(0.03, 0.025, 0.02, 0.88)
-	c_style.border_color = Color(0.85, 0.68, 0.28, 0.85)
+	c_style.bg_color = Color(0.02, 0.02, 0.02, 0.45)
+	c_style.border_color = Color(0.85, 0.70, 0.35, 0.25)
 	c_style.set_border_width_all(1)
-	c_style.set_corner_radius_all(6)
+	c_style.set_corner_radius_all(8)
+	c_style.content_margin_left = 10.0
+	c_style.content_margin_right = 10.0
+	c_style.content_margin_top = 2.0
+	c_style.content_margin_bottom = 2.0
 
 	compass_panel = PanelContainer.new()
 	compass_panel.name = "CompassPanel"
 	compass_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	compass_panel.offset_left = -210.0
-	compass_panel.offset_top = 10.0
-	compass_panel.offset_right = 210.0
-	compass_panel.offset_bottom = 58.0
+	compass_panel.offset_left = -190.0
+	compass_panel.offset_top = 8.0
+	compass_panel.offset_right = 190.0
+	compass_panel.offset_bottom = 46.0
 	compass_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	compass_panel.add_theme_stylebox_override("panel", c_style)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 1)
+	vbox.add_theme_constant_override("separation", 0)
 	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	compass_panel.add_child(vbox)
 
 	compass_tape = Control.new()
 	compass_tape.name = "CompassTape"
-	compass_tape.custom_minimum_size = Vector2(400.0, 24.0)
+	compass_tape.custom_minimum_size = Vector2(360.0, 20.0)
 	compass_tape.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	compass_tape.draw.connect(_draw_compass)
 	vbox.add_child(compass_tape)
@@ -642,8 +653,8 @@ func _build_compass() -> void:
 	compass_caravan_label.name = "CompassCaravanLabel"
 	compass_caravan_label.text = "КАРАВАН: ПОИСК..."
 	compass_caravan_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	compass_caravan_label.add_theme_font_size_override("font_size", 11)
-	compass_caravan_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.45, 1.0))
+	compass_caravan_label.add_theme_font_size_override("font_size", 10)
+	compass_caravan_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.45, 0.95))
 	vbox.add_child(compass_caravan_label)
 
 	add_child(compass_panel)

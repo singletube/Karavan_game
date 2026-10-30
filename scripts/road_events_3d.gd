@@ -1831,90 +1831,245 @@ func on_interact_completed(player: Node) -> void:
 	root.add_child(gate_switch)
 
 	# --- 4. ЗОНА ОТДЫХА И ТОРГОВЛИ ВНУТРИ ЛАГЕРЯ ---
-	# Костёр посередине лагеря с навесом
-	var fire_center := Vector3(-5.5, 0.0, 2.0)
-	# Каменное кольцо очага
-	for fi in range(8):
-		var ang: float = float(fi) * (TAU / 8.0)
-		_add_box(root, Vector3(0.35, 0.25, 0.35), mat_sandstone_dark, fire_center + Vector3(cos(ang) * 0.9, 0.12, sin(ang) * 0.9))
+	# Костёр посередине лагеря с треногой и котлом
+	var fire_center := Vector3(-4.5, 0.0, 1.5)
+	for fi in range(10):
+		var ang: float = float(fi) * (TAU / 10.0)
+		_add_box(root, Vector3(0.35, 0.25, 0.35), mat_sandstone_dark, fire_center + Vector3(cos(ang) * 1.0, 0.12, sin(ang) * 1.0))
 	# Тлеющие угли и кострище
-	_add_cyl(root, 0.18, 0.65, 0.65, mat_burnt_metal, fire_center + Vector3(0.0, 0.08, 0.0))
+	_add_cyl(root, 0.18, 0.70, 0.70, mat_burnt_metal, fire_center + Vector3(0.0, 0.08, 0.0))
+	# Кованая железная тренога над костром
+	_add_cyl(root, 1.6, 0.03, 0.03, mat_burnt_metal, fire_center + Vector3(-0.45, 0.75, -0.25), Vector3(deg_to_rad(15.0), 0.0, deg_to_rad(-18.0)))
+	_add_cyl(root, 1.6, 0.03, 0.03, mat_burnt_metal, fire_center + Vector3(0.45, 0.75, -0.25), Vector3(deg_to_rad(15.0), 0.0, deg_to_rad(18.0)))
+	_add_cyl(root, 1.6, 0.03, 0.03, mat_burnt_metal, fire_center + Vector3(0.0, 0.75, 0.48), Vector3(deg_to_rad(-20.0), 0.0, 0.0))
+	# Подвесной котел для варки похлебки
+	_add_cyl(root, 0.40, 0.28, 0.24, mat_burnt_metal, fire_center + Vector3(0.0, 0.65, 0.0))
+	_add_cyl(root, 0.45, 0.015, 0.015, mat_steel_beam, fire_center + Vector3(0.0, 1.10, 0.0)) # цепь
+
 	var fire_light := OmniLight3D.new()
-	fire_light.light_color = Color(1.0, 0.55, 0.15)
-	fire_light.light_energy = 2.8
-	fire_light.omni_range = 14.0
-	fire_light.position = fire_center + Vector3(0.0, 0.8, 0.0)
+	fire_light.light_color = Color(1.0, 0.58, 0.18)
+	fire_light.light_energy = 3.2
+	fire_light.omni_range = 16.0
+	fire_light.position = fire_center + Vector3(0.0, 0.9, 0.0)
 	root.add_child(fire_light)
 
-	# Лавки и тюки вокруг костра
-	_add_collidable_box(body, root, Vector3(2.2, 0.45, 0.65), mat_beam_wood, fire_center + Vector3(0.0, 0.22, 1.8))
-	_add_collidable_box(body, root, Vector3(2.2, 0.45, 0.65), mat_beam_wood, fire_center + Vector3(0.0, 0.22, -1.8))
-	_add_box(root, Vector3(1.8, 0.12, 0.5), mat_cushion, fire_center + Vector3(0.0, 0.48, 1.8))
+	# Лавки, тюки и спальные мешки вокруг костра
+	_add_collidable_box(body, root, Vector3(2.4, 0.45, 0.65), mat_beam_wood, fire_center + Vector3(0.0, 0.22, 2.0))
+	_add_collidable_box(body, root, Vector3(2.4, 0.45, 0.65), mat_beam_wood, fire_center + Vector3(0.0, 0.22, -2.0))
+	_add_box(root, Vector3(2.0, 0.12, 0.55), mat_cushion, fire_center + Vector3(0.0, 0.48, 2.0))
+	_add_box(root, Vector3(2.0, 0.12, 0.55), mat_carpet, fire_center + Vector3(0.0, 0.48, -2.0))
+	# Свернутый спальник
+	_add_cyl(root, 0.75, 0.18, 0.18, mat_sandstone_dark, fire_center + Vector3(1.4, 0.22, 1.8), Vector3(0.0, deg_to_rad(45.0), deg_to_rad(90.0)))
 
-	# Шатёр торговца (слева у стены)
+	# --- ВОДОНАПОРНАЯ ВЫШКА С ЦИСТЕРНОЙ (СЛЕВА СПЕРЕДИ) ---
+	var water_pos := Vector3(-9.2, 0.0, 9.5)
+	# 4 деревянные опоры вышки
+	for wx in [-1.2, 1.2]:
+		for wz in [-1.2, 1.2]:
+			_add_collidable_box(body, root, Vector3(0.24, 3.6, 0.24), mat_beam_wood, water_pos + Vector3(wx, 1.8, wz))
+	# Настил платформы
+	_add_collidable_box(body, root, Vector3(3.0, 0.25, 3.0), mat_beam_wood, water_pos + Vector3(0.0, 3.6, 0.0))
+	# Горизонтальная цистерна с чистой водой
+	var water_tank := _add_cyl(root, 2.6, 0.85, 0.85, mat_plane_metal, water_pos + Vector3(0.0, 4.6, 0.0))
+	water_tank.rotation.z = deg_to_rad(90.0)
+	# Обручи цистерны
+	_add_cyl(water_tank, 0.10, 0.90, 0.90, mat_burnt_metal, Vector3(0.0, -0.8, 0.0))
+	_add_cyl(water_tank, 0.10, 0.90, 0.90, mat_burnt_metal, Vector3(0.0, 0.8, 0.0))
+	# Сливная труба с вентилем
+	_add_cyl(root, 2.4, 0.06, 0.06, mat_steel_beam, water_pos + Vector3(1.2, 2.4, 0.0))
+	_add_box(root, Vector3(0.25, 0.25, 0.25), mat_emergency_red, water_pos + Vector3(1.2, 1.2, 0.0)) # вентиль
+
+	# --- 1. ШАТЁР ТОРГОВЦА ФАРИДА (СЛЕВА У СТЕНЫ) ---
+	# Открытый восточный базар на деревянных столбах с коврами и навесом
 	var trader_pos := Vector3(-8.8, 0.0, -4.5)
-	_add_collidable_box(body, root, Vector3(5.5, 3.2, 6.5), mat_adobe_clay, trader_pos + Vector3(0.0, 1.6, 0.0))
-	_add_box(root, Vector3(5.8, 0.3, 6.8), mat_carpet, trader_pos + Vector3(0.0, 3.3, 0.0))
-	# Вывеска Торговца
-	_add_box(root, Vector3(2.4, 0.6, 0.1), mat_gold_treasure, trader_pos + Vector3(0.0, 2.8, 3.35))
+	# 6 деревянных столбов-опор шатра
+	var tent_posts := [
+		Vector3(-2.4, 0.0, -2.8), Vector3(2.4, 0.0, -2.8),
+		Vector3(-2.4, 0.0, 0.0),  Vector3(2.4, 0.0, 0.0),
+		Vector3(-2.4, 0.0, 2.8),  Vector3(2.4, 0.0, 2.8)
+	]
+	for tp in tent_posts:
+		_add_collidable_box(body, root, Vector3(0.22, 3.4, 0.22), mat_beam_wood, trader_pos + tp + Vector3(0.0, 1.7, 0.0))
 
-	# NPC 1: ТОРГОВЕЦ (Торговля патронами, медикаментами, припасами)
+	# Верхние балки каркаса шатра
+	_add_box(root, Vector3(5.2, 0.20, 0.20), mat_beam_wood, trader_pos + Vector3(0.0, 3.4, -2.8))
+	_add_box(root, Vector3(5.2, 0.20, 0.20), mat_beam_wood, trader_pos + Vector3(0.0, 3.4, 2.8))
+	_add_box(root, Vector3(0.20, 0.20, 5.8), mat_beam_wood, trader_pos + Vector3(-2.4, 3.4, 0.0))
+	_add_box(root, Vector3(0.20, 0.20, 5.8), mat_beam_wood, trader_pos + Vector3(2.4, 3.4, 0.0))
+
+	# Текстильный тент шатра (двускатный с восточным орнаментом)
+	var roof_l := _add_box(root, Vector3(2.8, 0.12, 6.0), mat_carpet, trader_pos + Vector3(-1.3, 3.7, 0.0))
+	roof_l.rotation.z = deg_to_rad(15.0)
+	var roof_r := _add_box(root, Vector3(2.8, 0.12, 6.0), mat_carpet, trader_pos + Vector3(1.3, 3.7, 0.0))
+	roof_r.rotation.z = deg_to_rad(-15.0)
+	# Конек крыши шатра
+	_add_box(root, Vector3(0.35, 0.25, 6.1), mat_gold_treasure, trader_pos + Vector3(0.0, 4.05, 0.0))
+
+	# Задняя защитная стенка из мешков с песком и ткань
+	for sby in range(4):
+		_add_collidable_box(body, root, Vector3(0.55, 0.28, 5.4), mat_sandbag, trader_pos + Vector3(-2.4, 0.14 + sby * 0.28, 0.0))
+	# Персидский ковер на задней стене
+	_add_box(root, Vector3(0.04, 2.0, 4.8), mat_carpet, trader_pos + Vector3(-2.3, 2.0, 0.0))
+
+	# Длинный прилавок торговца
+	_add_collidable_box(body, root, Vector3(3.8, 0.90, 0.95), mat_beam_wood, trader_pos + Vector3(0.0, 0.45, 1.4))
+	_add_box(root, Vector3(4.0, 0.08, 1.05), mat_cushion, trader_pos + Vector3(0.0, 0.92, 1.4)) # коврик прилавка
+
+	# ТОВАРЫ НА ПРИЛАВКЕ: ящики патронов, аптечки, золотые монеты
+	_add_box(root, Vector3(0.55, 0.25, 0.35), mat_military_green, trader_pos + Vector3(-1.2, 1.05, 1.4)) # патронный цинк
+	_add_box(root, Vector3(0.50, 0.22, 0.32), mat_military_green, trader_pos + Vector3(-1.2, 1.28, 1.4))
+	_add_box(root, Vector3(0.38, 0.24, 0.28), mat_white_enamel, trader_pos + Vector3(0.9, 1.05, 1.4)) # армейская аптечка
+	_add_box(root, Vector3(0.08, 0.08, 0.08), mat_emergency_red, trader_pos + Vector3(0.9, 1.05, 1.55)) # красный крест
+	# Мешочки с монетами и золотой кувшин
+	_add_box(root, Vector3(0.20, 0.18, 0.20), mat_gold_treasure, trader_pos + Vector3(0.1, 1.02, 1.4))
+	_add_cyl(root, 0.35, 0.12, 0.14, mat_gold_treasure, trader_pos + Vector3(1.5, 1.10, 1.4)) # кувшин
+
+	# Подвесной золотой фонарь над прилавком
+	var trader_lamp := OmniLight3D.new()
+	trader_lamp.light_color = Color(1.0, 0.88, 0.55)
+	trader_lamp.light_energy = 3.2
+	trader_lamp.omni_range = 10.0
+	trader_lamp.position = trader_pos + Vector3(0.0, 2.7, 1.2)
+	root.add_child(trader_lamp)
+	_add_cyl(root, 0.28, 0.12, 0.12, mat_gold_treasure, trader_pos + Vector3(0.0, 2.8, 1.2))
+
+	# NPC 1: ТОРГОВЕЦ ФАРИД
 	var npc_trader := _create_interactive_npc(
 		0,
 		"Торговец Фарид",
 		"ПОГОВОРИТЬ С ТОРГОВЦЕМ ФАРИДОМ [E]",
-		trader_pos + Vector3(0.0, 0.0, 2.2),
+		trader_pos + Vector3(0.0, 0.0, 2.4),
 		deg_to_rad(180.0)
 	)
 	root.add_child(npc_trader)
 
-	# Стол торговца с товарами
-	_add_collidable_box(body, root, Vector3(2.4, 0.85, 0.9), mat_beam_wood, trader_pos + Vector3(0.0, 0.42, 1.3))
-	_add_box(root, Vector3(0.4, 0.2, 0.3), mat_military_green, trader_pos + Vector3(-0.6, 0.95, 1.3)) # патроны
-	_add_box(root, Vector3(0.3, 0.25, 0.25), mat_white_enamel, trader_pos + Vector3(0.5, 0.98, 1.3)) # аптечка
-	_add_box(root, Vector3(0.08, 0.08, 0.08), mat_emergency_red, trader_pos + Vector3(0.5, 0.98, 1.45)) # крест
-
-	# Мастерская / Механик (справа у стены)
+	# --- 2. МАСТЕРСКАЯ ОРУЖЕЙНИКА ГАССАНА (СПРАВА У СТЕНЫ) ---
+	# Индустриальный полуоткрытый ангар из стальных двутавров со сварочным постом
 	var mechanic_pos := Vector3(8.5, 0.0, -3.5)
-	_add_collidable_box(body, root, Vector3(5.0, 3.5, 7.0), mat_sandstone, mechanic_pos + Vector3(0.0, 1.75, 0.0))
-	_add_box(root, Vector3(5.2, 0.25, 7.2), mat_steel_beam, mechanic_pos + Vector3(0.0, 3.6, 0.0))
-	# Верстак и наковальня механика
-	_add_collidable_box(body, root, Vector3(2.6, 0.9, 1.0), mat_steel_beam, mechanic_pos + Vector3(0.0, 0.45, 2.2))
-	_add_box(root, Vector3(0.6, 0.4, 0.4), mat_burnt_metal, mechanic_pos + Vector3(-0.6, 1.1, 2.2)) # наковальня
+	# 4 массивные стальные опоры I-Beam
+	for mx in [-2.4, 2.4]:
+		for mz in [-2.8, 2.8]:
+			_add_collidable_box(body, root, Vector3(0.30, 3.8, 0.30), mat_steel_beam, mechanic_pos + Vector3(mx, 1.9, mz))
 
-	# NPC 2: МЕХАНИК (Прокачка каравана, брони, осей повозки)
+	# Верхние фермы
+	_add_box(root, Vector3(5.2, 0.30, 0.25), mat_steel_beam, mechanic_pos + Vector3(0.0, 3.8, -2.8))
+	_add_box(root, Vector3(5.2, 0.30, 0.25), mat_steel_beam, mechanic_pos + Vector3(0.0, 3.8, 2.8))
+	_add_box(root, Vector3(0.25, 0.30, 5.8), mat_steel_beam, mechanic_pos + Vector3(-2.4, 3.8, 0.0))
+	_add_box(root, Vector3(0.25, 0.30, 5.8), mat_steel_beam, mechanic_pos + Vector3(2.4, 3.8, 0.0))
+
+	# Односкатная крыша из ржавого профнастила с наклоном
+	var mech_roof := _add_box(root, Vector3(5.4, 0.14, 6.2), mat_metal_rusty, mechanic_pos + Vector3(0.0, 4.0, 0.0))
+	mech_roof.rotation.x = deg_to_rad(10.0)
+
+	# Задняя стенка из рифленого металла
+	_add_collidable_box(body, root, Vector3(0.20, 3.6, 5.6), mat_burnt_metal, mechanic_pos + Vector3(2.4, 1.8, 0.0))
+
+	# Рабочий стальной верстак механика
+	_add_collidable_box(body, root, Vector3(3.6, 0.90, 1.1), mat_steel_beam, mechanic_pos + Vector3(0.0, 0.45, 1.5))
+	# Наковальня на деревянной колоде
+	_add_cyl(root, 0.55, 0.35, 0.35, mat_beam_wood, mechanic_pos + Vector3(-1.2, 0.28, 0.2))
+	_add_box(root, Vector3(0.65, 0.35, 0.35), mat_burnt_metal, mechanic_pos + Vector3(-1.2, 0.72, 0.2)) # наковальня
+
+	# ДИЗЕЛЬНЫЙ ГЕНЕРАТОР В УГЛУ МАСТЕРСКОЙ
+	var gen_pos := mechanic_pos + Vector3(1.6, 0.0, -1.8)
+	_add_collidable_box(body, root, Vector3(1.4, 1.1, 1.1), mat_military_green, gen_pos + Vector3(0.0, 0.55, 0.0))
+	_add_cyl(root, 1.8, 0.08, 0.08, mat_burnt_metal, gen_pos + Vector3(0.4, 1.5, -0.2)) # выхлопная труба
+	# Кабели питания от генератора по земле
+	_add_cyl(root, 2.5, 0.03, 0.03, mat_burnt_metal, mechanic_pos + Vector3(0.8, 0.03, 0.0)).rotation.y = deg_to_rad(45.0)
+
+	# Оружейный стенд на стене с винтовками
+	_add_box(root, Vector3(0.12, 1.8, 2.6), mat_beam_wood, mechanic_pos + Vector3(2.2, 2.0, 0.0))
+	_add_box(root, Vector3(0.14, 0.12, 2.2), mat_steel_beam, mechanic_pos + Vector3(2.1, 2.4, 0.0)) # винтовка на крюках
+	_add_box(root, Vector3(0.14, 0.12, 2.0), mat_steel_beam, mechanic_pos + Vector3(2.1, 1.8, 0.0)) # дробовик
+
+	# Запасные колеса каравана у стены
+	for wi in range(2):
+		var w_wheel := _add_cyl(root, 0.22, 0.65, 0.65, mat_beam_wood, mechanic_pos + Vector3(-1.8 + wi * 0.8, 0.65, -2.4))
+		w_wheel.rotation.x = deg_to_rad(90.0)
+
+	# Фонарь дневного света над верстаком
+	var mech_lamp := OmniLight3D.new()
+	mech_lamp.light_color = Color(0.85, 0.95, 1.0)
+	mech_lamp.light_energy = 2.8
+	mech_lamp.omni_range = 10.0
+	mech_lamp.position = mechanic_pos + Vector3(0.0, 2.8, 1.2)
+	root.add_child(mech_lamp)
+
+	# NPC 2: ОРУЖЕЙНИК ГАССАН
 	var npc_mechanic := _create_interactive_npc(
 		1,
 		"Оружейник Гассан",
 		"УЛУЧШИТЬ КАРАВАН И ОРУЖИЕ У МАСТЕРА [E]",
-		mechanic_pos + Vector3(0.0, 0.0, 3.2),
+		mechanic_pos + Vector3(0.0, 0.0, 2.6),
 		deg_to_rad(180.0)
 	)
 	root.add_child(npc_mechanic)
 
-	# Штаб гарнизона / Командир (справа спереди)
+	# --- 3. ШТАБ КАПИТАНА БАШИРА И РАДИОМАЧТА (СПРАВА СПЕРЕДИ) ---
+	# Укрепленный бункер-блокпост с мешками песка, камуфляжной сеткой и 7-метровой антенной
 	var commander_pos := Vector3(8.2, 0.0, 10.5)
-	_add_collidable_box(body, root, Vector3(4.8, 3.0, 5.5), mat_bunker_wall, commander_pos + Vector3(0.0, 1.5, 0.0))
-	# Картографический стол
-	_add_collidable_box(body, root, Vector3(1.8, 0.85, 1.4), mat_beam_wood, commander_pos + Vector3(0.0, 0.42, 1.6))
-	_add_box(root, Vector3(1.4, 0.02, 1.1), mat_paper, commander_pos + Vector3(0.0, 0.87, 1.6)) # карта пустоши
+	# Низкий бетонный цоколь бункера
+	_add_collidable_box(body, root, Vector3(5.2, 1.2, 5.8), mat_bunker_wall, commander_pos + Vector3(0.0, 0.6, 0.0))
+	# Дуговой бруствер из мешков с песком
+	for sby in range(3):
+		_add_collidable_box(body, root, Vector3(4.8, 0.28, 0.55), mat_sandbag, commander_pos + Vector3(0.0, 1.2 + sby * 0.28, 2.6))
+		_add_collidable_box(body, root, Vector3(0.55, 0.28, 5.0), mat_sandbag, commander_pos + Vector3(-2.4, 1.2 + sby * 0.28, 0.0))
 
-	# NPC 3: КОМАНДИР АВАНПОСТА (Квесты и награды)
+	# Стойки и камуфляжная армейская сетка
+	for cx in [-2.4, 2.4]:
+		for cz in [-2.6, 2.6]:
+			_add_collidable_box(body, root, Vector3(0.18, 2.8, 0.18), mat_steel_beam, commander_pos + Vector3(cx, 1.4, cz))
+	_add_box(root, Vector3(5.6, 0.10, 6.0), mat_military_green, commander_pos + Vector3(0.0, 2.8, 0.0)) # тент
+
+	# 7-МЕТРОВАЯ ВЫСОКАЯ РАДИОМАЧТА С МИГАЮЩИМ КРАСНЫМ МАЯКОМ
+	var mast_pos := commander_pos + Vector3(2.2, 0.0, -2.4)
+	_add_collidable_cyl(body, root, 7.5, 0.18, 0.25, mat_steel_beam, mast_pos + Vector3(0.0, 3.75, 0.0))
+	# Перекладины антенны
+	_add_box(root, Vector3(1.8, 0.08, 0.08), mat_steel_beam, mast_pos + Vector3(0.0, 5.5, 0.0))
+	_add_box(root, Vector3(1.2, 0.08, 0.08), mat_steel_beam, mast_pos + Vector3(0.0, 6.8, 0.0))
+	# Параболическая антенна тарелки
+	var dish := _add_cyl(root, 0.12, 0.65, 0.65, mat_burnt_metal, mast_pos + Vector3(-0.4, 5.8, 0.0))
+	dish.rotation.z = deg_to_rad(65.0)
+	# Красный проблесковый авиационный маяк на вершине мачты
+	_add_sphere(root, 0.15, mat_emergency_red, mast_pos + Vector3(0.0, 7.6, 0.0))
+	var beacon_light := OmniLight3D.new()
+	beacon_light.light_color = Color(1.0, 0.2, 0.15)
+	beacon_light.light_energy = 3.0
+	beacon_light.omni_range = 14.0
+	beacon_light.position = mast_pos + Vector3(0.0, 7.6, 0.0)
+	root.add_child(beacon_light)
+
+	# Большой оперативный стол с картой боевых действий
+	_add_collidable_box(body, root, Vector3(2.4, 0.85, 1.6), mat_beam_wood, commander_pos + Vector3(0.0, 0.42, 0.6))
+	_add_box(root, Vector3(1.8, 0.02, 1.2), mat_paper, commander_pos + Vector3(0.0, 0.87, 0.6)) # карта
+	# Полевая армейская рация со светящимся экраном
+	_add_box(root, Vector3(0.65, 0.35, 0.45), mat_military_green, commander_pos + Vector3(-0.7, 1.05, 0.6))
+	_add_box(root, Vector3(0.25, 0.12, 0.04), mat_neon_sign, commander_pos + Vector3(-0.7, 1.10, 0.84)) # экран
+
+	# Фонарь штаба
+	var cmd_lamp := OmniLight3D.new()
+	cmd_lamp.light_color = Color(1.0, 0.90, 0.70)
+	cmd_lamp.light_energy = 2.6
+	cmd_lamp.omni_range = 9.0
+	cmd_lamp.position = commander_pos + Vector3(0.0, 2.2, 0.6)
+	root.add_child(cmd_lamp)
+
+	# NPC 3: КОМАНДИР КАПИТАН БАШИР
 	var npc_commander := _create_interactive_npc(
 		2,
 		"Капитан Башир",
 		"ВЗЯТЬ ЗАДАНИЕ У КАПИТАНА БАШИРА [E]",
-		commander_pos + Vector3(0.0, 0.0, 2.6),
+		commander_pos + Vector3(0.0, 0.0, 1.8),
 		deg_to_rad(180.0)
 	)
 	root.add_child(npc_commander)
 
-	# Фонари освещения лагеря
+	# Главные фонари освещения лагеря
 	var lamp1 := OmniLight3D.new()
 	lamp1.light_color = Color(1.0, 0.88, 0.65)
 	lamp1.light_energy = 2.4
-	lamp1.omni_range = 15.0
-	lamp1.position = Vector3(0.0, 3.5, 0.0)
+	lamp1.omni_range = 18.0
+	lamp1.position = Vector3(0.0, 4.2, 0.0)
 	root.add_child(lamp1)
 
 	return root
@@ -1980,6 +2135,18 @@ static func _add_cyl(parent: Node3D, height: float, top_r: float, bot_r: float, 
 	mi.mesh = cyl
 	mi.position = pos
 	mi.rotation = rot
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	parent.add_child(mi)
+	return mi
+
+static func _add_sphere(parent: Node3D, radius: float, mat: Material, pos: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var sph := SphereMesh.new()
+	sph.radius = radius
+	sph.height = radius * 2.0
+	sph.material = mat
+	mi.mesh = sph
+	mi.position = pos
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	parent.add_child(mi)
 	return mi
