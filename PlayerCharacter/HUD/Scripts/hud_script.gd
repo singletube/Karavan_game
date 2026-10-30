@@ -36,7 +36,9 @@ var health_panel: PanelContainer
 var health_label: Label
 var health_bar: ProgressBar
 var death_overlay: ColorRect
+var wave_panel: PanelContainer
 var wave_label: Label
+var wave_sub_label: Label
 var caravan_panel: PanelContainer
 var caravan_label: Label
 var caravan_bar: ProgressBar
@@ -62,16 +64,7 @@ func _ready() -> void:
 	weapon_manager.weapon_stack_updated.connect(Callable(self, "update_weapon_stack_display"))
 	$PlayerCharacterProperties.hide()
 	$FPSProperties.hide()
-	weapon_properties.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	weapon_properties.offset_left = -300.0
-	weapon_properties.offset_top = -116.0
-	weapon_properties.offset_right = -12.0
-	weapon_properties.offset_bottom = -12.0
-	for label in [weapon_stack_label_text, weapon_name_label_text, nb_ammo_in_mag_label_text, nb_ammo_total_label_text]:
-		label.add_theme_font_size_override("font_size", 16)
-	weapon_name_label_text.text = "ОРУЖИЕ:"
-	nb_ammo_in_mag_label_text.text = "В МАГАЗИНЕ:"
-	nb_ammo_total_label_text.text = "В ЗАПАСЕ:"
+	_style_weapon_properties()
 	_build_game_hud()
 	if play_char.has_signal("health_changed"):
 		play_char.connect("health_changed", _on_health_changed)
@@ -83,6 +76,39 @@ func _ready() -> void:
 	update_weapon_stack_display()
 	_connect_wave_spawner()
 	_connect_caravan()
+
+func _style_weapon_properties() -> void:
+	# Изящная стеклянная панель оружия в правом нижнем углу
+	var w_style := StyleBoxFlat.new()
+	w_style.bg_color = Color(0.04, 0.035, 0.03, 0.72)
+	w_style.border_color = Color(0.85, 0.70, 0.35, 0.40)
+	w_style.set_border_width_all(1)
+	w_style.set_corner_radius_all(10)
+	w_style.content_margin_left = 18.0
+	w_style.content_margin_right = 18.0
+	w_style.content_margin_top = 10.0
+	w_style.content_margin_bottom = 10.0
+	w_style.shadow_color = Color(0.0, 0.0, 0.0, 0.35)
+	w_style.shadow_size = 6
+
+	weapon_properties.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	weapon_properties.offset_left = -260.0
+	weapon_properties.offset_top = -105.0
+	weapon_properties.offset_right = -18.0
+	weapon_properties.offset_bottom = -18.0
+	weapon_properties.add_theme_stylebox_override("panel", w_style)
+
+	weapon_name_label_text.add_theme_font_size_override("font_size", 14)
+	weapon_name_label_text.add_theme_color_override("font_color", Color(0.95, 0.85, 0.55, 0.95))
+
+	nb_ammo_in_mag_label_text.add_theme_font_size_override("font_size", 24)
+	nb_ammo_in_mag_label_text.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 1.0))
+
+	nb_ammo_total_label_text.add_theme_font_size_override("font_size", 16)
+	nb_ammo_total_label_text.add_theme_color_override("font_color", Color(0.70, 0.68, 0.62, 0.85))
+
+	weapon_stack_label_text.add_theme_font_size_override("font_size", 11)
+	weapon_stack_label_text.add_theme_color_override("font_color", Color(0.60, 0.58, 0.52, 0.75))
 	
 func _process(delta : float) -> void:
 	display_current_FPS()
@@ -110,7 +136,7 @@ func display_play_char_properties() -> void:
 	camera_bob_vertical_offset_label_text.set_text(str(round_to_3_decimals(play_char.cam.v_offset)))
 	
 func update_weapon_stack_display() -> void:
-	weapon_stack_label_text.text = "1–6 — ОРУЖИЕ  |  [V] — ПИНОК"
+	weapon_stack_label_text.text = "[1-6] Оружие · [V] Пинок"
 	
 func display_weapon_properties() -> void:
 	if weapon_manager.current_weapon:
@@ -118,7 +144,7 @@ func display_weapon_properties() -> void:
 		if resource.weapon_name == "Chainsaw":
 			weapon_name_label_text.text = "БЕНЗОПИЛА"
 			nb_ammo_in_mag_label_text.text = "∞"
-			nb_ammo_total_label_text.text = "ТОПЛИВО"
+			nb_ammo_total_label_text.text = "БАК ПОЛОН"
 			return
 
 		var ammo_per_shot := maxi(1, resource.nb_proj_shots_at_same_time)
@@ -129,7 +155,7 @@ func display_weapon_properties() -> void:
 			reserve = 0
 		weapon_name_label_text.text = _localized_weapon_name(resource.weapon_name)
 		nb_ammo_in_mag_label_text.text = str(magazine)
-		nb_ammo_total_label_text.text = str(reserve)
+		nb_ammo_total_label_text.text = "/ %d" % reserve
 
 func _localized_weapon_name(weapon_name: String) -> String:
 	var names := {
@@ -153,81 +179,98 @@ func _build_game_hud() -> void:
 	blood_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(blood_overlay)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.035, 0.045, 0.055, 0.88)
-	panel_style.border_color = Color(0.85, 0.62, 0.25, 0.85)
-	panel_style.set_border_width_all(1)
-	panel_style.set_corner_radius_all(6)
+	# --- 1. ПАНЕЛЬ ЗДОРОВЬЯ ИГРОКА (НИЖНИЙ ЛЕВЫЙ УГОЛ) ---
 	var health_box := PanelContainer.new()
 	health_box.name = "HealthPanel"
 	health_box.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	health_box.offset_left = 12.0
-	health_box.offset_top = -58.0
-	health_box.offset_right = 230.0
-	health_box.offset_bottom = -12.0
-	health_box.add_theme_stylebox_override("panel", panel_style)
+	health_box.offset_left = 24.0
+	health_box.offset_top = -80.0
+	health_box.offset_right = 240.0
+	health_box.offset_bottom = -22.0
+
+	var hp_style := StyleBoxFlat.new()
+	hp_style.bg_color = Color(0.04, 0.035, 0.03, 0.75)
+	hp_style.border_color = Color(0.85, 0.70, 0.35, 0.40)
+	hp_style.set_border_width_all(1)
+	hp_style.set_corner_radius_all(10)
+	hp_style.content_margin_left = 16.0
+	hp_style.content_margin_right = 16.0
+	hp_style.content_margin_top = 8.0
+	hp_style.content_margin_bottom = 8.0
+	hp_style.shadow_color = Color(0.0, 0.0, 0.0, 0.35)
+	hp_style.shadow_size = 6
+	health_box.add_theme_stylebox_override("panel", hp_style)
+
 	var health_column := VBoxContainer.new()
-	health_column.add_theme_constant_override("separation", 3)
+	health_column.add_theme_constant_override("separation", 5)
 	health_box.add_child(health_column)
+
+	var hp_top_row := HBoxContainer.new()
+	health_column.add_child(hp_top_row)
+
+	var hp_icon := Label.new()
+	hp_icon.text = "✚ HP"
+	hp_icon.add_theme_font_size_override("font_size", 12)
+	hp_icon.add_theme_color_override("font_color", Color(0.9, 0.35, 0.35, 0.95))
+	hp_top_row.add_child(hp_icon)
+
 	health_label = Label.new()
+	health_label.text = "100"
 	health_label.add_theme_font_size_override("font_size", 18)
-	health_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.84))
-	health_column.add_child(health_label)
+	health_label.add_theme_color_override("font_color", Color(1.0, 0.96, 0.92))
+	health_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	health_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hp_top_row.add_child(health_label)
+
 	health_bar = ProgressBar.new()
 	health_bar.min_value = 0.0
 	health_bar.max_value = 100.0
+	health_bar.value = 100.0
 	health_bar.show_percentage = false
-	health_bar.custom_minimum_size = Vector2(196.0, 14.0)
+	health_bar.custom_minimum_size = Vector2(180.0, 5.0)
+
 	var bar_background := StyleBoxFlat.new()
-	bar_background.bg_color = Color(0.14, 0.035, 0.035, 1.0)
+	bar_background.bg_color = Color(0.12, 0.04, 0.04, 0.85)
+	bar_background.set_corner_radius_all(3)
+
 	var bar_fill := StyleBoxFlat.new()
-	bar_fill.bg_color = Color(0.2, 0.9, 0.25, 1.0)
+	bar_fill.bg_color = Color(0.25, 0.88, 0.42, 1.0)
+	bar_fill.set_corner_radius_all(3)
+
 	health_bar.add_theme_stylebox_override("background", bar_background)
 	health_bar.add_theme_stylebox_override("fill", bar_fill)
 	health_column.add_child(health_bar)
 	add_child(health_box)
 
-	var controls_hint := Label.new()
-	controls_hint.name = "ControlsHint"
-	controls_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	controls_hint.offset_left = -500.0
-	controls_hint.offset_top = -50.0
-	controls_hint.offset_right = 500.0
-	controls_hint.offset_bottom = -8.0
-	controls_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	controls_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	controls_hint.text = "1–6 Оружие · ЛКМ огонь/пилить · R перезар · F фонарик · E разобрать/лут\nКолесо мыши — смена · C/X присесть · Защищайте караван и осла!"
-	controls_hint.add_theme_font_size_override("font_size", 13)
-	controls_hint.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.9))
-	controls_hint.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
-	controls_hint.add_theme_constant_override("shadow_offset_x", 1)
-	controls_hint.add_theme_constant_override("shadow_offset_y", 1)
-	add_child(controls_hint)
-
+	# --- 2. МИНИМАЛИСТИЧНЫЙ ВИДЖЕТ КАРАВАНА (ВЕРХНИЙ ЦЕНТР, ПОД КОМПАСОМ) ---
 	var caravan_style := StyleBoxFlat.new()
-	caravan_style.bg_color = Color(0.04, 0.035, 0.02, 0.9)
-	caravan_style.border_color = Color(0.92, 0.72, 0.28, 0.9)
+	caravan_style.bg_color = Color(0.04, 0.035, 0.025, 0.70)
+	caravan_style.border_color = Color(0.85, 0.70, 0.30, 0.35)
 	caravan_style.set_border_width_all(1)
-	caravan_style.set_corner_radius_all(6)
+	caravan_style.set_corner_radius_all(8)
+	caravan_style.content_margin_left = 14.0
+	caravan_style.content_margin_right = 14.0
+	caravan_style.content_margin_top = 4.0
+	caravan_style.content_margin_bottom = 5.0
 
 	caravan_panel = PanelContainer.new()
 	caravan_panel.name = "CaravanPanel"
 	caravan_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	caravan_panel.offset_left = -160.0
-	caravan_panel.offset_top = 62.0
-	caravan_panel.offset_right = 160.0
-	caravan_panel.offset_bottom = 106.0
+	caravan_panel.offset_left = -140.0
+	caravan_panel.offset_top = 54.0
+	caravan_panel.offset_right = 140.0
+	caravan_panel.offset_bottom = 86.0
 	caravan_panel.add_theme_stylebox_override("panel", caravan_style)
 
 	var caravan_col := VBoxContainer.new()
-	caravan_col.add_theme_constant_override("separation", 2)
+	caravan_col.add_theme_constant_override("separation", 3)
 	caravan_panel.add_child(caravan_col)
 
 	caravan_label = Label.new()
-	caravan_label.text = "КАРАВАН (ПОВОЗКА И ОСЁЛ): 500 / 500"
+	caravan_label.text = "КАРАВАН  500 / 500"
 	caravan_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	caravan_label.add_theme_font_size_override("font_size", 13)
-	caravan_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.75, 1.0))
+	caravan_label.add_theme_font_size_override("font_size", 11)
+	caravan_label.add_theme_color_override("font_color", Color(0.95, 0.88, 0.75, 0.95))
 	caravan_col.add_child(caravan_label)
 
 	caravan_bar = ProgressBar.new()
@@ -235,59 +278,133 @@ func _build_game_hud() -> void:
 	caravan_bar.max_value = 500.0
 	caravan_bar.value = 500.0
 	caravan_bar.show_percentage = false
-	caravan_bar.custom_minimum_size = Vector2(300.0, 10.0)
+	caravan_bar.custom_minimum_size = Vector2(240.0, 4.0)
 
 	var c_bar_bg := StyleBoxFlat.new()
-	c_bar_bg.bg_color = Color(0.12, 0.08, 0.04, 1.0)
+	c_bar_bg.bg_color = Color(0.12, 0.09, 0.05, 0.85)
+	c_bar_bg.set_corner_radius_all(2)
+
 	var c_bar_fill := StyleBoxFlat.new()
-	c_bar_fill.bg_color = Color(0.95, 0.76, 0.22, 1.0)
+	c_bar_fill.bg_color = Color(0.92, 0.72, 0.25, 1.0)
+	c_bar_fill.set_corner_radius_all(2)
+
 	caravan_bar.add_theme_stylebox_override("background", c_bar_bg)
 	caravan_bar.add_theme_stylebox_override("fill", c_bar_fill)
 	caravan_col.add_child(caravan_bar)
 	add_child(caravan_panel)
 
-	wave_label = Label.new()
-	wave_label.name = "WaveStatus"
-	wave_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	wave_label.offset_left = -260.0
-	wave_label.offset_top = 112.0
-	wave_label.offset_right = 260.0
-	wave_label.offset_bottom = 160.0
-	wave_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wave_label.text = "ОЖИДАНИЕ ВОЛНЫ"
-	wave_label.add_theme_font_size_override("font_size", 18)
-	wave_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.43, 1.0))
-	wave_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
-	wave_label.add_theme_constant_override("shadow_offset_x", 1)
-	wave_label.add_theme_constant_override("shadow_offset_y", 1)
-	add_child(wave_label)
+	# --- 3. СТИЛЬНАЯ КАРТОЧКА СТАТУСА ВОЛНЫ (ВСПЛЫВАЕТ ПОД КАРАВАНОМ) ---
+	var wave_box_style := StyleBoxFlat.new()
+	wave_box_style.bg_color = Color(0.04, 0.03, 0.02, 0.65)
+	wave_box_style.border_color = Color(0.85, 0.65, 0.25, 0.30)
+	wave_box_style.set_border_width_all(1)
+	wave_box_style.set_corner_radius_all(6)
+	wave_box_style.content_margin_left = 12.0
+	wave_box_style.content_margin_right = 12.0
+	wave_box_style.content_margin_top = 4.0
+	wave_box_style.content_margin_bottom = 4.0
 
-	# Панель подсказки взаимодействия [E] (по центру экрана под прицелом)
+	wave_panel = PanelContainer.new()
+	wave_panel.name = "WavePanel"
+	wave_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	wave_panel.offset_left = -160.0
+	wave_panel.offset_top = 92.0
+	wave_panel.offset_right = 160.0
+	wave_panel.offset_bottom = 132.0
+	wave_panel.add_theme_stylebox_override("panel", wave_box_style)
+
+	var wave_vbox := VBoxContainer.new()
+	wave_vbox.add_theme_constant_override("separation", 1)
+	wave_panel.add_child(wave_vbox)
+
+	wave_label = Label.new()
+	wave_label.name = "WaveTitle"
+	wave_label.text = "ПОДГОТОВКА"
+	wave_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	wave_label.add_theme_font_size_override("font_size", 12)
+	wave_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35, 1.0))
+	wave_vbox.add_child(wave_label)
+
+	wave_sub_label = Label.new()
+	wave_sub_label.name = "WaveSubtitle"
+	wave_sub_label.text = "СЛЕДУЮЩАЯ ВОЛНА ЧЕРЕЗ 15 СЕК"
+	wave_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	wave_sub_label.add_theme_font_size_override("font_size", 10)
+	wave_sub_label.add_theme_color_override("font_color", Color(0.75, 0.72, 0.65, 0.9))
+	wave_vbox.add_child(wave_sub_label)
+
+	add_child(wave_panel)
+
+	# --- 4. МИНИМАЛИСТИЧНЫЙ ВИДЖЕТ ВРЕМЕНИ И ФОНАРИКА (ВЕРХНИЙ ПРАВЫЙ УГОЛ) ---
+	var top_right_panel := PanelContainer.new()
+	top_right_panel.name = "TopRightStatus"
+	top_right_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	top_right_panel.offset_left = -180.0
+	top_right_panel.offset_top = 14.0
+	top_right_panel.offset_right = -16.0
+	top_right_panel.offset_bottom = 44.0
+
+	var tr_style := StyleBoxFlat.new()
+	tr_style.bg_color = Color(0.04, 0.035, 0.03, 0.65)
+	tr_style.border_color = Color(0.85, 0.70, 0.35, 0.25)
+	tr_style.set_border_width_all(1)
+	tr_style.set_corner_radius_all(6)
+	tr_style.content_margin_left = 10.0
+	tr_style.content_margin_right = 10.0
+	tr_style.content_margin_top = 2.0
+	tr_style.content_margin_bottom = 2.0
+	top_right_panel.add_theme_stylebox_override("panel", tr_style)
+
+	var tr_hbox := HBoxContainer.new()
+	tr_hbox.add_theme_constant_override("separation", 10)
+	top_right_panel.add_child(tr_hbox)
+
+	time_label = Label.new()
+	time_label.name = "TimeLabel"
+	time_label.text = "☀️ 12:00"
+	time_label.add_theme_font_size_override("font_size", 11)
+	time_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.65, 0.95))
+	tr_hbox.add_child(time_label)
+
+	flashlight_label = Label.new()
+	flashlight_label.name = "FlashlightLabel"
+	flashlight_label.text = "🔦 F"
+	flashlight_label.add_theme_font_size_override("font_size", 11)
+	flashlight_label.add_theme_color_override("font_color", Color(0.65, 0.65, 0.65, 0.8))
+	tr_hbox.add_child(flashlight_label)
+
+	add_child(top_right_panel)
+
+	# --- 5. МИНИМАЛИСТИЧНЫЙ ИНТЕРАКТИВНЫЙ БАР [E] ПОД ПРИЦЕЛОМ ---
 	var interact_style := StyleBoxFlat.new()
-	interact_style.bg_color = Color(0.04, 0.04, 0.05, 0.88)
-	interact_style.border_color = Color(0.9, 0.75, 0.3, 0.9)
+	interact_style.bg_color = Color(0.04, 0.035, 0.03, 0.75)
+	interact_style.border_color = Color(0.9, 0.75, 0.3, 0.5)
 	interact_style.set_border_width_all(1)
 	interact_style.set_corner_radius_all(6)
+	interact_style.content_margin_left = 12.0
+	interact_style.content_margin_right = 12.0
+	interact_style.content_margin_top = 6.0
+	interact_style.content_margin_bottom = 6.0
 
 	interact_box = PanelContainer.new()
 	interact_box.name = "InteractBox"
 	interact_box.set_anchors_preset(Control.PRESET_CENTER)
-	interact_box.offset_left = -170.0
-	interact_box.offset_top = 46.0
-	interact_box.offset_right = 170.0
-	interact_box.offset_bottom = 98.0
+	interact_box.offset_left = -150.0
+	interact_box.offset_top = 42.0
+	interact_box.offset_right = 150.0
+	interact_box.offset_bottom = 82.0
 	interact_box.add_theme_stylebox_override("panel", interact_style)
 
 	var interact_vbox := VBoxContainer.new()
-	interact_vbox.add_theme_constant_override("separation", 3)
+	interact_vbox.add_theme_constant_override("separation", 4)
 	interact_box.add_child(interact_vbox)
 
 	interact_label = Label.new()
 	interact_label.name = "InteractLabel"
 	interact_label.text = "[E] ВЗАИМОДЕЙСТВИЕ"
 	interact_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	interact_label.add_theme_font_size_override("font_size", 14)
-	interact_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.8, 1.0))
+	interact_label.add_theme_font_size_override("font_size", 12)
+	interact_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.85, 1.0))
 	interact_vbox.add_child(interact_label)
 
 	interact_bar = ProgressBar.new()
@@ -296,11 +413,16 @@ func _build_game_hud() -> void:
 	interact_bar.max_value = 1.0
 	interact_bar.value = 0.0
 	interact_bar.show_percentage = false
-	interact_bar.custom_minimum_size = Vector2(280.0, 8.0)
+	interact_bar.custom_minimum_size = Vector2(220.0, 4.0)
+
 	var i_bg := StyleBoxFlat.new()
-	i_bg.bg_color = Color(0.12, 0.12, 0.14, 1.0)
+	i_bg.bg_color = Color(0.12, 0.10, 0.08, 0.85)
+	i_bg.set_corner_radius_all(2)
+
 	var i_fill := StyleBoxFlat.new()
-	i_fill.bg_color = Color(0.3, 1.0, 0.45, 1.0)
+	i_fill.bg_color = Color(0.35, 1.0, 0.45, 1.0)
+	i_fill.set_corner_radius_all(2)
+
 	interact_bar.add_theme_stylebox_override("background", i_bg)
 	interact_bar.add_theme_stylebox_override("fill", i_fill)
 	interact_vbox.add_child(interact_bar)
@@ -308,19 +430,19 @@ func _build_game_hud() -> void:
 	interact_box.hide()
 	add_child(interact_box)
 
-	# Всплывающее текстовое уведомление (Toast)
+	# --- 6. ТОСТ-УВЕДОМЛЕНИЯ ПО ЦЕНТРУ ---
 	toast_label = Label.new()
 	toast_label.name = "ToastLabel"
 	toast_label.set_anchors_preset(Control.PRESET_CENTER)
 	toast_label.offset_left = -300.0
-	toast_label.offset_top = -120.0
+	toast_label.offset_top = -100.0
 	toast_label.offset_right = 300.0
-	toast_label.offset_bottom = -80.0
+	toast_label.offset_bottom = -68.0
 	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	toast_label.add_theme_font_size_override("font_size", 20)
-	toast_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.45, 1.0))
-	toast_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
+	toast_label.add_theme_font_size_override("font_size", 16)
+	toast_label.add_theme_color_override("font_color", Color(0.35, 1.0, 0.45, 1.0))
+	toast_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
 	toast_label.add_theme_constant_override("shadow_offset_x", 1)
 	toast_label.add_theme_constant_override("shadow_offset_y", 1)
 	toast_label.hide()
@@ -333,19 +455,21 @@ func _build_game_hud() -> void:
 	camp_dialogue_ui.name = "CampDialogueUI"
 	add_child(camp_dialogue_ui)
 
+	# Экран гибели
 	death_overlay = ColorRect.new()
 	death_overlay.name = "DeathOverlay"
 	death_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	death_overlay.color = Color(0.08, 0.0, 0.0, 0.76)
+	death_overlay.color = Color(0.08, 0.01, 0.01, 0.82)
 	death_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	death_overlay.hide()
+
 	var death_text := Label.new()
 	death_text.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	death_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	death_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	death_text.text = "ВЫ ПОГИБЛИ"
-	death_text.add_theme_font_size_override("font_size", 58)
-	death_text.add_theme_color_override("font_color", Color(1.0, 0.18, 0.12, 1.0))
+	death_text.add_theme_font_size_override("font_size", 48)
+	death_text.add_theme_color_override("font_color", Color(1.0, 0.22, 0.16, 1.0))
 	death_overlay.add_child(death_text)
 	add_child(death_overlay)
 
