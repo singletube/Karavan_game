@@ -2,6 +2,8 @@ extends CanvasLayer
 
 class_name HUD
 
+const CampDialogueUIClass = preload("res://scripts/camp_dialogue_ui.gd")
+
 #player character reference variable
 @onready var play_char: PlayerCharacter = $".."
 @onready var weapon_manager: Node3D = %WeaponManager
@@ -45,6 +47,7 @@ var interact_box: PanelContainer
 var interact_label: Label
 var interact_bar: ProgressBar
 var toast_label: Label
+var camp_dialogue_ui: Control = null
 var _is_caravan_blocked: bool = false
 
 var compass_panel: PanelContainer
@@ -325,6 +328,11 @@ func _build_game_hud() -> void:
 
 	_build_compass()
 
+	# Диалоговое окно жителя лагеря (Торговля, Прокачка, Квесты)
+	camp_dialogue_ui = CampDialogueUIClass.new()
+	camp_dialogue_ui.name = "CampDialogueUI"
+	add_child(camp_dialogue_ui)
+
 	death_overlay = ColorRect.new()
 	death_overlay.name = "DeathOverlay"
 	death_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -409,12 +417,16 @@ func _connect_caravan() -> void:
 		caravan.connect("caravan_blocked_status", _on_caravan_blocked_status)
 	_on_caravan_health_changed(int(caravan.get("health")), int(caravan.get("MAX_HEALTH")))
 
-func _on_caravan_blocked_status(blocked: bool, _reason: String) -> void:
+func _on_caravan_blocked_status(blocked: bool, reason: String) -> void:
 	_is_caravan_blocked = blocked
 	if caravan_label:
 		if blocked:
-			caravan_label.text = "⚠️ КАРАВАН ОСТАНОВЛЕН: ЗАВАЛ НА ПУТИ!"
-			caravan_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.2, 1.0))
+			if reason.contains("ЛАГЕР"):
+				caravan_label.text = "⛺ КАРАВАН В БЕЗОПАСНОСТИ: ЛАГЕРЬ ВЫЖИВШИХ"
+				caravan_label.add_theme_color_override("font_color", Color(0.35, 1.0, 0.45, 1.0))
+			else:
+				caravan_label.text = "⚠️ КАРАВАН ОСТАНОВЛЕН: ЗАВАЛ НА ПУТИ!"
+				caravan_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.2, 1.0))
 		else:
 			var caravan = get_tree().get_first_node_in_group("caravan")
 			if caravan:
@@ -432,6 +444,10 @@ func show_interaction_prompt(prompt_text: String, progress: float = 0.0, show_ba
 func hide_interaction_prompt() -> void:
 	if interact_box:
 		interact_box.hide()
+
+func open_camp_dialogue_ui(npc_type: int, npc_name: String, player: Node) -> void:
+	if camp_dialogue_ui:
+		camp_dialogue_ui.open_for_npc(npc_type, npc_name, player)
 
 func show_toast(msg: String, col: Color = Color(0.3, 1.0, 0.45), duration: float = 2.8) -> void:
 	if not toast_label:

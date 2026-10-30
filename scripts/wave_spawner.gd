@@ -17,6 +17,7 @@ var enemies_to_spawn   : Array[String] = []
 var spawn_timer        : float = 0.0
 
 var is_in_break        : bool  = false
+var is_camp_paused     : bool  = false
 var break_timer        : float = 0.0
 var last_countdown_sec : int   = -1
 
@@ -64,6 +65,9 @@ func _find_and_connect_hud() -> void:
 func _process(delta: float) -> void:
 	# На клиенте волнами управляет хост/сервер
 	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+		return
+
+	if is_camp_paused:
 		return
 
 	if is_in_break:
@@ -419,6 +423,36 @@ func _complete_wave() -> void:
 
 	_start_break(wave_break)
 
+func set_camp_peaceful_zone(in_camp: bool) -> void:
+	is_camp_paused = in_camp
+	if in_camp:
+		# Уничтожаем оставшихся внешних зомби у входа в безопасный лагерь
+		if enemies_container:
+			for child: Node in enemies_container.get_children():
+				if is_instance_valid(child):
+					child.queue_free()
+		enemies_alive = 0
+		enemies_to_spawn.clear()
+		wave_active = false
+		enemies_remaining.emit(0)
+		if has_node("/root/MusicManager"):
+			get_node("/root/MusicManager").set_combat_mode(false)
+		wave_started.emit(current_wave, "БЕЗОПАСНАЯ ЗОНА: ЛАГЕРЬ ВЫЖИВШИХ")
+	else:
+		# При выходе из лагеря даем короткую передышку перед следующей волной
+		_start_break(10.0)
+
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		sync_camp_peaceful_zone.rpc(in_camp)
+
+@rpc("authority", "reliable")
+func sync_camp_peaceful_zone(in_camp: bool) -> void:
+	is_camp_paused = in_camp
+	if in_camp:
+		wave_started.emit(current_wave, "БЕЗОПАСНАЯ ЗОНА: ЛАГЕРЬ ВЫЖИВШИХ")
+		if has_node("/root/MusicManager"):
+			get_node("/root/MusicManager").set_combat_mode(false)
+
 func reset_to_wave_zero() -> void:
 	wave_active = false
 	is_in_break = false
@@ -441,7 +475,7 @@ func reset_to_wave_zero() -> void:
 # --- СЕТЕВАЯ СИНХРОНИЗАЦИЯ ВОЛН ---
 func send_full_sync_to_peer(peer_id: int) -> void:
 	var rem: int = enemies_alive + enemies_to_spawn.size()
-	rpc_id(peer_id, "sync_full_spawner_state", current_wave, wave_active, is_in_break, int(ceil(maxf(0.0, break_timer))), rem)
+	rpc_id(peer_id, "sync_full_spawner_state", current_wave, wave_active, is_in_break, int(ceil(maxf(0.0, break_timer))), rem, is_camp_paused)
 
 	# Отправляем список всех живых врагов новому клиенту
 	var existing_enemies: Array = []
@@ -483,11 +517,16 @@ func sync_all_existing_enemies(enemies_list: Array) -> void:
 			enemy.enemy_died.connect(_on_enemy_died.bind(enemy))
 
 @rpc("authority", "reliable")
-func sync_full_spawner_state(w_num: int, is_active: bool, in_break: bool, break_sec: int, rem: int) -> void:
+func sync_full_spawner_state(w_num: int, is_active: bool, in_break: bool, break_sec: int, rem: int, s_camp_paused: bool = false) -> void:
 	current_wave = w_num
 	wave_active = is_active
 	is_in_break = in_break
-	if is_in_break:
+	is_camp_paused = s_camp_paused
+	if is_camp_paused:
+		wave_started.emit(current_wave, "БЕЗОПАСНАЯ ЗОНА: ЛАГЕРЬ ВЫЖИВШИХ")
+		if has_node("/root/MusicManager"):
+			get_node("/root/MusicManager").set_combat_mode(false)
+	elif is_in_break:
 		wave_countdown.emit(break_sec)
 	elif wave_active:
 		var data: Dictionary = _get_wave_composition(current_wave)

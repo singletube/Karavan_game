@@ -256,6 +256,11 @@ func notify_hud(msg: String, col: Color = Color.WHITE) -> void:
 	if hud_node:
 		hud_node.show_toast(msg, col)
 
+func open_camp_dialogue(npc_type: int, npc_name: String) -> void:
+	var hud_node: HUD = get_node_or_null("HUD") as HUD
+	if hud_node and hud_node.has_method("open_camp_dialogue_ui"):
+		hud_node.open_camp_dialogue_ui(npc_type, npc_name, self)
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_local() or is_dead:
 		return

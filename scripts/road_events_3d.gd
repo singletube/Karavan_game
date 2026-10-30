@@ -2,6 +2,9 @@ extends Node
 
 class_name RoadEvents3D
 
+const OutpostCamp3DClass = preload("res://scripts/outpost_camp_3d.gd")
+const CampNPC3DClass = preload("res://scripts/camp_npc_3d.gd")
+
 # Фабрика дорожных событий: баррикады с взрывоопасными бочками, заброшенные заправки и оазисы
 
 # --- Материалы ---
@@ -1691,6 +1694,265 @@ static func create_crawlspace_shelter_ruins() -> Node3D:
 	root.add_child(crate)
 
 	return root
+
+# =========================================================================
+# УКРЕПЛЕННЫЙ АВАНПОСТ / ЛАГЕРЬ ВЫЖИВШИХ НА ДОРОГЕ (OUTPOST SURVIVOR CAMP)
+# =========================================================================
+static func create_outpost_camp() -> Node3D:
+	_ensure_materials()
+	var root: Node3D = OutpostCamp3DClass.new()
+	root.name = "OutpostCamp3D"
+
+	var body := StaticBody3D.new()
+	body.name = "CampStaticBody"
+	root.add_child(body)
+
+	# --- 1. ПЕРИМЕТР И СТЕНЫ ЛАГЕРЯ ---
+	# Лагерь размером 28м по ширине (X) и 46м по длине (Z: от +22 до -22)
+	# Дорога каравана проходит ровно по центру (X=0) с юга (Z=+22) на север (Z=-22)
+
+	# Левая стена (песчаник + металлические зубья)
+	_add_collidable_box(body, root, Vector3(1.4, 3.8, 44.0), mat_sandstone, Vector3(-13.5, 1.9, 0.0))
+	_add_collidable_box(body, root, Vector3(0.3, 0.6, 44.0), mat_steel_beam, Vector3(-13.5, 4.1, 0.0))
+
+	# Правая стена
+	_add_collidable_box(body, root, Vector3(1.4, 3.8, 44.0), mat_sandstone, Vector3(13.5, 1.9, 0.0))
+	_add_collidable_box(body, root, Vector3(0.3, 0.6, 44.0), mat_steel_beam, Vector3(13.5, 4.1, 0.0))
+
+	# Сторожевые башни по углам лагеря
+	var tower_coords := [
+		Vector3(-13.5, 0.0, 21.0),
+		Vector3(13.5, 0.0, 21.0),
+		Vector3(-13.5, 0.0, -21.0),
+		Vector3(13.5, 0.0, -21.0)
+	]
+	for t_pos in tower_coords:
+		# Опора башни
+		_add_collidable_cyl(body, root, 6.2, 1.6, 1.8, mat_sandstone_dark, t_pos + Vector3(0.0, 3.1, 0.0))
+		# Смотровая площадка
+		_add_collidable_box(body, root, Vector3(3.8, 0.4, 3.8), mat_steel_beam, t_pos + Vector3(0.0, 6.4, 0.0))
+		# Перила
+		_add_box(root, Vector3(3.8, 0.9, 0.1), mat_steel_beam, t_pos + Vector3(0.0, 7.0, 1.85))
+		_add_box(root, Vector3(3.8, 0.9, 0.1), mat_steel_beam, t_pos + Vector3(0.0, 7.0, -1.85))
+		_add_box(root, Vector3(0.1, 0.9, 3.8), mat_steel_beam, t_pos + Vector3(1.85, 7.0, 0.0))
+		_add_box(root, Vector3(0.1, 0.9, 3.8), mat_steel_beam, t_pos + Vector3(-1.85, 7.0, 0.0))
+		# Прожектор на башне
+		var spot := SpotLight3D.new()
+		spot.light_color = Color(1.0, 0.92, 0.65)
+		spot.light_energy = 3.5
+		spot.spot_range = 38.0
+		spot.spot_angle = 38.0
+		spot.position = t_pos + Vector3(0.0, 7.2, 0.0)
+		spot.rotation = Vector3(deg_to_rad(-25.0), deg_to_rad(180.0 if t_pos.z > 0.0 else 0.0), 0.0)
+		root.add_child(spot)
+
+	# --- 2. ВХОДНЫЕ ВОРОТА (ЮЖНЫЙ ВЪЕЗД: Z = +21.5) ---
+	# Пилоны ворот
+	_add_collidable_box(body, root, Vector3(2.2, 5.5, 2.2), mat_sandstone, Vector3(-5.2, 2.75, 21.5))
+	_add_collidable_box(body, root, Vector3(2.2, 5.5, 2.2), mat_sandstone, Vector3(5.2, 2.75, 21.5))
+	# Верхняя перекладина ворот
+	_add_collidable_box(body, root, Vector3(12.6, 0.9, 2.2), mat_steel_beam, Vector3(0.0, 5.95, 21.5))
+
+	# Подвижная решетка входных ворот
+	var entry_gate := Node3D.new()
+	entry_gate.name = "EntryGate"
+	entry_gate.position = Vector3(0.0, 6.5, 21.5) # Изначально подняты, чтобы караван заехал!
+	root.add_child(entry_gate)
+	root.entry_gate_node = entry_gate
+
+	# Полотно решетки
+	_add_box(entry_gate, Vector3(8.0, 4.4, 0.35), mat_burnt_metal, Vector3.ZERO)
+	for gi in range(7):
+		_add_cyl(entry_gate, 4.4, 0.06, 0.06, mat_steel_beam, Vector3(-3.0 + float(gi) * 1.0, 0.0, 0.0))
+
+	# Коллизия решетки (по умолчанию выключена, пока поднята)
+	var entry_col := CollisionShape3D.new()
+	var entry_box := BoxShape3D.new()
+	entry_box.size = Vector3(8.0, 4.4, 0.6)
+	entry_col.shape = entry_box
+	entry_col.position = Vector3(0.0, 2.2, 21.5)
+	entry_col.disabled = true
+	body.add_child(entry_col)
+	root.entry_gate_col = entry_col
+
+	# --- 3. ВЫХОДНЫЕ ВОРОТА (СЕВЕРНЫЙ ВЫЕЗД: Z = -21.5) ---
+	# Пилоны
+	_add_collidable_box(body, root, Vector3(2.2, 5.5, 2.2), mat_sandstone, Vector3(-5.2, 2.75, -21.5))
+	_add_collidable_box(body, root, Vector3(2.2, 5.5, 2.2), mat_sandstone, Vector3(5.2, 2.75, -21.5))
+	_add_collidable_box(body, root, Vector3(12.6, 0.9, 2.2), mat_steel_beam, Vector3(0.0, 5.95, -21.5))
+
+	# Подвижная решетка выходных ворот (ИЗНАЧАЛЬНО ЗАКРЫТА: караван останавливается перед ней!)
+	var exit_gate := Node3D.new()
+	exit_gate.name = "ExitGate"
+	exit_gate.position = Vector3(0.0, 2.2, -21.5)
+	root.add_child(exit_gate)
+	root.exit_gate_node = exit_gate
+
+	_add_box(exit_gate, Vector3(8.0, 4.4, 0.35), mat_burnt_metal, Vector3.ZERO)
+	for gi in range(7):
+		_add_cyl(exit_gate, 4.4, 0.06, 0.06, mat_steel_beam, Vector3(-3.0 + float(gi) * 1.0, 0.0, 0.0))
+
+	# Коллизия выходных ворот (препятствие каравану)
+	var exit_col := CollisionShape3D.new()
+	var exit_box := BoxShape3D.new()
+	exit_box.size = Vector3(8.0, 4.4, 0.6)
+	exit_col.shape = exit_box
+	exit_col.position = Vector3(0.0, 2.2, -21.5)
+	exit_col.disabled = false
+	body.add_child(exit_col)
+	root.exit_gate_col = exit_col
+
+	# Механизм / лебёдка открытия выходных ворот [E]
+	var gate_switch := Node3D.new()
+	gate_switch.name = "ExitGateSwitch"
+	gate_switch.position = Vector3(4.8, 1.2, -20.6)
+	gate_switch.add_to_group("interactive")
+	gate_switch.set_meta("prompt_text", "ОТКРЫТЬ ВОРОТА АВАНПОСТА [E]")
+	gate_switch.set_meta("requires_hold", true)
+	gate_switch.set_meta("hold_duration", 2.0)
+	root.exit_gate_trigger = gate_switch
+
+	# Визуальный пульт лебёдки
+	_add_collidable_box(body, root, Vector3(0.8, 1.4, 0.6), mat_steel_beam, Vector3(4.8, 0.7, -20.6))
+	_add_box(gate_switch, Vector3(0.2, 0.6, 0.2), mat_emergency_red, Vector3(0.0, 0.35, 0.0), Vector3(deg_to_rad(30.0), 0.0, 0.0))
+
+	# Скрипт переключателя
+	var sw_script := GDScript.new()
+	sw_script.source_code = """
+extends Node3D
+
+func on_interact_completed(player: Node) -> void:
+	var camp := get_parent() as OutpostCamp3D
+	if camp:
+		camp.open_exit_gate_by_player(player)
+"""
+	sw_script.reload()
+	gate_switch.set_script(sw_script)
+	root.add_child(gate_switch)
+
+	# --- 4. ЗОНА ОТДЫХА И ТОРГОВЛИ ВНУТРИ ЛАГЕРЯ ---
+	# Костёр посередине лагеря с навесом
+	var fire_center := Vector3(-5.5, 0.0, 2.0)
+	# Каменное кольцо очага
+	for fi in range(8):
+		var ang: float = float(fi) * (TAU / 8.0)
+		_add_box(root, Vector3(0.35, 0.25, 0.35), mat_sandstone_dark, fire_center + Vector3(cos(ang) * 0.9, 0.12, sin(ang) * 0.9))
+	# Тлеющие угли и кострище
+	_add_cyl(root, 0.18, 0.65, 0.65, mat_burnt_metal, fire_center + Vector3(0.0, 0.08, 0.0))
+	var fire_light := OmniLight3D.new()
+	fire_light.light_color = Color(1.0, 0.55, 0.15)
+	fire_light.light_energy = 2.8
+	fire_light.omni_range = 14.0
+	fire_light.position = fire_center + Vector3(0.0, 0.8, 0.0)
+	root.add_child(fire_light)
+
+	# Лавки и тюки вокруг костра
+	_add_collidable_box(body, root, Vector3(2.2, 0.45, 0.65), mat_beam_wood, fire_center + Vector3(0.0, 0.22, 1.8))
+	_add_collidable_box(body, root, Vector3(2.2, 0.45, 0.65), mat_beam_wood, fire_center + Vector3(0.0, 0.22, -1.8))
+	_add_box(root, Vector3(1.8, 0.12, 0.5), mat_cushion, fire_center + Vector3(0.0, 0.48, 1.8))
+
+	# Шатёр торговца (слева у стены)
+	var trader_pos := Vector3(-8.8, 0.0, -4.5)
+	_add_collidable_box(body, root, Vector3(5.5, 3.2, 6.5), mat_adobe_clay, trader_pos + Vector3(0.0, 1.6, 0.0))
+	_add_box(root, Vector3(5.8, 0.3, 6.8), mat_carpet, trader_pos + Vector3(0.0, 3.3, 0.0))
+	# Вывеска Торговца
+	_add_box(root, Vector3(2.4, 0.6, 0.1), mat_gold_treasure, trader_pos + Vector3(0.0, 2.8, 3.35))
+
+	# NPC 1: ТОРГОВЕЦ (Торговля патронами, медикаментами, припасами)
+	var npc_trader := _create_interactive_npc(
+		0,
+		"Торговец Фарид",
+		"ПОГОВОРИТЬ С ТОРГОВЦЕМ ФАРИДОМ [E]",
+		trader_pos + Vector3(0.0, 0.0, 2.2),
+		deg_to_rad(180.0)
+	)
+	root.add_child(npc_trader)
+
+	# Стол торговца с товарами
+	_add_collidable_box(body, root, Vector3(2.4, 0.85, 0.9), mat_beam_wood, trader_pos + Vector3(0.0, 0.42, 1.3))
+	_add_box(root, Vector3(0.4, 0.2, 0.3), mat_military_green, trader_pos + Vector3(-0.6, 0.95, 1.3)) # патроны
+	_add_box(root, Vector3(0.3, 0.25, 0.25), mat_white_enamel, trader_pos + Vector3(0.5, 0.98, 1.3)) # аптечка
+	_add_box(root, Vector3(0.08, 0.08, 0.08), mat_emergency_red, trader_pos + Vector3(0.5, 0.98, 1.45)) # крест
+
+	# Мастерская / Механик (справа у стены)
+	var mechanic_pos := Vector3(8.5, 0.0, -3.5)
+	_add_collidable_box(body, root, Vector3(5.0, 3.5, 7.0), mat_sandstone, mechanic_pos + Vector3(0.0, 1.75, 0.0))
+	_add_box(root, Vector3(5.2, 0.25, 7.2), mat_steel_beam, mechanic_pos + Vector3(0.0, 3.6, 0.0))
+	# Верстак и наковальня механика
+	_add_collidable_box(body, root, Vector3(2.6, 0.9, 1.0), mat_steel_beam, mechanic_pos + Vector3(0.0, 0.45, 2.2))
+	_add_box(root, Vector3(0.6, 0.4, 0.4), mat_burnt_metal, mechanic_pos + Vector3(-0.6, 1.1, 2.2)) # наковальня
+
+	# NPC 2: МЕХАНИК (Прокачка каравана, брони, осей повозки)
+	var npc_mechanic := _create_interactive_npc(
+		1,
+		"Оружейник Гассан",
+		"УЛУЧШИТЬ КАРАВАН И ОРУЖИЕ У МАСТЕРА [E]",
+		mechanic_pos + Vector3(0.0, 0.0, 3.2),
+		deg_to_rad(180.0)
+	)
+	root.add_child(npc_mechanic)
+
+	# Штаб гарнизона / Командир (справа спереди)
+	var commander_pos := Vector3(8.2, 0.0, 10.5)
+	_add_collidable_box(body, root, Vector3(4.8, 3.0, 5.5), mat_bunker_wall, commander_pos + Vector3(0.0, 1.5, 0.0))
+	# Картографический стол
+	_add_collidable_box(body, root, Vector3(1.8, 0.85, 1.4), mat_beam_wood, commander_pos + Vector3(0.0, 0.42, 1.6))
+	_add_box(root, Vector3(1.4, 0.02, 1.1), mat_paper, commander_pos + Vector3(0.0, 0.87, 1.6)) # карта пустоши
+
+	# NPC 3: КОМАНДИР АВАНПОСТА (Квесты и награды)
+	var npc_commander := _create_interactive_npc(
+		2,
+		"Капитан Башир",
+		"ВЗЯТЬ ЗАДАНИЕ У КАПИТАНА БАШИРА [E]",
+		commander_pos + Vector3(0.0, 0.0, 2.6),
+		deg_to_rad(180.0)
+	)
+	root.add_child(npc_commander)
+
+	# Фонари освещения лагеря
+	var lamp1 := OmniLight3D.new()
+	lamp1.light_color = Color(1.0, 0.88, 0.65)
+	lamp1.light_energy = 2.4
+	lamp1.omni_range = 15.0
+	lamp1.position = Vector3(0.0, 3.5, 0.0)
+	root.add_child(lamp1)
+
+	return root
+
+static func _create_interactive_npc(npc_type: int, npc_name: String, prompt_text: String, pos: Vector3, rot_y: float) -> Node3D:
+	var holder := Node3D.new()
+	holder.name = "NPC_%s" % npc_name.replace(" ", "_")
+	holder.position = pos
+	holder.rotation.y = rot_y
+
+	# 3D Модель NPC
+	var model: Node3D = CampNPC3DClass.new()
+	model.set("npc_type", npc_type)
+	model.set("npc_name", npc_name)
+	holder.add_child(model)
+
+	# Настройка интерактивной группы и метаданных
+	holder.add_to_group("interactive")
+	holder.set_meta("prompt_text", prompt_text)
+	holder.set_meta("requires_hold", false)
+	holder.set_meta("npc_type", npc_type)
+	holder.set_meta("npc_name", npc_name)
+
+	# Скрипт взаимодействия: открывает диалоговый UI у игрока
+	var npc_script := GDScript.new()
+	npc_script.source_code = """
+extends Node3D
+
+func on_interact(player: Node) -> void:
+	var n_type: int = int(get_meta("npc_type", 0))
+	var n_name: String = str(get_meta("npc_name", "Житель лагеря"))
+	if player and player.has_method("open_camp_dialogue"):
+		player.open_camp_dialogue(n_type, n_name)
+"""
+	npc_script.reload()
+	holder.set_script(npc_script)
+
+	return holder
 
 # =========================================================================
 # ВСПОМОГАТЕЛЬНЫЕ МЕШ-ФУНКЦИИ

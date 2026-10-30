@@ -14,6 +14,7 @@ class_name DesertGenerator
 
 const TUMBLEWEED_SCENE = preload("res://scenes/tumbleweed.tscn")
 const RoadEvents3D = preload("res://scripts/road_events_3d.gd")
+const OutpostCamp3D = preload("res://scripts/outpost_camp_3d.gd")
 
 # Уникальный сид мира для полной случайности каждой новой игры (и синхронизации в мультиплеере)
 var world_seed            : int        = 0
@@ -117,7 +118,7 @@ func get_raw_terrain_height(wx: float, wz: float) -> float:
 func get_terrain_height(wx: float, wz: float) -> float:
 	var h: float = get_raw_terrain_height(wx, wz)
 
-	# Выравнивание фундамента под постройки (POI Foundation Leveling)
+	# Выравнивание фундамента под постройки и лагеря (POI & Camp Foundation Leveling)
 	for p_coord in spawned_pois.keys():
 		var data: Dictionary = spawned_pois[p_coord]
 		var c_world_x: float = float(p_coord.x) * chunk_size
@@ -128,9 +129,12 @@ func get_terrain_height(wx: float, wz: float) -> float:
 		var dx: float = wx - p_x
 		var dz: float = wz - p_z
 		var d: float = sqrt(dx * dx + dz * dz)
-		if d < 22.0:
+		var poi_type: String = data.get("type", "")
+		var level_radius: float = 30.0 if poi_type == "outpost_camp" else 22.0
+		var inner_radius: float = 18.0 if poi_type == "outpost_camp" else 10.0
+		if d < level_radius:
 			var base_h: float = get_raw_terrain_height(p_x, p_z)
-			var blend: float = clampf((d - 10.0) / 12.0, 0.0, 1.0)
+			var blend: float = clampf((d - inner_radius) / (level_radius - inner_radius), 0.0, 1.0)
 			blend = blend * blend * (3.0 - 2.0 * blend)
 			h = lerpf(base_h, h, blend)
 
@@ -388,6 +392,8 @@ func _create_poi_node(p_type: String) -> Node3D:
 			return RoadEvents3D.create_plane_wreck_ruins()
 		"clay_ruins":
 			return RoadEvents3D.create_clay_ruins()
+		"outpost_camp":
+			return RoadEvents3D.create_outpost_camp()
 		_:
 			return RoadEvents3D.create_gas_station()
 
@@ -520,18 +526,39 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	if is_spawn_center:
 		_populate_starting_location(chunk, coord, rng, exclusion_zones)
 	elif coord.x == 0 and coord.y < 0:
+		# Периодический спавн укрепленного лагеря выживших (каждые 8-10 чанков, ~1 км пути)
+		var is_camp_chunk: bool = (abs(coord.y) >= 6) and (abs(coord.y) % 8 == 0)
+
 		if spawned_pois.has(coord):
 			var data: Dictionary = spawned_pois[coord]
 			var p_type: String = data.get("type", "gas_station")
 			var node := _create_poi_node(p_type)
 			node.rotation.y = data.get("rot", 0.0)
-			var sx: float = data.get("side_x", 14.5)
+			var sx: float = data.get("side_x", data.get("x", 0.0))
 			var sz: float = data.get("z", 0.0)
 			var sy: float = get_terrain_height(chunk.position.x + sx, chunk.position.z + sz)
 			node.position = Vector3(sx, sy - 0.06, sz)
 			chunk.add_child(node)
-			_setup_poi_loot_crate(node, coord)
-			exclusion_zones.append(Vector3(sx, sz, 18.0))
+			if node is OutpostCamp3D:
+				(node as OutpostCamp3D).camp_id = "%d_%d" % [coord.x, coord.y]
+				# Синхронизация открытых ворот, если они уже открыты в сети
+				if NetworkManager != null and NetworkManager.opened_camp_gates.has((node as OutpostCamp3D).camp_id):
+					(node as OutpostCamp3D).apply_open_exit_gate()
+			else:
+				_setup_poi_loot_crate(node, coord)
+			exclusion_zones.append(Vector3(sx, sz, 26.0 if p_type == "outpost_camp" else 18.0))
+
+		elif is_camp_chunk and _is_far_enough_from_pois(coord, 3):
+			# Спавн укрепленного лагеря прямо на караванном тракте (X=0)
+			var camp_node := _create_poi_node("outpost_camp") as OutpostCamp3D
+			camp_node.camp_id = "%d_%d" % [coord.x, coord.y]
+			var camp_y: float = get_terrain_height(chunk.position.x, chunk.position.z)
+			camp_node.position = Vector3(0.0, camp_y - 0.06, 0.0)
+			chunk.add_child(camp_node)
+			exclusion_zones.append(Vector3(0.0, 0.0, 26.0))
+			spawned_pois[coord] = { "type": "outpost_camp", "side_x": 0.0, "x": 0.0, "z": 0.0, "rot": 0.0 }
+			if NetworkManager != null and NetworkManager.opened_camp_gates.has(camp_node.camp_id):
+				camp_node.apply_open_exit_gate()
 
 		else:
 			var can_poi: bool = (coord.y <= -1) and _is_far_enough_from_pois(coord, rng.randi_range(2, 4))

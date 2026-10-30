@@ -110,9 +110,10 @@ func _on_peer_connected(id: int) -> void:
 		if desert_gen and desert_gen.has_method("send_full_sync_to_peer"):
 			desert_gen.send_full_sync_to_peer(id)
 
-		# Синхронизируем списки уже расчищенных завалов и собранного лута
+		# Синхронизируем списки уже расчищенных завалов, открытых ворот лагерей и собранного лута
 		rpc_id(id, "sync_all_cleared_obstacles", cleared_obstacles.keys())
 		rpc_id(id, "sync_all_looted_crates", looted_crates.keys())
+		rpc_id(id, "sync_all_opened_camp_gates", opened_camp_gates.keys())
 
 func _on_peer_disconnected(id: int) -> void:
 	emit_signal("player_disconnected", id)
@@ -216,6 +217,43 @@ func sync_all_cleared_obstacles(all_ids: Array) -> void:
 		var obst := _find_obstacle_by_id(s_id)
 		if obst and is_instance_valid(obst):
 			obst.queue_free()
+
+# === СИНХРОНИЗАЦИЯ ВОРОТ ЛАГЕРЕЙ ВЫЖИВШИХ ===
+var opened_camp_gates: Dictionary = {}
+
+func request_open_camp_gate(camp_id: String) -> void:
+	if camp_id.is_empty():
+		return
+	if not multiplayer.has_multiplayer_peer():
+		_apply_open_camp_gate(camp_id)
+		return
+	rpc("sync_open_camp_gate", camp_id)
+
+@rpc("any_peer", "call_local", "reliable")
+func sync_open_camp_gate(camp_id: String) -> void:
+	_apply_open_camp_gate(camp_id)
+
+func _apply_open_camp_gate(camp_id: String) -> void:
+	opened_camp_gates[camp_id] = true
+	var camp := _find_camp_by_id(camp_id)
+	if camp and is_instance_valid(camp) and camp.has_method("apply_open_exit_gate"):
+		camp.apply_open_exit_gate()
+
+func _find_camp_by_id(camp_id: String) -> Node:
+	var camps := get_tree().get_nodes_in_group("outpost_camp")
+	for c in camps:
+		if is_instance_valid(c) and c.get("camp_id") == camp_id:
+			return c
+	return null
+
+@rpc("authority", "reliable")
+func sync_all_opened_camp_gates(all_ids: Array) -> void:
+	for id in all_ids:
+		var s_id: String = str(id)
+		opened_camp_gates[s_id] = true
+		var camp := _find_camp_by_id(s_id)
+		if camp and is_instance_valid(camp) and camp.has_method("apply_open_exit_gate"):
+			camp.apply_open_exit_gate()
 
 # === СИНХРОНИЗАЦИЯ ЛУТА (ПРИПАСЫ НА ЗАПРАВКАХ И В ОАЗИСАХ) ===
 var looted_crates: Dictionary = {}

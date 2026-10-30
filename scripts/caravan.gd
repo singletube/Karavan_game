@@ -17,6 +17,7 @@ signal caravan_blocked_status(blocked: bool, reason: String)
 var health: int = MAX_HEALTH
 var is_destroyed: bool = false
 var is_blocked: bool = false
+var is_in_camp: bool = false
 var walk_phase: float = 0.0
 
 var track_dist: float = 0.0
@@ -75,9 +76,13 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var was_blocked := is_blocked
-	is_blocked = _check_road_obstacles()
+	var road_blocked := _check_road_obstacles()
+	is_blocked = road_blocked or is_in_camp
 	if is_blocked != was_blocked:
-		caravan_blocked_status.emit(is_blocked, "ДОРОГА ЗАБЛОКИРОВАНА!" if is_blocked else "")
+		var status_text := "ДОРОГА ЗАБЛОКИРОВАНА!"
+		if is_in_camp:
+			status_text = "ПРИВАЛ В ЛАГЕРЕ ВЫЖИВШИХ"
+		caravan_blocked_status.emit(is_blocked, status_text if is_blocked else "")
 
 	# Сетевая синхронизация состояния каравана (10 раз в сек)
 	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
@@ -161,6 +166,15 @@ func _check_road_obstacles() -> bool:
 # Возвращает позицию спавна внутри кузова повозки (для игрока)
 func get_cargo_spawn_position() -> Vector3:
 	return global_transform * Vector3(0.0, 1.15, 0.3)
+
+func set_in_camp(in_camp: bool) -> void:
+	is_in_camp = in_camp
+	var road_blocked := _check_road_obstacles()
+	is_blocked = road_blocked or is_in_camp
+	var status_text := "ДОРОГА ЗАБЛОКИРОВАНА!"
+	if is_in_camp:
+		status_text = "ПРИВАЛ В ЛАГЕРЕ ВЫЖИВШИХ"
+	caravan_blocked_status.emit(is_blocked, status_text if is_blocked else "")
 
 func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> void:
 	if is_destroyed:
