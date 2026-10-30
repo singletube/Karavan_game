@@ -85,37 +85,50 @@ func _ready() -> void:
 	_connect_caravan()
 
 func _style_weapon_properties() -> void:
-	# Изящная стеклянная панель оружия в правом нижнем углу
-	var w_style := StyleBoxFlat.new()
-	w_style.bg_color = Color(0.04, 0.035, 0.03, 0.72)
-	w_style.border_color = Color(0.85, 0.70, 0.35, 0.40)
-	w_style.set_border_width_all(1)
-	w_style.set_corner_radius_all(10)
-	w_style.content_margin_left = 18.0
-	w_style.content_margin_right = 18.0
-	w_style.content_margin_top = 10.0
-	w_style.content_margin_bottom = 10.0
-	w_style.shadow_color = Color(0.0, 0.0, 0.0, 0.35)
-	w_style.shadow_size = 6
+	# Скрываем старые debug-метки ("Available weapons :", "Weapon name :", etc.)
+	var left_col := weapon_properties.get_node_or_null("PanelContainer/HBoxContainer/VBoxContainer")
+	if left_col:
+		left_col.hide()
+
+	# Полностью убираем серую рамку и фоновую коробку — делаем стильный парящий минималистичный HUD
+	var transparent_style := StyleBoxEmpty.new()
+	weapon_properties.add_theme_stylebox_override("panel", transparent_style)
+	var pc := weapon_properties.get_node_or_null("PanelContainer") as PanelContainer
+	if pc:
+		pc.add_theme_stylebox_override("panel", transparent_style)
 
 	weapon_properties.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	weapon_properties.offset_left = -260.0
-	weapon_properties.offset_top = -105.0
-	weapon_properties.offset_right = -18.0
-	weapon_properties.offset_bottom = -18.0
-	weapon_properties.add_theme_stylebox_override("panel", w_style)
+	weapon_properties.offset_left = -220.0
+	weapon_properties.offset_top = -85.0
+	weapon_properties.offset_right = -24.0
+	weapon_properties.offset_bottom = -20.0
 
-	weapon_name_label_text.add_theme_font_size_override("font_size", 14)
-	weapon_name_label_text.add_theme_color_override("font_color", Color(0.95, 0.85, 0.55, 0.95))
+	# Название оружия: аккуратный золотистый трекинг без рамок
+	weapon_name_label_text.add_theme_font_size_override("font_size", 13)
+	weapon_name_label_text.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45, 0.95))
+	weapon_name_label_text.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	weapon_name_label_text.add_theme_constant_override("shadow_offset_x", 1)
+	weapon_name_label_text.add_theme_constant_override("shadow_offset_y", 1)
+	weapon_name_label_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
-	nb_ammo_in_mag_label_text.add_theme_font_size_override("font_size", 24)
-	nb_ammo_in_mag_label_text.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 1.0))
+	# Патроны в магазине: крупный, четкий, чистый белый шрифт (как в современных AAA-шутерах)
+	nb_ammo_in_mag_label_text.add_theme_font_size_override("font_size", 34)
+	nb_ammo_in_mag_label_text.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.98))
+	nb_ammo_in_mag_label_text.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
+	nb_ammo_in_mag_label_text.add_theme_constant_override("shadow_offset_x", 2)
+	nb_ammo_in_mag_label_text.add_theme_constant_override("shadow_offset_y", 2)
+	nb_ammo_in_mag_label_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
+	# Патроны в резерве: полупрозрачный приглушенный тон
 	nb_ammo_total_label_text.add_theme_font_size_override("font_size", 16)
-	nb_ammo_total_label_text.add_theme_color_override("font_color", Color(0.70, 0.68, 0.62, 0.85))
+	nb_ammo_total_label_text.add_theme_color_override("font_color", Color(0.70, 0.70, 0.70, 0.65))
+	nb_ammo_total_label_text.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.8))
+	nb_ammo_total_label_text.add_theme_constant_override("shadow_offset_x", 1)
+	nb_ammo_total_label_text.add_theme_constant_override("shadow_offset_y", 1)
+	nb_ammo_total_label_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
-	weapon_stack_label_text.add_theme_font_size_override("font_size", 11)
-	weapon_stack_label_text.add_theme_color_override("font_color", Color(0.60, 0.58, 0.52, 0.75))
+	# Подсказка по выбору оружия — скрываем, чтобы не захламлять правый угол
+	weapon_stack_label_text.hide()
 	
 func _process(delta : float) -> void:
 	display_current_FPS()
@@ -151,7 +164,8 @@ func display_weapon_properties() -> void:
 		if resource.weapon_name == "Chainsaw":
 			weapon_name_label_text.text = "БЕНЗОПИЛА"
 			nb_ammo_in_mag_label_text.text = "∞"
-			nb_ammo_total_label_text.text = "БАК ПОЛОН"
+			nb_ammo_total_label_text.text = " | БАК ПОЛОН"
+			nb_ammo_in_mag_label_text.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35, 1.0))
 			return
 
 		var ammo_per_shot := maxi(1, resource.nb_proj_shots_at_same_time)
@@ -161,8 +175,16 @@ func display_weapon_properties() -> void:
 			magazine = reserve
 			reserve = 0
 		weapon_name_label_text.text = _localized_weapon_name(resource.weapon_name)
+		
+		# Динамическая предупреждающая подсветка, если в обойме мало патронов
+		var low_mag := magazine <= maxi(1, int(resource.mag_capacity * 0.25))
+		if low_mag:
+			nb_ammo_in_mag_label_text.add_theme_color_override("font_color", Color(1.0, 0.32, 0.25, 1.0))
+		else:
+			nb_ammo_in_mag_label_text.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.98))
+
 		nb_ammo_in_mag_label_text.text = str(magazine)
-		nb_ammo_total_label_text.text = "/ %d" % reserve
+		nb_ammo_total_label_text.text = " | %d" % reserve
 
 func _localized_weapon_name(weapon_name: String) -> String:
 	var names := {
