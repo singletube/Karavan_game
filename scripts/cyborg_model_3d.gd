@@ -1,57 +1,29 @@
 extends Node3D
 
 # =========================================================================
-# REALISTIC CYBORG ZOMBIE CONTROLLER (BLENDER 3D GLB IMPORT)
-# Загружает высокополигональные детальные PBR-модели, созданные в Blender
-# на основе референса: иссушенная мумия, разорванные пустынные лохмотья,
-# титановые бронепластины с заклепками, светящийся алый визор, гидравлические
-# поршни и стальные когти.
+# REALISTIC CYBORG ZOMBIE CONTROLLER
+# Использует высококачественную анимированную 3D-модель (Melty Zombie / Xellotath)
+# с полным набором скелетных анимаций:
+# walk01, walk02, run, idle01, idle02, attack01, attack02, damage, death, on_all_four_A
+# А также кибернетические импланты: светящийся алый окуляр / визор на кости головы,
+# цветовую дифференциацию и масштабирование по типам зомби.
 # =========================================================================
 
-const GLB_MODELS: Dictionary = {
-	"Walker":   "res://models/zombies/cyborg_walker.glb",
-	"Runner":   "res://models/zombies/cyborg_runner.glb",
-	"Brute":    "res://models/zombies/cyborg_brute.glb",
-	"Crawler":  "res://models/zombies/cyborg_crawler.glb",
-	"Spitter":  "res://models/zombies/cyborg_spitter.glb",
-	"Screamer": "res://models/zombies/cyborg_screamer.glb",
-	"Exploder": "res://models/zombies/cyborg_exploder.glb"
-}
+const ZOMBIE_MODEL_PATH: String = "res://models/zombies/real_zombie_walker.glb"
 
 var current_type: String = "Walker"
 
-# --- Иерархия суставов (универсальный риг) ---
-var root_node      : Node3D
-var pelvis         : Node3D
-var torso          : Node3D
-var chest          : Node3D
-var head           : Node3D
+# Ссылки на ноды загруженной модели
+var _model_instance: Node3D = null
+var anim_player: AnimationPlayer = null
+var skeleton: Skeleton3D = null
+var eye_light: OmniLight3D = null
 
-var l_hip          : Node3D
-var l_knee         : Node3D
-var r_hip          : Node3D
-var r_knee         : Node3D
-
-var l_shoulder     : Node3D
-var l_elbow        : Node3D
-var r_shoulder     : Node3D
-var r_elbow        : Node3D
-
-var rotating_saws  : Array[Node3D] = []
-
-# --- Анимационное состояние ---
-var anim_time      : float = 0.0
-var walk_speed_mult: float = 1.0
-var is_moving      : bool = false
-var is_attacking   : bool = false
-var is_hurt        : bool = false
-var is_dead        : bool = false
-
-var attack_progress: float = 0.0
-var hurt_progress  : float = 0.0
-var death_progress : float = 0.0
-
-var _model_instance: Node3D
+# Параметры анимаций
+var is_moving: bool = false
+var is_attacking: bool = false
+var is_hurt: bool = false
+var is_dead: bool = false
 
 func _ready() -> void:
 	pass
@@ -60,195 +32,197 @@ func setup_type(type_name: String) -> void:
 	current_type = type_name
 	_clear_model()
 
-	var path : String = GLB_MODELS.get(type_name, GLB_MODELS["Walker"])
-	var scene_res = load(path)
+	var scene_res = load(ZOMBIE_MODEL_PATH)
 	if not scene_res:
-		push_error("Failed to load cyborg model: " + path)
+		push_error("Failed to load real zombie model: " + ZOMBIE_MODEL_PATH)
 		return
 
 	_model_instance = scene_res.instantiate() as Node3D
 	if not _model_instance:
-		push_error("Failed to instantiate cyborg model instance: " + path)
+		push_error("Failed to instantiate zombie model")
 		return
 
-	_model_instance.name = "ModelInstance"
-	# Разворот на PI, чтобы локальный фронт -Z совпадал с направлением движения в enemy.gd
-	_model_instance.rotation.y = PI
+	_model_instance.name = "RealZombieInstance"
 	add_child(_model_instance)
 
-	# Поиск суставов
-	root_node   = _model_instance.find_child("Root", true, false) as Node3D
-	pelvis      = _model_instance.find_child("Pelvis", true, false) as Node3D
-	torso       = _model_instance.find_child("Torso", true, false) as Node3D
-	chest       = _model_instance.find_child("Chest", true, false) as Node3D
-	head        = _model_instance.find_child("Head", true, false) as Node3D
+	# Поиск AnimationPlayer
+	anim_player = _model_instance.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	if not anim_player:
+		for c in _model_instance.find_children("*", "AnimationPlayer", true, false):
+			anim_player = c as AnimationPlayer
+			break
 
-	l_shoulder  = _model_instance.find_child("L_Shoulder", true, false) as Node3D
-	l_elbow     = _model_instance.find_child("L_Elbow", true, false) as Node3D
-	r_shoulder  = _model_instance.find_child("R_Shoulder", true, false) as Node3D
-	r_elbow     = _model_instance.find_child("R_Elbow", true, false) as Node3D
+	# Настройка циклов анимаций
+	if anim_player:
+		_configure_animation_loops()
 
-	l_hip       = _model_instance.find_child("L_Hip", true, false) as Node3D
-	l_knee      = _model_instance.find_child("L_Knee", true, false) as Node3D
-	r_hip       = _model_instance.find_child("R_Hip", true, false) as Node3D
-	r_knee      = _model_instance.find_child("R_Knee", true, false) as Node3D
+	# Поиск Skeleton3D для кибернетических аттачментов
+	skeleton = _model_instance.find_child("Skeleton3D", true, false) as Skeleton3D
+	if not skeleton:
+		for c in _model_instance.find_children("*", "Skeleton3D", true, false):
+			skeleton = c as Skeleton3D
+			break
 
-	# Безопасная инициализация заглушек при отсутствии узла
-	root_node   = _ensure_node(root_node, _model_instance, "Root")
-	pelvis      = _ensure_node(pelvis, root_node, "Pelvis")
-	torso       = _ensure_node(torso, pelvis, "Torso")
-	chest       = _ensure_node(chest, torso, "Chest")
-	head        = _ensure_node(head, chest, "Head")
+	# Настройка масштаба и параметров под тип зомби
+	_apply_type_customization()
 
-	l_shoulder  = _ensure_node(l_shoulder, chest, "L_Shoulder")
-	l_elbow     = _ensure_node(l_elbow, l_shoulder, "L_Elbow")
-	r_shoulder  = _ensure_node(r_shoulder, chest, "R_Shoulder")
-	r_elbow     = _ensure_node(r_elbow, r_shoulder, "R_Elbow")
-
-	l_hip       = _ensure_node(l_hip, pelvis, "L_Hip")
-	l_knee      = _ensure_node(l_knee, l_hip, "L_Knee")
-	r_hip       = _ensure_node(r_hip, pelvis, "R_Hip")
-	r_knee      = _ensure_node(r_knee, r_hip, "R_Knee")
-
-	# Поиск вращающихся дисковых пил
-	rotating_saws.clear()
-	for child in _model_instance.find_children("*Saw*", "Node3D", true, false):
-		rotating_saws.append(child as Node3D)
-
-func _ensure_node(node: Node3D, parent_node: Node3D, default_name: String) -> Node3D:
-	if is_instance_valid(node):
-		return node
-	var dummy := Node3D.new()
-	dummy.name = default_name
-	if is_instance_valid(parent_node):
-		parent_node.add_child(dummy)
-	else:
-		add_child(dummy)
-	return dummy
+	# Добавление светящегося кибер-окуляра на голову
+	if skeleton:
+		_attach_cyber_eye()
 
 func _clear_model() -> void:
 	for c in get_children():
 		c.queue_free()
-	rotating_saws.clear()
 	_model_instance = null
-	anim_time = 0.0
-	attack_progress = 0.0
-	hurt_progress = 0.0
-	death_progress = 0.0
+	anim_player = null
+	skeleton = null
+	eye_light = null
+	is_dead = false
+	is_hurt = false
+	is_attacking = false
+	is_moving = false
+
+func _configure_animation_loops() -> void:
+	var looping_anims = ["walk01", "walk02", "run", "idle01", "idle02", "on_all_four_A", "on_all_four_B"]
+	for a_name in looping_anims:
+		if anim_player.has_animation(a_name):
+			anim_player.get_animation(a_name).loop_mode = Animation.LOOP_LINEAR
+
+	var single_anims = ["attack01", "attack02", "damage", "death"]
+	for a_name in single_anims:
+		if anim_player.has_animation(a_name):
+			anim_player.get_animation(a_name).loop_mode = Animation.LOOP_NONE
+
+func _apply_type_customization() -> void:
+	match current_type:
+		"Runner":
+			scale = Vector3(0.92, 0.92, 0.92)
+		"Brute":
+			scale = Vector3(1.38, 1.38, 1.38)
+		"Crawler":
+			scale = Vector3(1.05, 0.9, 1.05)
+		"Spitter":
+			scale = Vector3(0.95, 0.95, 0.95)
+		"Screamer":
+			scale = Vector3(0.96, 0.96, 0.96)
+		"Exploder":
+			scale = Vector3(1.0, 1.0, 1.0)
+		_:
+			scale = Vector3.ONE
+
+func _get_type_eye_color() -> Color:
+	match current_type:
+		"Spitter":
+			return Color(0.2, 1.0, 0.25) # Токсичный кислотный свет
+		"Screamer":
+			return Color(1.0, 0.85, 0.1) # Тревожный желто-янтарный
+		"Exploder":
+			return Color(1.0, 0.28, 0.05) # Взрывной огненно-оранжевый
+		_:
+			return Color(1.0, 0.08, 0.08) # Зловещий алый кибер-окуляр
+
+func _attach_cyber_eye() -> void:
+	var head_bone_idx = skeleton.find_bone("head_014")
+	if head_bone_idx == -1:
+		return
+
+	var bone_attachment := BoneAttachment3D.new()
+	bone_attachment.name = "CyberHeadAttachment"
+	bone_attachment.bone_name = "head_014"
+	skeleton.add_child(bone_attachment)
+
+	var eye_color := _get_type_eye_color()
+
+	# Металлическая оправа киберокуляра
+	var socket_mesh := MeshInstance3D.new()
+	var socket_cyl := CylinderMesh.new()
+	socket_cyl.top_radius = 0.08
+	socket_cyl.bottom_radius = 0.08
+	socket_cyl.height = 0.06
+	socket_mesh.mesh = socket_cyl
+	var socket_mat := StandardMaterial3D.new()
+	socket_mat.albedo_color = Color(0.12, 0.12, 0.13)
+	socket_mat.metallic = 0.9
+	socket_mat.roughness = 0.25
+	socket_mesh.material_override = socket_mat
+	socket_mesh.position = Vector3(0.15, 0.22, 0.45)
+	socket_mesh.rotation_degrees = Vector3(80, 0, 0)
+	bone_attachment.add_child(socket_mesh)
+
+	# Светящаяся линза окуляра
+	var lens_mesh := MeshInstance3D.new()
+	var lens_sphere := SphereMesh.new()
+	lens_sphere.radius = 0.06
+	lens_sphere.height = 0.08
+	lens_mesh.mesh = lens_sphere
+	var lens_mat := StandardMaterial3D.new()
+	lens_mat.albedo_color = eye_color
+	lens_mat.emission_enabled = true
+	lens_mat.emission = eye_color
+	lens_mat.emission_energy_multiplier = 4.5
+	lens_mesh.material_override = lens_mat
+	lens_mesh.position = Vector3(0.0, 0.02, 0.0)
+	socket_mesh.add_child(lens_mesh)
+
+	# Источник света от окуляра
+	eye_light = OmniLight3D.new()
+	eye_light.light_color = eye_color
+	eye_light.light_energy = 1.2
+	eye_light.omni_range = 1.8
+	eye_light.shadow_enabled = false
+	lens_mesh.add_child(eye_light)
 
 # =========================================================================
-# БИОМЕХАНИЧЕСКАЯ АНИМАЦИЯ ПОХОДКИ, АТАКИ И ПОРАЖЕНИЯ
+# УПРАВЛЕНИЕ АНИМАЦИЯМИ (ВЫЗЫВАЕТСЯ ИЗ ENEMY.GD)
 # =========================================================================
-func update_animation(delta: float, moving: bool, move_speed: float, attacking: bool, hurt: bool, dead: bool) -> void:
+func update_animation(_delta: float, moving: bool, move_speed: float, attacking: bool, hurt: bool, dead: bool) -> void:
+	if not anim_player:
+		return
+
 	is_moving = moving
-	walk_speed_mult = move_speed
 	is_attacking = attacking
 	is_hurt = hurt
 	is_dead = dead
 
-	# Вращение дисковых пил (если установлены)
-	var saw_speed : float = (40.0 if is_attacking else 18.0) * delta
-	for saw in rotating_saws:
-		if is_instance_valid(saw):
-			saw.rotate_z(saw_speed)
-
+	# 1. Смерть (высший приоритет)
 	if is_dead:
-		_animate_death(delta)
+		if eye_light and is_instance_valid(eye_light):
+			eye_light.light_energy = move_toward(eye_light.light_energy, 0.0, _delta * 3.0)
+		if anim_player.current_animation != "death":
+			anim_player.play("death", 0.15)
 		return
 
+	# 2. Получение урона
 	if is_hurt:
-		_animate_hurt(delta)
+		if anim_player.current_animation != "damage":
+			anim_player.play("damage", 0.08, 1.4)
 		return
 
-	if is_moving:
-		anim_time += delta * (walk_speed_mult * 2.2)
-	else:
-		anim_time = move_toward(anim_time, 0.0, delta * 3.0)
-
-	var leg_angle : float = sin(anim_time) * 0.65
-	var body_bob  : float = absf(cos(anim_time)) * 0.06
-	var spine_yaw : float = sin(anim_time) * 0.15
-
-	if current_type != "Crawler" and current_type != "Exploder":
-		pelvis.position.y = lerpf(pelvis.position.y, (0.88 if current_type == "Walker" else (1.05 if current_type == "Brute" else 0.85)) - body_bob, delta * 10.0)
-		torso.rotation.y = spine_yaw
-		head.rotation.y = -spine_yaw * 0.5
-		head.rotation.x = sin(anim_time * 2.0) * 0.08
-
-		l_hip.rotation.x = leg_angle
-		r_hip.rotation.x = -leg_angle
-		l_knee.rotation.x = maxf(0.0, -leg_angle * 0.8)
-		r_knee.rotation.x = maxf(0.0, leg_angle * 0.8)
-	elif current_type == "Crawler":
-		l_shoulder.rotation.x = sin(anim_time) * 0.45
-		r_shoulder.rotation.x = -sin(anim_time) * 0.45
-		torso.rotation.y = sin(anim_time) * 0.20
-	elif current_type == "Exploder":
-		pelvis.rotation.z = sin(anim_time) * 0.12
-		l_hip.rotation.x = leg_angle * 0.7
-		r_hip.rotation.x = -leg_angle * 0.7
-
-	# Анимация рук и атак
+	# 3. Атака
 	if is_attacking:
-		_animate_attack(delta)
-	else:
-		attack_progress = 0.0
-		if current_type == "Screamer":
-			l_shoulder.rotation.x = deg_to_rad(-85.0) + sin(anim_time * 1.5) * 0.15
-			l_shoulder.rotation.z = deg_to_rad(30.0)
-			r_shoulder.rotation.x = deg_to_rad(-85.0) + sin(anim_time * 1.5) * 0.15
-			r_shoulder.rotation.z = deg_to_rad(-30.0)
-		elif current_type != "Crawler" and current_type != "Exploder":
-			l_shoulder.rotation.x = deg_to_rad(-25.0) + sin(anim_time) * 0.30
-			l_shoulder.rotation.z = deg_to_rad(12.0)
-			l_elbow.rotation.x = deg_to_rad(-45.0)
+		var atk_anim = "attack02" if (current_type == "Runner" or current_type == "Screamer") else "attack01"
+		var atk_speed = 1.4 if current_type == "Runner" else 1.1
+		if anim_player.current_animation != atk_anim:
+			anim_player.play(atk_anim, 0.1, atk_speed)
+		return
 
-			r_shoulder.rotation.x = deg_to_rad(-20.0) - sin(anim_time) * 0.30
-			r_shoulder.rotation.z = deg_to_rad(-12.0)
-			r_elbow.rotation.x = deg_to_rad(-35.0)
+	# 4. Движение
+	if is_moving:
+		match current_type:
+			"Crawler":
+				if anim_player.current_animation != "on_all_four_A":
+					anim_player.play("on_all_four_A", 0.2, maxf(1.0, move_speed * 0.45))
+			"Runner":
+				if anim_player.current_animation != "run":
+					anim_player.play("run", 0.15, maxf(1.1, move_speed * 0.32))
+			"Brute":
+				if anim_player.current_animation != "walk02":
+					anim_player.play("walk02", 0.2, 0.85)
+			_:
+				if anim_player.current_animation != "walk01":
+					anim_player.play("walk01", 0.2, maxf(0.85, move_speed * 0.38))
+		return
 
-func _animate_attack(delta: float) -> void:
-	attack_progress += delta * (6.5 if current_type == "Runner" else 4.2)
-	var phase : float = fmod(attack_progress, TAU)
-
-	if phase < PI:
-		var t : float = phase / PI
-		l_shoulder.rotation.x = lerp_angle(l_shoulder.rotation.x, deg_to_rad(-120.0), t)
-		l_elbow.rotation.x = deg_to_rad(-85.0)
-		torso.rotation.y = deg_to_rad(25.0)
-	else:
-		var t : float = (phase - PI) / PI
-		l_shoulder.rotation.x = lerp_angle(l_shoulder.rotation.x, deg_to_rad(45.0), t * 1.8)
-		l_elbow.rotation.x = deg_to_rad(-10.0)
-		torso.rotation.y = deg_to_rad(-30.0)
-
-func _animate_hurt(delta: float) -> void:
-	hurt_progress += delta * 8.0
-	chest.rotation.x = deg_to_rad(-22.0)
-	head.rotation.x = deg_to_rad(-35.0)
-	l_shoulder.rotation.x = deg_to_rad(15.0)
-	r_shoulder.rotation.x = deg_to_rad(15.0)
-	root_node.position.z = -0.08
-
-func _animate_death(delta: float) -> void:
-	death_progress = minf(1.0, death_progress + delta * 2.8)
-	var t : float = death_progress
-
-	var target_y : float = 0.28
-	if current_type == "Brute":
-		target_y = 0.45
-	elif current_type == "Crawler":
-		target_y = 0.18
-	elif current_type == "Exploder":
-		target_y = 0.35
-
-	root_node.position.y = lerpf(root_node.position.y, target_y, t)
-	root_node.rotation.x = lerp_angle(root_node.rotation.x, deg_to_rad(-85.0), t)
-	l_hip.rotation.x = lerp_angle(l_hip.rotation.x, deg_to_rad(-10.0), t)
-	r_hip.rotation.x = lerp_angle(r_hip.rotation.x, deg_to_rad(-10.0), t)
-	l_knee.rotation.x = lerp_angle(l_knee.rotation.x, deg_to_rad(40.0), t)
-	r_knee.rotation.x = lerp_angle(r_knee.rotation.x, deg_to_rad(25.0), t)
-	l_shoulder.rotation.z = lerp_angle(l_shoulder.rotation.z, deg_to_rad(45.0), t)
-	r_shoulder.rotation.z = lerp_angle(r_shoulder.rotation.z, deg_to_rad(-45.0), t)
-	pelvis.rotation = pelvis.rotation.lerp(Vector3.ZERO, t)
-	torso.rotation = torso.rotation.lerp(Vector3.ZERO, t)
+	# 5. Покой (Idle)
+	if anim_player.current_animation != "idle01" and anim_player.current_animation != "idle02":
+		anim_player.play("idle01", 0.25)
