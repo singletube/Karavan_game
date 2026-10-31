@@ -96,7 +96,12 @@ func _physics_process(delta: float) -> void:
 			model.update_animation(delta, false, 0.0, walk_phase)
 		return
 
-	var step := move_direction.normalized() * (move_speed * delta)
+	var current_move_speed: float = move_speed
+	var gmm = get_node_or_null("/root/GodModeManager")
+	if gmm:
+		current_move_speed = BASE_SPEED * gmm.caravan_speed_mult
+
+	var step := move_direction.normalized() * (current_move_speed * delta)
 	global_position += step
 
 	# Следование рельефу песчаных дюн (высота и наклон повозки)
@@ -108,10 +113,10 @@ func _physics_process(delta: float) -> void:
 	var target_pitch := atan2(back_h - front_h, 5.0)
 	rotation.x = lerp_angle(rotation.x, target_pitch, delta * 6.0)
 
-	walk_phase += delta * (move_speed * 1.5)
+	walk_phase += delta * (current_move_speed * 1.5)
 
 	# 1. Следы колес повозки на песке (каждые 0.85м пути)
-	track_dist += move_speed * delta
+	track_dist += current_move_speed * delta
 	if track_dist >= 0.85:
 		track_dist = 0.0
 		SandEffects.add_caravan_wheel_tracks(global_position, move_direction)
@@ -178,6 +183,8 @@ func set_in_camp(in_camp: bool) -> void:
 
 func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> void:
 	if is_destroyed:
+		return
+	if get_node_or_null("/root/GodModeManager") and get_node("/root/GodModeManager").caravan_god_mode:
 		return
 
 	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():

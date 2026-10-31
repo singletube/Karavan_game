@@ -12,7 +12,9 @@ func enter(play_char_ref : CharacterBody3D) -> void:
 	verifications()
 	
 func verifications() -> void:
-	play_char.move_speed = play_char.run_speed
+	var gmm = play_char.get_node_or_null("/root/GodModeManager")
+	var p_mult: float = gmm.player_speed_mult if gmm else 1.0
+	play_char.move_speed = play_char.run_speed * p_mult
 	play_char.move_accel = play_char.run_accel
 	play_char.move_deccel = play_char.run_deccel
 	

@@ -26,10 +26,13 @@ func shoot() -> void:
 			if m and m.has_method("set_sawing"):
 				m.set_sawing(true)
 		
+		var gmm = get_node_or_null("/root/GodModeManager")
+		var is_inf_ammo : bool = (gmm != null and gmm.infinite_ammo)
+
 		#number of successive shots (for example if 3, the weapon will shot 3 times in a row)
 		for i in range(current_weapon.resources.nb_proj_shots):
 			#same conditions has before, are checked before every shot
-			if ((current_weapon.resources.total_ammo_in_mag > 0 and current_weapon.resources.total_ammo_in_mag >= current_weapon.resources.nb_proj_shots_at_same_time) 
+			if is_inf_ammo or ((current_weapon.resources.total_ammo_in_mag > 0 and current_weapon.resources.total_ammo_in_mag >= current_weapon.resources.nb_proj_shots_at_same_time) 
 			or (current_weapon.resources.all_ammo_in_mag and weapon_manager.ammo_manager.ammo_dict[current_weapon.resources.ammo_type] > 0) and \
 			weapon_manager.ammo_manager.ammo_dict[current_weapon.resources.ammo_type] >= current_weapon.resources.nb_proj_shots_at_same_time):
 				
@@ -44,8 +47,9 @@ func shoot() -> void:
 				#a shotgun shell is constituted of ~ 20 pellets that are spread across the target, 
 				#so 20 projectiles shots at the same time)
 				for j in range(0, current_weapon.resources.nb_proj_shots_at_same_time):
-					if current_weapon.resources.all_ammo_in_mag: weapon_manager.ammo_manager.ammo_dict[current_weapon.resources.ammo_type] -= 1
-					else: current_weapon.resources.total_ammo_in_mag -= 1
+					if not is_inf_ammo:
+						if current_weapon.resources.all_ammo_in_mag: weapon_manager.ammo_manager.ammo_dict[current_weapon.resources.ammo_type] -= 1
+						else: current_weapon.resources.total_ammo_in_mag -= 1
 					
 					#get the collision point
 					point_of_collision = get_camera_fov()

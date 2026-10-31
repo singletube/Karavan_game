@@ -460,6 +460,8 @@ func get_combat_status() -> Dictionary:
 func take_damage(amount: int, _hit_direction: Vector3 = Vector3.ZERO, _hit_position: Vector3 = Vector3.ZERO) -> void:
 	if is_dead:
 		return
+	if get_node_or_null("/root/GodModeManager") and get_node("/root/GodModeManager").player_god_mode:
+		return
 	if not is_local():
 		rpc_id(get_multiplayer_authority(), "apply_remote_damage", amount)
 		return
