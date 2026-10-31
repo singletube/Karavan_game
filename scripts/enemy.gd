@@ -537,6 +537,9 @@ func _die() -> void:
 	velocity = Vector3.ZERO
 	shape.disabled = true
 
+	if cyborg_model_3d and cyborg_model_3d.visible:
+		cyborg_model_3d.update_animation(0.0, false, 0.0, false, false, true)
+
 	enemy_died.emit()
 
 	# Растекающаяся лужа крови под телом поверженного киборга
