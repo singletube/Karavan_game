@@ -58,6 +58,8 @@ func _setup_container() -> void:
 		add_child(enemies_container)
 
 func _find_and_connect_hud() -> void:
+	if not get_tree() or not get_tree().current_scene:
+		return
 	var hud: Node = get_tree().current_scene.find_child("HUD", true, false)
 	if hud and hud.has_method("connect_spawner"):
 		hud.connect_spawner(self)
@@ -345,7 +347,6 @@ func _spawn_single_enemy(z_type: String, pos: Vector3, custom_name: String = "")
 
 	var spawn_y: float = DesertGenerator.get_height(pos.x, pos.z) + 0.8
 	var spawn_pos: Vector3 = Vector3(pos.x, spawn_y, pos.z)
-	enemy.global_position = spawn_pos
 
 	enemies_container.add_child(enemy)
 	enemy.global_position = spawn_pos

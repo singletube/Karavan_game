@@ -278,6 +278,54 @@ func refill_all_ammo() -> void:
 				am.ammo_dict[k] = 999
 	show_toast("📦 ПАТРОНЫ ВО ВСЕХ ОРУЖИЯХ ПОПОЛНЕНЫ ДО МАКСИМУМА")
 
+func spawn_zombie(z_type: String, count: int = 1) -> void:
+	var player := _get_first_node("player")
+	var caravan := _get_first_node("caravan")
+
+	var base_pos := Vector3.ZERO
+	var fwd_dir := Vector3(0, 0, 1)
+
+	if player and is_instance_valid(player):
+		var cam: Node3D = player.get_node_or_null("Head/Camera3D") as Node3D
+		if cam:
+			fwd_dir = -cam.global_transform.basis.z.normalized()
+			fwd_dir.y = 0.0
+			fwd_dir = fwd_dir.normalized()
+		else:
+			fwd_dir = -player.global_transform.basis.z.normalized()
+			fwd_dir.y = 0.0
+			fwd_dir = fwd_dir.normalized()
+		if fwd_dir.length_squared() < 0.01:
+			fwd_dir = Vector3(0, 0, 1)
+		base_pos = player.global_position + fwd_dir * 8.0
+	elif caravan and is_instance_valid(caravan):
+		base_pos = caravan.global_position + Vector3(0, 0, 8.0)
+	else:
+		base_pos = Vector3(0, 0, 8.0)
+
+	var spawner := _get_first_node("wave_spawner")
+
+	for i in range(count):
+		var offset := Vector3(randf_range(-3.5, 3.5), 0.0, randf_range(-3.5, 3.5)) if count > 1 else Vector3.ZERO
+		var target_pos := base_pos + offset
+		if spawner and is_instance_valid(spawner) and spawner.has_method("_spawn_single_enemy"):
+			spawner._spawn_single_enemy(z_type, target_pos)
+		else:
+			var scn = preload("res://scenes/enemy.tscn")
+			var enemy = scn.instantiate()
+			enemy.zombie_type = z_type
+			var sy = DesertGenerator.get_height(target_pos.x, target_pos.z) + 0.8
+			target_pos.y = sy
+			var tree = get_tree()
+			if tree and tree.current_scene:
+				var enemies_cont = tree.current_scene.get_node_or_null("Enemies")
+				if not enemies_cont:
+					enemies_cont = tree.current_scene
+				enemies_cont.add_child(enemy)
+				enemy.global_position = target_pos
+
+	show_toast("🧟 Спавн: %s (x%d)" % [z_type, count])
+
 # =========================================================================
 # ПОСТРОЕНИЕ ПОЛЬЗОВАТЕЛЬСКОГО ИНТЕРФЕЙСА (UI)
 # =========================================================================
@@ -313,7 +361,7 @@ func _build_ui() -> void:
 	panel = PanelContainer.new()
 	panel.name = "GodModePanel"
 	panel.visible = false
-	panel.custom_minimum_size = Vector2(480, 580)
+	panel.custom_minimum_size = Vector2(520, 640)
 	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
@@ -514,6 +562,70 @@ func _build_ui() -> void:
 	btn_ammo.text = "📦 Пополнить все боеприпасы до 999"
 	btn_ammo.pressed.connect(refill_all_ammo)
 	vbox.add_child(btn_ammo)
+
+	vbox.add_child(_create_separator())
+
+	# --- РАЗДЕЛ 5: СПАВН ЗОМБИ (DEV SPAWNER) ---
+	vbox.add_child(_create_section_label("🧟 СПАВН ЗОМБИ (DEV SPAWNER)"))
+
+	var grid_zombies := GridContainer.new()
+	grid_zombies.columns = 2
+	grid_zombies.add_theme_constant_override("h_separation", 8)
+	grid_zombies.add_theme_constant_override("v_separation", 6)
+	grid_zombies.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var z_configs := [
+		{"type": "Walker",   "label": "🧟 Штурмовик (Walker)"},
+		{"type": "Runner",   "label": "⚡ Бегун (Runner)"},
+		{"type": "Brute",    "label": "🛡️ Громила (Brute)"},
+		{"type": "Crawler",  "label": "🕷️ Ползун (Crawler)"},
+		{"type": "Spitter",  "label": "🧪 Плевун (Spitter)"},
+		{"type": "Screamer", "label": "📢 Сирена (Screamer)"},
+		{"type": "Exploder", "label": "💣 Камикадзе (Exploder)"},
+	]
+
+	for cfg in z_configs:
+		var z_type: String = cfg["type"]
+		var b := Button.new()
+		b.text = cfg["label"]
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(func(): spawn_zombie(z_type, 1))
+		grid_zombies.add_child(b)
+
+	# Кнопка для случайного зомби
+	var btn_rand := Button.new()
+	btn_rand.text = "🎲 Случайный зомби"
+	btn_rand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_rand.pressed.connect(func():
+		var all_types := ["Walker", "Runner", "Brute", "Crawler", "Spitter", "Screamer", "Exploder"]
+		spawn_zombie(all_types.pick_random(), 1)
+	)
+	grid_zombies.add_child(btn_rand)
+	vbox.add_child(grid_zombies)
+
+	# Кнопки спавна групп и орд
+	var hbox_horde := HBoxContainer.new()
+	var btn_all_types := Button.new()
+	btn_all_types.text = "☠️ Все виды (по 1 шт)"
+	btn_all_types.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_all_types.pressed.connect(func():
+		for t in ["Walker", "Runner", "Brute", "Crawler", "Spitter", "Screamer", "Exploder"]:
+			spawn_zombie(t, 1)
+		show_toast("☠️ Заспавнены все 7 видов зомби!")
+	)
+	hbox_horde.add_child(btn_all_types)
+
+	var btn_horde := Button.new()
+	btn_horde.text = "🔥 Орда x3 (21 шт)"
+	btn_horde.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_horde.add_theme_color_override("font_color", Color(1.0, 0.5, 0.2))
+	btn_horde.pressed.connect(func():
+		for t in ["Walker", "Runner", "Brute", "Crawler", "Spitter", "Screamer", "Exploder"]:
+			spawn_zombie(t, 3)
+		show_toast("🔥 Заспавнена ОРДА: 21 кибер-зомби!")
+	)
+	hbox_horde.add_child(btn_horde)
+	vbox.add_child(hbox_horde)
 
 func _refresh_ui_values() -> void:
 	if chk_player_god:
