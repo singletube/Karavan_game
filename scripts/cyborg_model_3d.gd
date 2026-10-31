@@ -3,16 +3,11 @@ extends Node3D
 # =========================================================================
 # REALISTIC CYBORG ZOMBIE CONTROLLER
 # Использует оригинальную анимированную 3D-модель (Melty Zombie)
-# с уникальными процедурными кибернетическими апгрейдами для каждого типа:
-# - Walker:   Штурмовой окуляр, бронеплита на груди, боевой клинок на запястье
-# - Runner:   Неоновый бирюзовый визор, радиаторные ребра на спине, клинки-богомолы на обеих руках, поршни на ногах
-# - Brute:    Тяжелый бронешлем с узкой щелью, гигантский шипастый наплечник, колоссальная гидравлическая клешня
-# - Crawler:  Паучий 4-глазый оптический сенсор, спинной панцирь с маячком, стальные когти
-# - Spitter:  Химический респиратор с токсичным зеленым оком, баллоны с кислотой на спине, распылитель на руке
-# - Screamer: Вращающаяся желтая сирена на голове, акустические тарелки-излучатели, антенная решетка
-# - Exploder: Реакторное ядро бомбы в груди с пульсирующим пламенем, защитная клетка, мигающий маяк тревоги
-#
-# Фиксация после смерти: трупы падают на землю и намертво застывают (не дергаются).
+# с богатым набором деталей:
+# - Обноски одежды / рваные лохмотья пустыни (burlap rags, scarves, loincloths)
+# - Корректное анатомическое расположение деталей (на груди, плечах, руках, коленях, а не в животе!)
+# - Уникальные кибер-импланты для каждого типа (Walker, Runner, Brute, Crawler, Spitter, Screamer, Exploder)
+# - Полная фиксация трупа после смерти (не дергается и не встает).
 # =========================================================================
 
 const ZOMBIE_MODEL_PATH: String = "res://models/zombies/melty_zombie/scene.gltf"
@@ -33,10 +28,16 @@ var is_dead: bool = false
 var has_died: bool = false
 var death_timer: float = 0.0
 
-# Материалы общего пользования
+# Текстуры и материалы
+var _tex_rags: Texture2D
+var _tex_armor: Texture2D
+var _tex_lens: Texture2D
+
+var _mat_desert_rags: StandardMaterial3D
+var _mat_cyber_armor: StandardMaterial3D
 var _mat_dark_metal: StandardMaterial3D
 var _mat_rust_metal: StandardMaterial3D
-var _mat_hazard: StandardMaterial3D
+var _mat_steel_blade: StandardMaterial3D
 
 func _ready() -> void:
 	pass
@@ -44,7 +45,7 @@ func _ready() -> void:
 func setup_type(type_name: String) -> void:
 	current_type = type_name
 	_clear_model()
-	_init_shared_materials()
+	_init_materials()
 
 	var scene_res = load(ZOMBIE_MODEL_PATH)
 	if not scene_res:
@@ -81,11 +82,12 @@ func setup_type(type_name: String) -> void:
 	# Настройка масштаба под тип
 	_apply_type_customization()
 
-	# Установка уникальных кибернетических имплантов для данного типа
+	# Добавление обносок одежды и кибернетических имплантов
 	if skeleton:
+		_build_clothing_rags()
 		_build_type_cyber_upgrades()
 
-	# Запуск начальной анимации покоя
+	# Запуск анимации покоя
 	if anim_player:
 		anim_player.play("idle01")
 
@@ -103,21 +105,47 @@ func _clear_model() -> void:
 	is_attacking = false
 	is_moving = false
 
-func _init_shared_materials() -> void:
+func _init_materials() -> void:
+	_tex_rags = load("res://assets/textures/zombies/desert_rags.jpg")
+	_tex_armor = load("res://assets/textures/zombies/cyber_armor.jpg")
+	_tex_lens = load("res://assets/textures/zombies/optic_lens.jpg")
+
+	# 1. Материал пустынных лохмотьев / рваной мешковины
+	_mat_desert_rags = StandardMaterial3D.new()
+	if _tex_rags:
+		_mat_desert_rags.albedo_texture = _tex_rags
+	else:
+		_mat_desert_rags.albedo_color = Color(0.48, 0.40, 0.30)
+	_mat_desert_rags.roughness = 0.95
+	_mat_desert_rags.cull_mode = BaseMaterial3D.CULL_DISABLED # Двустороннее отображение ткани
+	_mat_desert_rags.uv1_scale = Vector3(1.5, 1.5, 1.5)
+
+	# 2. Материал кибер-брони с заклепками и ржавчиной
+	_mat_cyber_armor = StandardMaterial3D.new()
+	if _tex_armor:
+		_mat_cyber_armor.albedo_texture = _tex_armor
+	else:
+		_mat_cyber_armor.albedo_color = Color(0.25, 0.23, 0.22)
+	_mat_cyber_armor.metallic = 0.88
+	_mat_cyber_armor.roughness = 0.38
+
+	# 3. Темный титан
 	_mat_dark_metal = StandardMaterial3D.new()
 	_mat_dark_metal.albedo_color = Color(0.12, 0.12, 0.14)
-	_mat_dark_metal.metallic = 0.95
-	_mat_dark_metal.roughness = 0.25
+	_mat_dark_metal.metallic = 0.96
+	_mat_dark_metal.roughness = 0.22
 
+	# 4. Ржавая сталь
 	_mat_rust_metal = StandardMaterial3D.new()
-	_mat_rust_metal.albedo_color = Color(0.38, 0.26, 0.18)
-	_mat_rust_metal.metallic = 0.85
-	_mat_rust_metal.roughness = 0.55
+	_mat_rust_metal.albedo_color = Color(0.35, 0.22, 0.16)
+	_mat_rust_metal.metallic = 0.82
+	_mat_rust_metal.roughness = 0.6
 
-	_mat_hazard = StandardMaterial3D.new()
-	_mat_hazard.albedo_color = Color(0.9, 0.72, 0.08)
-	_mat_hazard.metallic = 0.6
-	_mat_hazard.roughness = 0.35
+	# 5. Полированная сталь клинков
+	_mat_steel_blade = StandardMaterial3D.new()
+	_mat_steel_blade.albedo_color = Color(0.85, 0.88, 0.92)
+	_mat_steel_blade.metallic = 0.98
+	_mat_steel_blade.roughness = 0.12
 
 func _configure_animation_loops() -> void:
 	var looping_anims = ["walk01", "walk02", "run", "idle01", "idle02", "on_all_four_A", "on_all_four_B"]
@@ -136,7 +164,7 @@ func _apply_type_customization() -> void:
 		"Runner":
 			scale = Vector3.ONE * (BASE_SCALE * 0.90)
 		"Brute":
-			scale = Vector3.ONE * (BASE_SCALE * 1.42) # Колоссальный танк
+			scale = Vector3.ONE * (BASE_SCALE * 1.45) # Громила высотой ~2.7м
 		"Crawler":
 			scale = Vector3(BASE_SCALE * 1.05, BASE_SCALE * 0.85, BASE_SCALE * 1.05)
 		"Spitter":
@@ -157,6 +185,41 @@ func _get_or_create_bone_att(bone_name: String) -> BoneAttachment3D:
 	att.name = "Att_" + bone_name
 	skeleton.add_child(att)
 	return att
+
+# =========================================================================
+# ОБНОСКИ ПУСТЫННОЙ ОДЕЖДЫ (ДЛЯ ВСЕХ ЗОМБИ)
+# =========================================================================
+func _build_clothing_rags() -> void:
+	# 1. Рваный шарф / пончо вокруг шеи и плеч (кость neck_013)
+	var neck_att := _get_or_create_bone_att("neck_013")
+	var poncho := MeshInstance3D.new()
+	var p_mesh := CylinderMesh.new()
+	p_mesh.top_radius = 0.28
+	p_mesh.bottom_radius = 0.42
+	p_mesh.height = 0.35
+	poncho.mesh = p_mesh
+	poncho.material_override = _mat_desert_rags
+	poncho.position = Vector3(-0.35, 0.0, 0.1)
+	neck_att.add_child(poncho)
+
+	# 2. Рваная набедренная повязка / лохмотья пояса (кость hip_016)
+	var hip_att := _get_or_create_bone_att("hip_016")
+	var loincloth := MeshInstance3D.new()
+	var l_mesh := BoxMesh.new()
+	l_mesh.size = Vector3(0.5, 0.03, 0.55)
+	loincloth.mesh = l_mesh
+	loincloth.material_override = _mat_desert_rags
+	loincloth.position = Vector3(-0.6, 0.0, 0.35)
+	hip_att.add_child(loincloth)
+
+	# 3. Свисающие лохмотья ткани сзади
+	var back_rags := MeshInstance3D.new()
+	var b_mesh := BoxMesh.new()
+	b_mesh.size = Vector3(0.45, 0.03, 0.6)
+	back_rags.mesh = b_mesh
+	back_rags.material_override = _mat_desert_rags
+	back_rags.position = Vector3(-0.65, 0.0, -0.25)
+	hip_att.add_child(back_rags)
 
 # =========================================================================
 # УНИКАЛЬНЫЕ КИБЕРНЕТИЧЕСКИЕ АПГРЕЙДЫ ПО ТИПАМ
@@ -180,42 +243,51 @@ func _build_type_cyber_upgrades() -> void:
 
 # --- 1. WALKER: ШТУРМОВОЙ КИБОРГ ---
 func _build_walker_upgrades() -> void:
+	# Алый окуляр с титановой накладкой на лбу
 	var head_att := _get_or_create_bone_att("head_014")
-	_create_ocular_eye(head_att, Vector3(0.12, -0.28, 0.28), Color(1.0, 0.05, 0.05), 0.04)
+	_create_cranial_plate(head_att, Color(1.0, 0.05, 0.05))
 
-	# Бронеплита на груди с заклепками
-	var chest_att := _get_or_create_bone_att("chest_017")
-	var plate := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(0.5, 0.45, 0.08)
-	plate.mesh = box
-	plate.material_override = _mat_dark_metal
-	plate.position = Vector3(0.1, -0.05, 0.55)
-	plate.rotation_degrees = Vector3(10, 0, 0)
-	chest_att.add_child(plate)
+	# Баллистическая бронеплита на ВЕРХНЕЙ ЧАСТИ ГРУДИ (кость neck_013)
+	var neck_att := _get_or_create_bone_att("neck_013")
+	var chestplate := MeshInstance3D.new()
+	var cp_box := BoxMesh.new()
+	cp_box.size = Vector3(0.55, 0.45, 0.08)
+	chestplate.mesh = cp_box
+	chestplate.material_override = _mat_cyber_armor
+	# Смещение на грудь (не в живот!): local -X = вниз к груди, local +Z = вперед
+	chestplate.position = Vector3(-0.7, 0.0, 0.48)
+	neck_att.add_child(chestplate)
 
-	# Клинок на правом запястье
+	# Сегментный позвоночный кабель на спине
+	var spine_conduit := MeshInstance3D.new()
+	var sc_cyl := CylinderMesh.new()
+	sc_cyl.top_radius = 0.045
+	sc_cyl.bottom_radius = 0.045
+	sc_cyl.height = 0.85
+	spine_conduit.mesh = sc_cyl
+	spine_conduit.material_override = _mat_dark_metal
+	spine_conduit.position = Vector3(-0.6, 0.0, -0.42)
+	neck_att.add_child(spine_conduit)
+
+	# Боевой клинок на правом предплечье/запястье
 	var arm_att := _get_or_create_bone_att("forearm_R_09")
 	var blade := MeshInstance3D.new()
-	var blade_box := BoxMesh.new()
-	blade_box.size = Vector3(0.04, 0.55, 0.08)
-	blade.mesh = blade_box
-	var blade_mat := StandardMaterial3D.new()
-	blade_mat.albedo_color = Color(0.8, 0.82, 0.85)
-	blade_mat.metallic = 0.98
-	blade_mat.roughness = 0.15
-	blade.material_override = blade_mat
-	blade.position = Vector3(0.0, 0.35, 0.1)
+	var b_box := BoxMesh.new()
+	b_box.size = Vector3(0.04, 0.65, 0.09)
+	blade.mesh = b_box
+	blade.material_override = _mat_steel_blade
+	blade.position = Vector3(0.0, 0.55, 0.12)
 	arm_att.add_child(blade)
 
-# --- 2. RUNNER: КИБЕР-БЕГУН (НЕОНОВЫЙ ВИЗОР, КЛИНКИ-БОГОМОЛЫ, ПОРШНИ) ---
+# --- 2. RUNNER: КИБЕР-БЕГУН ---
 func _build_runner_upgrades() -> void:
 	var head_att := _get_or_create_bone_att("head_014")
-	var cyan_color := Color(0.1, 0.85, 1.0)
-	# Узкий горизонтальный визор на глазах
+	var cyan_color := Color(0.1, 0.9, 1.0)
+
+	# Аэродинамичный неоновый визор на глазах
 	var visor := MeshInstance3D.new()
 	var v_box := BoxMesh.new()
-	v_box.size = Vector3(0.12, 0.45, 0.06)
+	v_box.size = Vector3(0.12, 0.45, 0.08)
 	visor.mesh = v_box
 	var v_mat := StandardMaterial3D.new()
 	v_mat.albedo_color = cyan_color
@@ -227,59 +299,53 @@ func _build_runner_upgrades() -> void:
 	head_att.add_child(visor)
 	_add_light(visor, cyan_color, 1.2, 2.0)
 
-	# Спинные радиаторные рёбра (охлаждение спринтера)
-	var chest_att := _get_or_create_bone_att("chest_017")
+	# Тройные ребра охлаждения на спине (кость neck_013)
+	var neck_att := _get_or_create_bone_att("neck_013")
 	for i in range(3):
 		var fin := MeshInstance3D.new()
 		var fin_box := BoxMesh.new()
-		fin_box.size = Vector3(0.08, 0.03, 0.35)
+		fin_box.size = Vector3(0.18, 0.03, 0.38)
 		fin.mesh = fin_box
 		fin.material_override = _mat_dark_metal
-		fin.position = Vector3(0.3 - i * 0.22, 0.0, -0.45)
-		chest_att.add_child(fin)
+		fin.position = Vector3(-0.35 - i * 0.22, 0.0, -0.42)
+		neck_att.add_child(fin)
 
-	# Парные клинки-богомолы на обеих руках
-	for bone_name in ["forearm_L_051", "forearm_R_09"]:
-		var a_att := _get_or_create_bone_att(bone_name)
+	# Парные выдвижные клинки-богомолы на обеих руках
+	for bname in ["forearm_L_051", "forearm_R_09"]:
+		var a_att := _get_or_create_bone_att(bname)
 		var b_mesh := MeshInstance3D.new()
 		var b_box := BoxMesh.new()
-		b_box.size = Vector3(0.03, 0.65, 0.07)
+		b_box.size = Vector3(0.03, 0.72, 0.08)
 		b_mesh.mesh = b_box
-		var b_mat := StandardMaterial3D.new()
-		b_mat.albedo_color = Color(0.15, 0.15, 0.18)
-		b_mat.emission_enabled = true
-		b_mat.emission = cyan_color
-		b_mat.emission_energy_multiplier = 2.0
-		b_mesh.material_override = b_mat
-		b_mesh.position = Vector3(0.0, 0.45, 0.15)
+		b_mesh.material_override = _mat_steel_blade
+		b_mesh.position = Vector3(0.0, 0.55, 0.14)
 		a_att.add_child(b_mesh)
 
-	# Поршни на голенях
-	for bone_name in ["shin_L_035", "shin_R_039"]:
-		var s_att := _get_or_create_bone_att(bone_name)
+	# Пневматические поршни на голенях
+	for bname in ["shin_L_035", "shin_R_039"]:
+		var s_att := _get_or_create_bone_att(bname)
 		var piston := MeshInstance3D.new()
 		var cyl := CylinderMesh.new()
 		cyl.top_radius = 0.04
 		cyl.bottom_radius = 0.04
-		cyl.height = 0.45
+		cyl.height = 0.5
 		piston.mesh = cyl
 		piston.material_override = _mat_dark_metal
-		piston.position = Vector3(0.0, 0.0, -0.12)
+		piston.position = Vector3(0.0, 0.0, -0.15)
 		s_att.add_child(piston)
 
-# --- 3. BRUTE: ТЯЖЕЛЫЙ ДЖАГГЕРНАУТ (БРОНЕШЛЕМ, СПАЙКИ, ГИДРАВЛИЧЕСКАЯ КЛЕШНЯ) ---
+# --- 3. BRUTE: ТЯЖЕЛЫЙ ДЖАГГЕРНАУТ ---
 func _build_brute_upgrades() -> void:
+	# Тяжелая железная маска-череп с узкой светящейся щелью
 	var head_att := _get_or_create_bone_att("head_014")
-	# Тяжелая железная маска-шлем
 	var helmet := MeshInstance3D.new()
 	var h_box := BoxMesh.new()
 	h_box.size = Vector3(0.35, 0.65, 0.45)
 	helmet.mesh = h_box
-	helmet.material_override = _mat_rust_metal
+	helmet.material_override = _mat_cyber_armor
 	helmet.position = Vector3(0.05, 0.0, 0.15)
 	head_att.add_child(helmet)
 
-	# Узкая алая смотровая щель
 	var slit := MeshInstance3D.new()
 	var s_box := BoxMesh.new()
 	s_box.size = Vector3(0.05, 0.45, 0.04)
@@ -292,73 +358,83 @@ func _build_brute_upgrades() -> void:
 	slit.material_override = red_mat
 	slit.position = Vector3(0.12, 0.0, 0.38)
 	head_att.add_child(slit)
-	_add_light(slit, Color(1.0, 0.02, 0.02), 1.5, 2.5)
+	_add_light(slit, Color(1.0, 0.02, 0.02), 1.6, 2.5)
 
 	# Шипастый наплечник на левом плече
 	var shoulder_att := _get_or_create_bone_att("shoulder_L_015")
 	var pauldron := MeshInstance3D.new()
 	var p_box := BoxMesh.new()
-	p_box.size = Vector3(0.4, 0.5, 0.4)
+	p_box.size = Vector3(0.45, 0.55, 0.45)
 	pauldron.mesh = p_box
-	pauldron.material_override = _mat_rust_metal
+	pauldron.material_override = _mat_cyber_armor
 	pauldron.position = Vector3(0.0, 0.25, 0.0)
 	shoulder_att.add_child(pauldron)
 
-	# Шип на наплечнике
-	var spike := MeshInstance3D.new()
-	var s_cone := CylinderMesh.new()
-	s_cone.top_radius = 0.01
-	s_cone.bottom_radius = 0.08
-	s_cone.height = 0.35
-	spike.mesh = s_cone
-	spike.material_override = _mat_dark_metal
-	spike.position = Vector3(0.0, 0.38, 0.0)
-	pauldron.add_child(spike)
+	# 2 стальных шипа на наплечнике
+	for o in [-0.15, 0.15]:
+		var spike := MeshInstance3D.new()
+		var s_cone := CylinderMesh.new()
+		s_cone.top_radius = 0.01
+		s_cone.bottom_radius = 0.08
+		s_cone.height = 0.35
+		spike.mesh = s_cone
+		spike.material_override = _mat_dark_metal
+		spike.position = Vector3(0.0, 0.35, o)
+		pauldron.add_child(spike)
+
+	# Противоосколочный щит на верхней груди (кость neck_013)
+	var neck_att := _get_or_create_bone_att("neck_013")
+	var blast_plate := MeshInstance3D.new()
+	var bp_box := BoxMesh.new()
+	bp_box.size = Vector3(0.65, 0.75, 0.14)
+	blast_plate.mesh = bp_box
+	blast_plate.material_override = _mat_cyber_armor
+	blast_plate.position = Vector3(-0.75, 0.0, 0.52)
+	neck_att.add_child(blast_plate)
 
 	# Колоссальная гидравлическая клешня на правой руке
 	var claw_att := _get_or_create_bone_att("forearm_R_09")
 	var claw_base := MeshInstance3D.new()
 	var c_cyl := CylinderMesh.new()
-	c_cyl.top_radius = 0.16
-	c_cyl.bottom_radius = 0.14
-	c_cyl.height = 0.55
+	c_cyl.top_radius = 0.18
+	c_cyl.bottom_radius = 0.15
+	c_cyl.height = 0.6
 	claw_base.mesh = c_cyl
-	claw_base.material_override = _mat_rust_metal
-	claw_base.position = Vector3(0.0, 0.25, 0.0)
+	claw_base.material_override = _mat_cyber_armor
+	claw_base.position = Vector3(0.0, 0.3, 0.0)
 	claw_att.add_child(claw_base)
 
-	# Стальные клешни-захваты
+	# 3 мощных стальных пальца-захвата
 	for a in [-35.0, 0.0, 35.0]:
 		var finger := MeshInstance3D.new()
 		var f_box := BoxMesh.new()
-		f_box.size = Vector3(0.08, 0.45, 0.08)
+		f_box.size = Vector3(0.08, 0.5, 0.08)
 		finger.mesh = f_box
 		finger.material_override = _mat_dark_metal
-		finger.position = Vector3(0.0, 0.55, 0.1)
+		finger.position = Vector3(0.0, 0.6, 0.12)
 		finger.rotation_degrees = Vector3(0, 0, a)
 		claw_base.add_child(finger)
 
-# --- 4. CRAWLER: ПАУК-СТАЛКЕР (МУЛЬТИОКУЛЯР, ПАНЦИРЬ, КОГТИ) ---
+# --- 4. CRAWLER: ПАУК-СТАЛКЕР ---
 func _build_crawler_upgrades() -> void:
 	var head_att := _get_or_create_bone_att("head_014")
-	# 4 паучьих светящихся окуляра
 	var red_col := Color(1.0, 0.05, 0.05)
-	_create_ocular_eye(head_att, Vector3(0.12, -0.22, 0.28), red_col, 0.03)
-	_create_ocular_eye(head_att, Vector3(0.12, -0.32, 0.28), red_col, 0.03)
-	_create_ocular_eye(head_att, Vector3(0.02, -0.18, 0.26), red_col, 0.025)
-	_create_ocular_eye(head_att, Vector3(0.02, -0.36, 0.26), red_col, 0.025)
+	_create_ocular_eye(head_att, Vector3(0.12, -0.22, 0.28), red_col, 0.035)
+	_create_ocular_eye(head_att, Vector3(0.12, -0.32, 0.28), red_col, 0.035)
+	_create_ocular_eye(head_att, Vector3(0.02, -0.18, 0.26), red_col, 0.028)
+	_create_ocular_eye(head_att, Vector3(0.02, -0.36, 0.26), red_col, 0.028)
 
-	# Спинной защитный панцирь
-	var chest_att := _get_or_create_bone_att("chest_017")
+	# Спинной бронепанцирь (кость neck_013)
+	var neck_att := _get_or_create_bone_att("neck_013")
 	var carapace := MeshInstance3D.new()
 	var car_box := BoxMesh.new()
 	car_box.size = Vector3(0.7, 0.65, 0.15)
 	carapace.mesh = car_box
-	carapace.material_override = _mat_dark_metal
-	carapace.position = Vector3(0.0, 0.0, -0.45)
-	chest_att.add_child(carapace)
+	carapace.material_override = _mat_cyber_armor
+	carapace.position = Vector3(-0.65, 0.0, -0.45)
+	neck_att.add_child(carapace)
 
-	# Маячок на панцире
+	# Мигающий маяк на панцире
 	var beacon := MeshInstance3D.new()
 	var b_sph := SphereMesh.new()
 	b_sph.radius = 0.06
@@ -370,16 +446,14 @@ func _build_crawler_upgrades() -> void:
 	b_mat.emission = Color(1.0, 0.4, 0.0)
 	b_mat.emission_energy_multiplier = 4.0
 	beacon.material_override = b_mat
-	beacon.position = Vector3(0.0, 0.0, -0.1)
+	beacon.position = Vector3(0.0, 0.0, -0.12)
 	carapace.add_child(beacon)
 	_add_light(beacon, Color(1.0, 0.4, 0.0), 1.0, 1.8)
 
-# --- 5. SPITTER: ХИМИЧЕСКИЙ БИО-КИБОРГ (КИСЛОТНЫЕ БАЛЛОНЫ, РЕСПИРАТОР, РАСПЫЛИТЕЛЬ) ---
+# --- 5. SPITTER: ХИМИЧЕСКИЙ БИО-КИБОРГ ---
 func _build_spitter_upgrades() -> void:
 	var toxic_green := Color(0.2, 1.0, 0.25)
 	var head_att := _get_or_create_bone_att("head_014")
-
-	# Токсичный окуляр
 	_create_ocular_eye(head_att, Vector3(0.12, -0.28, 0.28), toxic_green, 0.045)
 
 	# Химический респиратор на челюсти
@@ -392,51 +466,50 @@ func _build_spitter_upgrades() -> void:
 	mask.position = Vector3(0.0, 0.0, 0.15)
 	jaw_att.add_child(mask)
 
-	# Двойные кислотные баллоны за спиной
-	var chest_att := _get_or_create_bone_att("chest_017")
+	# Двойные кислотные баллоны за спиной на шее/лопатках (кость neck_013)
+	var neck_att := _get_or_create_bone_att("neck_013")
 	for x_offset in [-0.22, 0.22]:
 		var tank := MeshInstance3D.new()
 		var cyl := CylinderMesh.new()
-		cyl.top_radius = 0.09
-		cyl.bottom_radius = 0.09
-		cyl.height = 0.65
+		cyl.top_radius = 0.1
+		cyl.bottom_radius = 0.1
+		cyl.height = 0.7
 		tank.mesh = cyl
 		var tank_mat := StandardMaterial3D.new()
-		tank_mat.albedo_color = Color(0.1, 0.3, 0.12)
+		tank_mat.albedo_color = Color(0.1, 0.35, 0.12)
 		tank_mat.emission_enabled = true
 		tank_mat.emission = toxic_green
-		tank_mat.emission_energy_multiplier = 1.8
+		tank_mat.emission_energy_multiplier = 2.0
 		tank.material_override = tank_mat
-		tank.position = Vector3(0.0, x_offset, -0.55)
+		tank.position = Vector3(-0.55, x_offset, -0.52)
 		tank.rotation_degrees = Vector3(0, 0, 90)
-		chest_att.add_child(tank)
+		neck_att.add_child(tank)
 
-	# Распылитель кислоты на левом предплечье
+	# Распылитель кислоты на левой руке
 	var spray_att := _get_or_create_bone_att("forearm_L_051")
 	var nozzle := MeshInstance3D.new()
 	var n_cyl := CylinderMesh.new()
 	n_cyl.top_radius = 0.05
 	n_cyl.bottom_radius = 0.08
-	n_cyl.height = 0.4
+	n_cyl.height = 0.45
 	nozzle.mesh = n_cyl
 	nozzle.material_override = _mat_dark_metal
-	nozzle.position = Vector3(0.0, 0.35, 0.1)
+	nozzle.position = Vector3(0.0, 0.4, 0.12)
 	spray_att.add_child(nozzle)
 
-# --- 6. SCREAMER: НЕЙРО-СИРЕНА (МИГАЮЩИЙ МАЯК, АКУСТИЧЕСКИЕ ТАРЕЛКИ, АНТЕННЫ) ---
+# --- 6. SCREAMER: НЕЙРО-СИРЕНА ---
 func _build_screamer_upgrades() -> void:
 	var head_att := _get_or_create_bone_att("head_014")
 	var amber_color := Color(1.0, 0.82, 0.08)
 
-	# Желтый сканирующий визор
 	_create_ocular_eye(head_att, Vector3(0.12, -0.28, 0.28), amber_color, 0.04)
 
-	# Сирена на макушке
+	# Вращающийся купол сирены на макушке
 	var siren := MeshInstance3D.new()
 	var s_cyl := CylinderMesh.new()
 	s_cyl.top_radius = 0.06
 	s_cyl.bottom_radius = 0.09
-	s_cyl.height = 0.15
+	s_cyl.height = 0.16
 	siren.mesh = s_cyl
 	var s_mat := StandardMaterial3D.new()
 	s_mat.albedo_color = amber_color
@@ -452,7 +525,7 @@ func _build_screamer_upgrades() -> void:
 	for side in [-0.3, 0.3]:
 		var dish := MeshInstance3D.new()
 		var d_cyl := CylinderMesh.new()
-		d_cyl.top_radius = 0.12
+		d_cyl.top_radius = 0.14
 		d_cyl.bottom_radius = 0.03
 		d_cyl.height = 0.08
 		dish.mesh = d_cyl
@@ -461,30 +534,30 @@ func _build_screamer_upgrades() -> void:
 		dish.rotation_degrees = Vector3(0, 0, 90 if side > 0 else -90)
 		head_att.add_child(dish)
 
-	# Антенная решетка на спине
-	var chest_att := _get_or_create_bone_att("chest_017")
+	# Антенная решетка на спине (кость neck_013)
+	var neck_att := _get_or_create_bone_att("neck_013")
 	var antenna := MeshInstance3D.new()
 	var a_cyl := CylinderMesh.new()
 	a_cyl.top_radius = 0.015
 	a_cyl.bottom_radius = 0.02
-	a_cyl.height = 0.95
+	a_cyl.height = 1.05
 	antenna.mesh = a_cyl
 	antenna.material_override = _mat_dark_metal
-	antenna.position = Vector3(0.45, 0.15, -0.45)
-	chest_att.add_child(antenna)
+	antenna.position = Vector3(0.1, 0.15, -0.45)
+	neck_att.add_child(antenna)
 
-# --- 7. EXPLODER: ДРОН-КАМИКАДЗЕ (РЕАКТОР-БОМБА В ГРУДИ, СТРОБОСКОП) ---
+# --- 7. EXPLODER: ДРОН-КАМИКАДЗЕ ---
 func _build_exploder_upgrades() -> void:
 	var head_att := _get_or_create_bone_att("head_014")
 	var fiery_orange := Color(1.0, 0.22, 0.02)
 	_create_ocular_eye(head_att, Vector3(0.12, -0.28, 0.28), fiery_orange, 0.04)
 
-	# Реакторное ядро бомбы прямо в груди
-	var chest_att := _get_or_create_bone_att("chest_017")
+	# Реакторное ядро бомбы НА ГРУДИ (кость neck_013)
+	var neck_att := _get_or_create_bone_att("neck_013")
 	var bomb_core := MeshInstance3D.new()
 	var sphere := SphereMesh.new()
-	sphere.radius = 0.18
-	sphere.height = 0.36
+	sphere.radius = 0.2
+	sphere.height = 0.4
 	bomb_core.mesh = sphere
 	var core_mat := StandardMaterial3D.new()
 	core_mat.albedo_color = fiery_orange
@@ -492,20 +565,59 @@ func _build_exploder_upgrades() -> void:
 	core_mat.emission = fiery_orange
 	core_mat.emission_energy_multiplier = 6.0
 	bomb_core.material_override = core_mat
-	bomb_core.position = Vector3(0.05, 0.0, 0.52)
-	chest_att.add_child(bomb_core)
-	_add_light(bomb_core, fiery_orange, 2.0, 3.2)
+	bomb_core.position = Vector3(-0.7, 0.0, 0.52)
+	neck_att.add_child(bomb_core)
+	_add_light(bomb_core, fiery_orange, 2.2, 3.5)
 
-	# Защитная решетка вокруг бомбы
+	# Защитная клетка реактора
 	var cage := MeshInstance3D.new()
 	var cage_box := BoxMesh.new()
-	cage_box.size = Vector3(0.42, 0.42, 0.12)
+	cage_box.size = Vector3(0.48, 0.48, 0.14)
 	cage.mesh = cage_box
-	cage.material_override = _mat_rust_metal
-	cage.position = Vector3(0.05, 0.0, 0.6)
-	chest_att.add_child(cage)
+	cage.material_override = _mat_cyber_armor
+	cage.position = Vector3(-0.7, 0.0, 0.6)
+	neck_att.add_child(cage)
 
-# --- ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ СОЗДАНИЯ ---
+# --- ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ---
+func _create_cranial_plate(parent: Node3D, color: Color) -> void:
+	# Металлическая пластина на черепе
+	var plate := MeshInstance3D.new()
+	var p_box := BoxMesh.new()
+	p_box.size = Vector3(0.18, 0.28, 0.06)
+	plate.mesh = p_box
+	plate.material_override = _mat_cyber_armor
+	plate.position = Vector3(0.14, -0.25, 0.24)
+	plate.rotation_degrees = Vector3(15, 0, 0)
+	parent.add_child(plate)
+
+	# Окуляр внутри пластины
+	var socket_mesh := MeshInstance3D.new()
+	var socket_cyl := CylinderMesh.new()
+	socket_cyl.top_radius = 0.045
+	socket_cyl.bottom_radius = 0.045
+	socket_cyl.height = 0.03
+	socket_mesh.mesh = socket_cyl
+	socket_mesh.material_override = _mat_dark_metal
+	socket_mesh.position = Vector3(0.0, -0.03, 0.04)
+	socket_mesh.rotation_degrees = Vector3(0, 0, 90)
+	plate.add_child(socket_mesh)
+
+	var lens_mesh := MeshInstance3D.new()
+	var lens_sphere := SphereMesh.new()
+	lens_sphere.radius = 0.035
+	lens_sphere.height = 0.045
+	lens_mesh.mesh = lens_sphere
+	var lens_mat := StandardMaterial3D.new()
+	lens_mat.albedo_color = color
+	lens_mat.emission_enabled = true
+	lens_mat.emission = color
+	lens_mat.emission_energy_multiplier = 4.5
+	lens_mesh.material_override = lens_mat
+	lens_mesh.position = Vector3(0.0, 0.015, 0.0)
+	socket_mesh.add_child(lens_mesh)
+
+	_add_light(lens_mesh, color, 1.2, 2.0)
+
 func _create_ocular_eye(parent: Node3D, pos: Vector3, color: Color, radius: float) -> void:
 	var socket_mesh := MeshInstance3D.new()
 	var socket_cyl := CylinderMesh.new()
@@ -555,19 +667,17 @@ func update_animation(_delta: float, moving: bool, move_speed: float, attacking:
 	is_hurt = hurt
 	is_dead = dead
 
-	# 1. Смерть (высший приоритет): фиксирует труп намертво без дерганий
+	# 1. Смерть: фиксирует труп намертво без дерганий
 	if is_dead:
 		if not has_died:
 			has_died = true
 			death_timer = 0.0
-			# Моментально гасим все кибернетические огни
 			for light in eye_lights:
 				if is_instance_valid(light):
 					light.light_energy = 0.0
 			anim_player.play("death", 0.1)
 			return
 
-		# Если уже умер — отслеживаем завершение анимации и намертво замораживаем
 		death_timer += _delta
 		if death_timer >= 2.95 or not anim_player.is_playing() or anim_player.current_animation != "death":
 			anim_player.pause()
@@ -575,7 +685,6 @@ func update_animation(_delta: float, moving: bool, move_speed: float, attacking:
 				anim_player.seek(anim_player.get_animation("death").length, true)
 		return
 
-	# Если труп — не давать проигрывать другие анимации
 	if has_died:
 		return
 
