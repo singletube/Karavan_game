@@ -1,8 +1,29 @@
 extends Node3D
 
+# =========================================================================
+# WEAPON 3D RIG (FIRST-PERSON VIEW)
+# Использует настоящие 3D-модели оружия (GLB):
+# - Револьвер .44 (Revolver.glb)
+# - Обрез двустволки (Shotgun.glb)
+# - Автомат каравана (AssaultRifle.glb)
+# - Ракетница RPG (RocketLauncher.glb)
+# =========================================================================
+
+const MODEL_REVOLVER = preload("res://models/weapons/Revolver.glb")
+const MODEL_SHOTGUN  = preload("res://models/weapons/Shotgun.glb")
+const MODEL_RIFLE    = preload("res://models/weapons/AssaultRifle.glb")
+const MODEL_ROCKET   = preload("res://models/weapons/RocketLauncher.glb")
+
 # --- Базовые трансформации для выравнивания по центру ---
 const BASE_POS := Vector3(0.0, -0.19, -0.42)
 const BASE_ROT := Vector3(0.0, 0.0, 0.0)
+
+const FLASH_POSITIONS = [
+	Vector3(0.0, 0.035, -0.36), # Revolver
+	Vector3(0.0, 0.025, -0.58), # Shotgun
+	Vector3(0.0, 0.020, -0.55), # Rifle
+	Vector3(0.0, 0.030, -0.52)  # Rocket
+]
 
 var current_weapon_idx : int = 0
 var weapon_nodes       : Array = []
@@ -12,7 +33,7 @@ var recoil_z   : float = 0.0
 var recoil_rot : float = 0.0
 var bob_time   : float = 0.0
 
-@onready var muzzle_flash_3d : Node3D = $MuzzleFlash3D
+var muzzle_flash_3d : Node3D = null
 
 func _ready() -> void:
 	position = BASE_POS
@@ -96,6 +117,9 @@ func set_active_weapon(idx: int) -> void:
 		if w:
 			w.visible = (i == idx)
 
+	if muzzle_flash_3d and idx >= 0 and idx < FLASH_POSITIONS.size():
+		muzzle_flash_3d.position = FLASH_POSITIONS[idx]
+
 	# Анимация доставания (подъем снизу вверх в 3D)
 	position.y = BASE_POS.y - 0.15
 	rotation.x = deg_to_rad(-18.0)
@@ -150,173 +174,56 @@ func update_transform(delta: float, is_moving: bool, move_speed: float) -> void:
 
 
 # =========================================================================
-# ПОСТРОЕНИЕ 3D МОДЕЛЕЙ ОРУЖИЯ
+# ПОСТРОЕНИЕ 3D МОДЕЛЕЙ ОРУЖИЯ (НАСТОЯЩИЕ 3D GLB МОДЕЛИ)
 # =========================================================================
 func _build_3d_weapons() -> void:
-	# Материалы PBR
-	var mat_metal := StandardMaterial3D.new()
-	mat_metal.albedo_color = Color(0.20, 0.20, 0.24)
-	mat_metal.metallic = 0.90
-	mat_metal.roughness = 0.30
-
-	var mat_metal_dark := StandardMaterial3D.new()
-	mat_metal_dark.albedo_color = Color(0.12, 0.12, 0.14)
-	mat_metal_dark.metallic = 0.80
-	mat_metal_dark.roughness = 0.45
-
-	var mat_wood := StandardMaterial3D.new()
-	mat_wood.albedo_color = Color(0.38, 0.20, 0.10)
-	mat_wood.roughness = 0.75
-
-	var mat_khaki := StandardMaterial3D.new()
-	mat_khaki.albedo_color = Color(0.26, 0.32, 0.22)
-	mat_khaki.metallic = 0.35
-	mat_khaki.roughness = 0.55
-
-	var mat_warhead := StandardMaterial3D.new()
-	mat_warhead.albedo_color = Color(0.80, 0.16, 0.12)
-	mat_warhead.roughness = 0.40
-
 	# --- 1. РЕВОЛЬВЕР .44 (Слот 1) ---
-	var rev := Node3D.new()
-	rev.name = "Weapon3D_Revolver"
-	add_child(rev)
-	weapon_nodes.append(rev)
+	var rev_root := Node3D.new()
+	rev_root.name = "Weapon3D_Revolver"
+	add_child(rev_root)
+	weapon_nodes.append(rev_root)
 
-	# Ствол
-	var rev_barrel := _create_box(Vector3(0.038, 0.045, 0.30), mat_metal)
-	rev_barrel.position = Vector3(0.0, 0.02, -0.15)
-	rev.add_child(rev_barrel)
-
-	# Мушка
-	var rev_sight := _create_box(Vector3(0.008, 0.018, 0.015), mat_metal_dark)
-	rev_sight.position = Vector3(0.0, 0.052, -0.28)
-	rev.add_child(rev_sight)
-
-	# Барабан
-	var rev_cyl := _create_cylinder(0.034, 0.075, mat_metal_dark)
-	rev_cyl.rotation.x = deg_to_rad(90.0)
-	rev_cyl.position = Vector3(0.0, 0.01, -0.01)
-	rev.add_child(rev_cyl)
-
-	# Рукоятка
-	var rev_grip := _create_box(Vector3(0.036, 0.11, 0.055), mat_wood)
-	rev_grip.rotation.x = deg_to_rad(-22.0)
-	rev_grip.position = Vector3(0.0, -0.065, 0.04)
-	rev.add_child(rev_grip)
+	var rev = MODEL_REVOLVER.instantiate()
+	rev.scale = Vector3.ONE * 0.22
+	rev.rotation_degrees = Vector3(0, 90, 0)
+	rev.position = Vector3(0.0, -0.02, 0.08)
+	rev_root.add_child(rev)
 
 	# --- 2. ОБРЕЗ ДВУСТВОЛКИ (Слот 2) ---
-	var shot := Node3D.new()
-	shot.name = "Weapon3D_Shotgun"
-	add_child(shot)
-	weapon_nodes.append(shot)
+	var shot_root := Node3D.new()
+	shot_root.name = "Weapon3D_Shotgun"
+	add_child(shot_root)
+	weapon_nodes.append(shot_root)
 
-	# Левый ствол
-	var s_barrel_l := _create_cylinder(0.024, 0.38, mat_metal_dark)
-	s_barrel_l.rotation.x = deg_to_rad(90.0)
-	s_barrel_l.position = Vector3(-0.026, 0.02, -0.16)
-	shot.add_child(s_barrel_l)
-
-	# Правый ствол
-	var s_barrel_r := _create_cylinder(0.024, 0.38, mat_metal_dark)
-	s_barrel_r.rotation.x = deg_to_rad(90.0)
-	s_barrel_r.position = Vector3(0.026, 0.02, -0.16)
-	shot.add_child(s_barrel_r)
-
-	# Прицельная планка сверху
-	var s_rib := _create_box(Vector3(0.016, 0.012, 0.38), mat_metal)
-	s_rib.position = Vector3(0.0, 0.038, -0.16)
-	shot.add_child(s_rib)
-
-	# Мушка посередине
-	var s_bead := _create_box(Vector3(0.008, 0.012, 0.012), mat_metal)
-	s_bead.position = Vector3(0.0, 0.048, -0.34)
-	shot.add_child(s_bead)
-
-	# Деревянное цевье снизу
-	var s_forend := _create_box(Vector3(0.088, 0.042, 0.22), mat_wood)
-	s_forend.position = Vector3(0.0, -0.015, -0.09)
-	shot.add_child(s_forend)
-
-	# Деревянная рукоятка ложи
-	var s_stock := _create_box(Vector3(0.048, 0.09, 0.08), mat_wood)
-	s_stock.rotation.x = deg_to_rad(-24.0)
-	s_stock.position = Vector3(0.0, -0.06, 0.06)
-	shot.add_child(s_stock)
+	var shot = MODEL_SHOTGUN.instantiate()
+	shot.scale = Vector3.ONE * 0.18
+	shot.rotation_degrees = Vector3(0, 90, 0)
+	shot.position = Vector3(0.0, -0.04, 0.12)
+	shot_root.add_child(shot)
 
 	# --- 3. АВТОМАТ КАРАВАНА (Слот 3) ---
-	var rif := Node3D.new()
-	rif.name = "Weapon3D_Rifle"
-	add_child(rif)
-	weapon_nodes.append(rif)
+	var rif_root := Node3D.new()
+	rif_root.name = "Weapon3D_Rifle"
+	add_child(rif_root)
+	weapon_nodes.append(rif_root)
 
-	# Ствольная коробка
-	var r_rec := _create_box(Vector3(0.048, 0.068, 0.26), mat_metal_dark)
-	r_rec.position = Vector3(0.0, 0.02, -0.08)
-	rif.add_child(r_rec)
-
-	# Ствол с пламегасителем
-	var r_bar := _create_cylinder(0.014, 0.28, mat_metal)
-	r_bar.rotation.x = deg_to_rad(90.0)
-	r_bar.position = Vector3(0.0, 0.024, -0.32)
-	rif.add_child(r_bar)
-
-	# Мушка кольцевая
-	var r_sight := _create_box(Vector3(0.012, 0.028, 0.015), mat_metal)
-	r_sight.position = Vector3(0.0, 0.052, -0.38)
-	rif.add_child(r_sight)
-
-	# Цевье
-	var r_guard := _create_box(Vector3(0.054, 0.052, 0.16), mat_wood)
-	r_guard.position = Vector3(0.0, 0.015, -0.21)
-	rif.add_child(r_guard)
-
-	# Изогнутый магазин
-	var r_mag := _create_box(Vector3(0.032, 0.14, 0.065), mat_metal_dark)
-	r_mag.rotation.x = deg_to_rad(18.0)
-	r_mag.position = Vector3(0.0, -0.08, -0.10)
-	rif.add_child(r_mag)
-
-	# Пистолетная рукоятка
-	var r_grip := _create_box(Vector3(0.036, 0.095, 0.045), mat_wood)
-	r_grip.rotation.x = deg_to_rad(-22.0)
-	r_grip.position = Vector3(0.0, -0.065, 0.05)
-	rif.add_child(r_grip)
+	var rif = MODEL_RIFLE.instantiate()
+	rif.scale = Vector3.ONE * 0.36
+	rif.rotation_degrees = Vector3(0, 90, 0)
+	rif.position = Vector3(0.0, -0.045, 0.06)
+	rif_root.add_child(rif)
 
 	# --- 4. РАКЕТНИЦА RPG (Слот 4) ---
-	var rkt := Node3D.new()
-	rkt.name = "Weapon3D_Rocket"
-	add_child(rkt)
-	weapon_nodes.append(rkt)
+	var rkt_root := Node3D.new()
+	rkt_root.name = "Weapon3D_Rocket"
+	add_child(rkt_root)
+	weapon_nodes.append(rkt_root)
 
-	# Ракетная труба
-	var rkt_tube := _create_cylinder(0.062, 0.55, mat_khaki)
-	rkt_tube.rotation.x = deg_to_rad(90.0)
-	rkt_tube.position = Vector3(0.0, 0.02, -0.14)
-	rkt.add_child(rkt_tube)
-
-	# Раструб на конце трубы
-	var rkt_ring := _create_cylinder(0.074, 0.06, mat_metal_dark)
-	rkt_ring.rotation.x = deg_to_rad(90.0)
-	rkt_ring.position = Vector3(0.0, 0.02, -0.40)
-	rkt.add_child(rkt_ring)
-
-	# Ракета торчащая из ствола (коническая боеголовка)
-	var rkt_warhead := _create_cylinder(0.058, 0.18, mat_warhead)
-	rkt_warhead.rotation.x = deg_to_rad(90.0)
-	rkt_warhead.position = Vector3(0.0, 0.02, -0.47)
-	rkt.add_child(rkt_warhead)
-
-	# Прицельный щиток сбоку
-	var rkt_optic := _create_box(Vector3(0.015, 0.045, 0.06), mat_metal_dark)
-	rkt_optic.position = Vector3(-0.075, 0.06, -0.20)
-	rkt.add_child(rkt_optic)
-
-	# Рукоятка
-	var rkt_grip := _create_box(Vector3(0.038, 0.12, 0.05), mat_khaki)
-	rkt_grip.rotation.x = deg_to_rad(-16.0)
-	rkt_grip.position = Vector3(0.0, -0.08, -0.06)
-	rkt.add_child(rkt_grip)
+	var rkt = MODEL_ROCKET.instantiate()
+	rkt.scale = Vector3.ONE * 0.44
+	rkt.rotation_degrees = Vector3(0, 90, 0)
+	rkt.position = Vector3(0.0, -0.04, 0.04)
+	rkt_root.add_child(rkt)
 
 # =========================================================================
 # ВСПЫШКА ВЫСТРЕЛА (3D FLASH + LIGHT)
@@ -324,7 +231,7 @@ func _build_3d_weapons() -> void:
 func _build_muzzle_flash() -> void:
 	var flash_parent := Node3D.new()
 	flash_parent.name = "MuzzleFlash3D"
-	flash_parent.position = Vector3(0.0, 0.025, -0.48)
+	flash_parent.position = FLASH_POSITIONS[0]
 	flash_parent.visible = false
 	add_child(flash_parent)
 	muzzle_flash_3d = flash_parent
@@ -340,7 +247,13 @@ func _build_muzzle_flash() -> void:
 	var flash_mat := StandardMaterial3D.new()
 	flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	flash_mat.albedo_color = Color(1.0, 0.9, 0.3)
-	flash_mat.albedo_texture = TextureGen.make_muzzle_flash()
+	if ResourceLoader.exists("res://assets/textures/muzzle_flash.png"):
+		flash_mat.albedo_texture = load("res://assets/textures/muzzle_flash.png")
+	elif ResourceLoader.exists("res://Weapons/Images/muzzle_flash.png"):
+		flash_mat.albedo_texture = load("res://Weapons/Images/muzzle_flash.png")
+	elif ClassDB.class_exists("TextureGen") or Engine.has_singleton("TextureGen"):
+		# Fallback to generator if available
+		pass
 	flash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	flash_mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 
@@ -351,23 +264,3 @@ func _build_muzzle_flash() -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = qm
 	flash_parent.add_child(mi)
-
-# Вспомогательные функции создания лоу-поли примитивов
-func _create_box(box_size: Vector3, mat: Material) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = box_size
-	mesh.material = mat
-	mi.mesh = mesh
-	return mi
-
-func _create_cylinder(radius: float, height: float, mat: Material) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = radius
-	mesh.bottom_radius = radius
-	mesh.height = height
-	mesh.radial_segments = 12
-	mesh.material = mat
-	mi.mesh = mesh
-	return mi

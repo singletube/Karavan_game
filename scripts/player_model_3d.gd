@@ -5,6 +5,13 @@ class_name PlayerModel3D
 # 3D МОДЕЛЬ ПЕРСОНАЖА (Ковбой / Стрелок в пустыне с детальными текстурами)
 # =========================================================================
 
+const MODEL_REVOLVER = preload("res://models/weapons/Revolver.glb")
+const MODEL_SHOTGUN  = preload("res://models/weapons/Shotgun.glb")
+const MODEL_RIFLE    = preload("res://models/weapons/AssaultRifle.glb")
+const MODEL_SNIPER   = preload("res://models/weapons/SniperRifle.glb")
+const MODEL_ROCKET   = preload("res://models/weapons/RocketLauncher.glb")
+const MODEL_SMG      = preload("res://models/weapons/SMG.glb")
+
 var pelvis         : Node3D
 var torso          : Node3D
 var head           : Node3D
@@ -297,42 +304,52 @@ func set_weapon(weapon_name: String) -> void:
 
 	match weapon_name:
 		"Shotgun":
-			# Двустволка
-			_make_box(Vector3(0.06, 0.10, 0.22), mat_leather, active_gun, Vector3(0, -0.02, -0.10)) # приклад
-			_make_cyl(0.55, 0.025, 0.025, mat_dark_steel, active_gun, Vector3(-0.025, 0.04, 0.22), Vector3(PI / 2.0, 0, 0))
-			_make_cyl(0.55, 0.025, 0.025, mat_dark_steel, active_gun, Vector3(0.025, 0.04, 0.22), Vector3(PI / 2.0, 0, 0))
-			muzzle_flash.position = Vector3(0, 0.04, 0.52)
+			var gun = MODEL_SHOTGUN.instantiate()
+			gun.scale = Vector3.ONE * 0.16
+			gun.rotation_degrees = Vector3(0, -90, 0)
+			gun.position = Vector3(0.0, 0.02, 0.16)
+			active_gun.add_child(gun)
+			muzzle_flash.position = Vector3(0, 0.02, 0.65)
 		"AssaultRifle":
-			# Автомат
-			_make_box(Vector3(0.06, 0.10, 0.20), mat_leather, active_gun, Vector3(0, -0.02, -0.08))
-			_make_box(Vector3(0.07, 0.10, 0.35), mat_dark_steel, active_gun, Vector3(0, 0.04, 0.12)) # ствольная коробка
-			_make_box(Vector3(0.05, 0.18, 0.10), mat_metal, active_gun, Vector3(0, -0.10, 0.14), Vector3(0.2, 0, 0)) # рожок
-			_make_cyl(0.45, 0.022, 0.022, mat_dark_steel, active_gun, Vector3(0, 0.04, 0.44), Vector3(PI / 2.0, 0, 0))
-			muzzle_flash.position = Vector3(0, 0.04, 0.68)
+			var gun = MODEL_RIFLE.instantiate()
+			gun.scale = Vector3.ONE * 0.32
+			gun.rotation_degrees = Vector3(0, -90, 0)
+			gun.position = Vector3(0.0, 0.02, 0.14)
+			active_gun.add_child(gun)
+			muzzle_flash.position = Vector3(0, 0.02, 0.68)
 		"SniperRifle":
-			# Снайперская винтовка с оптикой
-			_make_box(Vector3(0.06, 0.11, 0.26), mat_leather, active_gun, Vector3(0, -0.02, -0.12))
-			_make_cyl(0.75, 0.024, 0.024, mat_dark_steel, active_gun, Vector3(0, 0.04, 0.38), Vector3(PI / 2.0, 0, 0))
-			_make_cyl(0.24, 0.035, 0.035, mat_metal, active_gun, Vector3(0, 0.11, 0.15), Vector3(PI / 2.0, 0, 0)) # прицел
-			muzzle_flash.position = Vector3(0, 0.04, 0.78)
+			var gun = MODEL_SNIPER.instantiate()
+			gun.scale = Vector3.ONE * 0.36
+			gun.rotation_degrees = Vector3(0, -90, 0)
+			gun.position = Vector3(0.0, 0.02, 0.18)
+			active_gun.add_child(gun)
+			muzzle_flash.position = Vector3(0, 0.02, 0.82)
 		"RocketLauncher":
-			# Ракетница (РПГ / Базука)
-			_make_cyl(0.95, 0.075, 0.075, StandardMaterial3D.new(), active_gun, Vector3(0, 0.08, 0.15), Vector3(PI / 2.0, 0, 0))
-			active_gun.get_child(0).material_override = mat_torso
-			_make_cyl(0.14, 0.11, 0.075, mat_metal, active_gun, Vector3(0, 0.08, 0.62), Vector3(PI / 2.0, 0, 0)) # раструб
-			muzzle_flash.position = Vector3(0, 0.08, 0.70)
+			var gun = MODEL_ROCKET.instantiate()
+			gun.scale = Vector3.ONE * 0.40
+			gun.rotation_degrees = Vector3(0, -90, 0)
+			gun.position = Vector3(0.0, 0.04, 0.15)
+			active_gun.add_child(gun)
+			muzzle_flash.position = Vector3(0, 0.04, 0.72)
+		"SMG":
+			var gun = MODEL_SMG.instantiate()
+			gun.scale = Vector3.ONE * 0.32
+			gun.rotation_degrees = Vector3(0, -90, 0)
+			gun.position = Vector3(0.0, 0.02, 0.12)
+			active_gun.add_child(gun)
+			muzzle_flash.position = Vector3(0, 0.02, 0.55)
 		"Chainsaw":
-			# Бензопила
 			_make_box(Vector3(0.22, 0.22, 0.35), mat_orange, active_gun, Vector3(0, 0.04, 0.05)) # корпус
 			_make_box(Vector3(0.03, 0.14, 0.50), mat_dark_steel, active_gun, Vector3(0, 0.04, 0.45)) # шина
 			_make_box(Vector3(0.04, 0.16, 0.52), mat_metal, active_gun, Vector3(0, 0.04, 0.45)) # цепь
 			muzzle_flash.position = Vector3(0, 0.04, 0.72)
 		_:
-			# Классический револьвер .44
-			_make_box(Vector3(0.06, 0.10, 0.08), mat_leather, active_gun, Vector3(0, 0, 0)) # рукоять
-			_make_cyl(0.22, 0.028, 0.028, mat_metal, active_gun, Vector3(0, 0.04, 0.12), Vector3(PI / 2.0, 0, 0)) # ствол
-			_make_cyl(0.09, 0.05, 0.05, mat_dark_steel, active_gun, Vector3(0, 0.04, 0.03), Vector3(PI / 2.0, 0, 0)) # барабан
-			muzzle_flash.position = Vector3(0, 0.04, 0.25)
+			var gun = MODEL_REVOLVER.instantiate()
+			gun.scale = Vector3.ONE * 0.20
+			gun.rotation_degrees = Vector3(0, -90, 0)
+			gun.position = Vector3(0.0, 0.01, 0.10)
+			active_gun.add_child(gun)
+			muzzle_flash.position = Vector3(0, 0.02, 0.36)
 
 func play_shoot_effect(w_name: String = "") -> void:
 	if not w_name.is_empty() and w_name != current_weapon_name:
