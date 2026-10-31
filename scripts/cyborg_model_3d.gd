@@ -2,24 +2,23 @@ extends Node3D
 
 # =========================================================================
 # REALISTIC CYBORG ZOMBIE CONTROLLER
-# Использует высококачественную анимированную 3D-модель (Melty Zombie / Xellotath)
+# Использует оригинальную анимированную 3D-модель (Melty Zombie)
 # с полным набором скелетных анимаций:
-# walk01, walk02, run, idle01, idle02, attack01, attack02, damage, death, on_all_four_A
-# А также кибернетические импланты: светящийся алый окуляр / визор на кости головы,
-# цветовую дифференциацию и масштабирование по типам зомби.
+# walk01, walk02, run, idle01, idle02, attack01, attack02, damage, death, on_all_four_B
+# С кибернетическим светящимся визором на кости черепа и вертикальной ориентацией.
 # =========================================================================
 
-const ZOMBIE_MODEL_PATH: String = "res://models/zombies/real_zombie_walker.glb"
+const ZOMBIE_MODEL_PATH: String = "res://models/zombies/melty_zombie/scene.gltf"
 
 var current_type: String = "Walker"
 
-# Ссылки на ноды загруженной модели
+# Ссылки на ноды
 var _model_instance: Node3D = null
 var anim_player: AnimationPlayer = null
 var skeleton: Skeleton3D = null
 var eye_light: OmniLight3D = null
 
-# Параметры анимаций
+# Состояние
 var is_moving: bool = false
 var is_attacking: bool = false
 var is_hurt: bool = false
@@ -34,7 +33,7 @@ func setup_type(type_name: String) -> void:
 
 	var scene_res = load(ZOMBIE_MODEL_PATH)
 	if not scene_res:
-		push_error("Failed to load real zombie model: " + ZOMBIE_MODEL_PATH)
+		push_error("Failed to load zombie model: " + ZOMBIE_MODEL_PATH)
 		return
 
 	_model_instance = scene_res.instantiate() as Node3D
@@ -52,23 +51,26 @@ func setup_type(type_name: String) -> void:
 			anim_player = c as AnimationPlayer
 			break
 
-	# Настройка циклов анимаций
 	if anim_player:
 		_configure_animation_loops()
 
-	# Поиск Skeleton3D для кибернетических аттачментов
+	# Поиск Skeleton3D
 	skeleton = _model_instance.find_child("Skeleton3D", true, false) as Skeleton3D
 	if not skeleton:
 		for c in _model_instance.find_children("*", "Skeleton3D", true, false):
 			skeleton = c as Skeleton3D
 			break
 
-	# Настройка масштаба и параметров под тип зомби
+	# Настройка масштаба под тип
 	_apply_type_customization()
 
-	# Добавление светящегося кибер-окуляра на голову
+	# Добавление светящегося кибер-окуляра на кость головы
 	if skeleton:
 		_attach_cyber_eye()
+
+	# Запуск начальной анимации покоя
+	if anim_player:
+		anim_player.play("idle01")
 
 func _clear_model() -> void:
 	for c in get_children():
@@ -94,21 +96,23 @@ func _configure_animation_loops() -> void:
 			anim_player.get_animation(a_name).loop_mode = Animation.LOOP_NONE
 
 func _apply_type_customization() -> void:
+	# Базовый масштаб модели: 0.68 обеспечивает рост 1.86м
+	const BASE_SCALE: float = 0.68
 	match current_type:
 		"Runner":
-			scale = Vector3(0.92, 0.92, 0.92)
+			scale = Vector3.ONE * (BASE_SCALE * 0.90)
 		"Brute":
-			scale = Vector3(1.38, 1.38, 1.38)
+			scale = Vector3.ONE * (BASE_SCALE * 1.40) # Внушительный громила ~2.6м
 		"Crawler":
-			scale = Vector3(1.05, 0.9, 1.05)
+			scale = Vector3(BASE_SCALE * 1.05, BASE_SCALE * 0.85, BASE_SCALE * 1.05)
 		"Spitter":
-			scale = Vector3(0.95, 0.95, 0.95)
+			scale = Vector3.ONE * (BASE_SCALE * 0.95)
 		"Screamer":
-			scale = Vector3(0.96, 0.96, 0.96)
+			scale = Vector3.ONE * (BASE_SCALE * 0.96)
 		"Exploder":
-			scale = Vector3(1.0, 1.0, 1.0)
+			scale = Vector3.ONE * (BASE_SCALE * 1.0)
 		_:
-			scale = Vector3.ONE
+			scale = Vector3.ONE * BASE_SCALE
 
 func _get_type_eye_color() -> Color:
 	match current_type:
@@ -119,7 +123,7 @@ func _get_type_eye_color() -> Color:
 		"Exploder":
 			return Color(1.0, 0.28, 0.05) # Взрывной огненно-оранжевый
 		_:
-			return Color(1.0, 0.08, 0.08) # Зловещий алый кибер-окуляр
+			return Color(1.0, 0.06, 0.06) # Зловещий алый кибер-окуляр
 
 func _attach_cyber_eye() -> void:
 	var head_bone_idx = skeleton.find_bone("head_014")
@@ -133,41 +137,41 @@ func _attach_cyber_eye() -> void:
 
 	var eye_color := _get_type_eye_color()
 
-	# Металлическая оправа киберокуляра
+	# Металлическая оправа киберокуляра на черепе
 	var socket_mesh := MeshInstance3D.new()
 	var socket_cyl := CylinderMesh.new()
-	socket_cyl.top_radius = 0.08
-	socket_cyl.bottom_radius = 0.08
-	socket_cyl.height = 0.06
+	socket_cyl.top_radius = 0.04
+	socket_cyl.bottom_radius = 0.04
+	socket_cyl.height = 0.03
 	socket_mesh.mesh = socket_cyl
 	var socket_mat := StandardMaterial3D.new()
-	socket_mat.albedo_color = Color(0.12, 0.12, 0.13)
-	socket_mat.metallic = 0.9
-	socket_mat.roughness = 0.25
+	socket_mat.albedo_color = Color(0.1, 0.1, 0.12)
+	socket_mat.metallic = 0.95
+	socket_mat.roughness = 0.2
 	socket_mesh.material_override = socket_mat
-	socket_mesh.position = Vector3(0.15, 0.22, 0.45)
-	socket_mesh.rotation_degrees = Vector3(80, 0, 0)
+	socket_mesh.position = Vector3(0.12, -0.28, 0.28)
+	socket_mesh.rotation_degrees = Vector3(0, 0, 90)
 	bone_attachment.add_child(socket_mesh)
 
 	# Светящаяся линза окуляра
 	var lens_mesh := MeshInstance3D.new()
 	var lens_sphere := SphereMesh.new()
-	lens_sphere.radius = 0.06
-	lens_sphere.height = 0.08
+	lens_sphere.radius = 0.032
+	lens_sphere.height = 0.04
 	lens_mesh.mesh = lens_sphere
 	var lens_mat := StandardMaterial3D.new()
 	lens_mat.albedo_color = eye_color
 	lens_mat.emission_enabled = true
 	lens_mat.emission = eye_color
-	lens_mat.emission_energy_multiplier = 4.5
+	lens_mat.emission_energy_multiplier = 4.0
 	lens_mesh.material_override = lens_mat
-	lens_mesh.position = Vector3(0.0, 0.02, 0.0)
+	lens_mesh.position = Vector3(0.0, 0.015, 0.0)
 	socket_mesh.add_child(lens_mesh)
 
 	# Источник света от окуляра
 	eye_light = OmniLight3D.new()
 	eye_light.light_color = eye_color
-	eye_light.light_energy = 1.2
+	eye_light.light_energy = 1.0
 	eye_light.omni_range = 1.8
 	eye_light.shadow_enabled = false
 	lens_mesh.add_child(eye_light)
@@ -210,8 +214,8 @@ func update_animation(_delta: float, moving: bool, move_speed: float, attacking:
 	if is_moving:
 		match current_type:
 			"Crawler":
-				if anim_player.current_animation != "on_all_four_A":
-					anim_player.play("on_all_four_A", 0.2, maxf(1.0, move_speed * 0.45))
+				if anim_player.current_animation != "on_all_four_B":
+					anim_player.play("on_all_four_B", 0.2, maxf(1.0, move_speed * 0.45))
 			"Runner":
 				if anim_player.current_animation != "run":
 					anim_player.play("run", 0.15, maxf(1.1, move_speed * 0.32))
