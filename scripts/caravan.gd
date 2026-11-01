@@ -19,7 +19,6 @@ var is_destroyed: bool = false
 var is_blocked: bool = false
 var is_in_camp: bool = false
 var is_boosted: bool = false
-var donkey_trigger: Node3D = null
 var walk_phase: float = 0.0
 
 var track_dist: float = 0.0
@@ -52,44 +51,21 @@ func _ready() -> void:
 	if hit_sound and snd_wood_hit:
 		hit_sound.stream = snd_wood_hit
 
-	_setup_donkey_interaction()
-
-func _setup_donkey_interaction() -> void:
-	donkey_trigger = Node3D.new()
-	donkey_trigger.name = "DonkeySpurTrigger"
-	donkey_trigger.position = Vector3(0.0, 1.2, -4.2)
-	donkey_trigger.add_to_group("interactive")
-	donkey_trigger.set_meta("prompt_text", "ПОГОНЯТЬ ОСЛА (УСКОРЕНИЕ x10) [E]")
-	var scr := GDScript.new()
-	scr.source_code = """extends Node3D
-func on_interact(_player: Node) -> void:
-	var caravan := get_parent()
-	if caravan and caravan.has_method("toggle_boost"):
-		caravan.toggle_boost()
-"""
-	scr.reload()
-	donkey_trigger.set_script(scr)
-	add_child(donkey_trigger)
-
 func toggle_boost() -> void:
 	set_boost(not is_boosted)
 
 func set_boost(val: bool) -> void:
 	is_boosted = val
-	if donkey_trigger and is_instance_valid(donkey_trigger):
-		donkey_trigger.set_meta("prompt_text", "УСПОКОИТЬ ОСЛА (НОРМА x1) [E]" if is_boosted else "ПОГОНЯТЬ ОСЛА (УСКОРЕНИЕ x10) [E]")
 	if is_inside_tree():
 		var gmm = get_node_or_null("/root/GodModeManager")
 		if gmm and gmm.has_method("show_toast"):
-			gmm.show_toast("🐎 ОСЕЛ РАЗОГНАН В 10 РАЗ! (22.5 м/с)" if is_boosted else "🐪 ОСЕЛ ПЕРЕШЕЛ НА ШАГ (2.25 м/с)")
+			gmm.show_toast("🐎 DEV: ОСЕЛ РАЗОГНАН В 10 РАЗ! (22.5 м/с)" if is_boosted else "🐪 DEV: ОСЕЛ ПЕРЕШЕЛ НА ШАГ (2.25 м/с)")
 		if multiplayer and multiplayer.has_multiplayer_peer() and multiplayer.is_server():
 			sync_caravan_boost.rpc(is_boosted)
 
 @rpc("authority", "reliable")
 func sync_caravan_boost(boosted: bool) -> void:
 	is_boosted = boosted
-	if donkey_trigger and is_instance_valid(donkey_trigger):
-		donkey_trigger.set_meta("prompt_text", "УСПОКОИТЬ ОСЛА (НОРМА x1) [E]" if is_boosted else "ПОГОНЯТЬ ОСЛА (УСКОРЕНИЕ x10) [E]")
 
 func _physics_process(delta: float) -> void:
 	if _hit_grace_timer > 0.0:

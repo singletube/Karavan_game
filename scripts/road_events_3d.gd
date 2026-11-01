@@ -4,6 +4,7 @@ class_name RoadEvents3D
 
 const OutpostCamp3DClass = preload("res://scripts/outpost_camp_3d.gd")
 const CampNPC3DClass = preload("res://scripts/camp_npc_3d.gd")
+const PropModels3D = preload("res://scripts/prop_models_3d.gd")
 
 # Фабрика дорожных событий: баррикады с взрывоопасными бочками, заброшенные заправки и оазисы
 
@@ -1746,7 +1747,56 @@ static func create_outpost_camp() -> Node3D:
 		spot.rotation = Vector3(deg_to_rad(-25.0), deg_to_rad(180.0 if t_pos.z > 0.0 else 0.0), 0.0)
 		root.add_child(spot)
 
+		# Огневая позиция снайпера на башне (мешки с песком, винтовка, россыпь гильз, ящик патронов)
+		var sandbags_f := PropModels3D.create_sandbag_wall(2.8, 2)
+		sandbags_f.position = t_pos + Vector3(0.0, 6.6, 1.7 if t_pos.z > 0.0 else -1.7)
+		root.add_child(sandbags_f)
+
+		var rifle := PropModels3D.create_rifle_prop()
+		rifle.position = t_pos + Vector3(0.6, 7.1, 1.6 if t_pos.z > 0.0 else -1.6)
+		rifle.rotation = Vector3(deg_to_rad(20.0), deg_to_rad(180.0 if t_pos.z > 0.0 else 0.0), deg_to_rad(-15.0))
+		root.add_child(rifle)
+
+		var casings := PropModels3D.create_spent_casings_pile(0.65)
+		casings.position = t_pos + Vector3(0.2, 6.6, 0.4 if t_pos.z > 0.0 else -0.4)
+		root.add_child(casings)
+
+		var ammo_bx := PropModels3D.create_ammo_crate_open()
+		ammo_bx.position = t_pos + Vector3(-0.9, 6.6, 0.3 if t_pos.z > 0.0 else -0.3)
+		ammo_bx.scale = Vector3(0.7, 0.7, 0.7)
+		root.add_child(ammo_bx)
+
 	# --- 2. ВХОДНЫЕ ВОРОТА (ЮЖНЫЙ ВЪЕЗД: Z = +21.5) ---
+	# Противотанковые ежи и колючая проволока на подступах к воротам
+	var hedge_positions := [
+		Vector3(-8.5, 0.0, 25.5),
+		Vector3(-4.8, 0.0, 27.5),
+		Vector3(4.8, 0.0, 27.5),
+		Vector3(8.5, 0.0, 25.5),
+	]
+	for hp in hedge_positions:
+		var hedgehog := PropModels3D.create_tank_trap_hedgehog()
+		hedgehog.position = hp
+		root.add_child(hedgehog)
+
+	# Устрашающие пики с насаженными светящимися головами киборгов
+	var trophy_left := PropModels3D.create_cyborg_spike_trophy()
+	trophy_left.position = Vector3(-6.8, 0.0, 23.5)
+	root.add_child(trophy_left)
+
+	var trophy_right := PropModels3D.create_cyborg_spike_trophy()
+	trophy_right.position = Vector3(6.8, 0.0, 23.5)
+	root.add_child(trophy_right)
+
+	# Стопки шин вдоль наружных стен лагеря
+	var wall_tires_l := PropModels3D.create_tire_stack(3)
+	wall_tires_l.position = Vector3(-13.8, 0.0, 10.0)
+	root.add_child(wall_tires_l)
+
+	var wall_tires_r := PropModels3D.create_tire_stack(4)
+	wall_tires_r.position = Vector3(13.8, 0.0, 10.0)
+	root.add_child(wall_tires_r)
+
 	# Пилоны ворот
 	_add_collidable_box(body, root, Vector3(2.2, 5.5, 2.2), mat_sandstone, Vector3(-5.2, 2.75, 21.5))
 	_add_collidable_box(body, root, Vector3(2.2, 5.5, 2.2), mat_sandstone, Vector3(5.2, 2.75, 21.5))
@@ -1879,6 +1929,20 @@ func on_interact_completed(player: Node) -> void:
 	_add_cyl(root, 2.4, 0.06, 0.06, mat_steel_beam, water_pos + Vector3(1.2, 2.4, 0.0))
 	_add_box(root, Vector3(0.25, 0.25, 0.25), mat_emergency_red, water_pos + Vector3(1.2, 1.2, 0.0)) # вентиль
 
+	# Две детальные финиковые пальмы у оазисной цистерны
+	var palm1 := PropModels3D.create_palm_tree(6.2, 0.16)
+	palm1.position = water_pos + Vector3(-2.6, 0.0, 3.4)
+	root.add_child(palm1)
+
+	var palm2 := PropModels3D.create_palm_tree(5.2, -0.18)
+	palm2.position = water_pos + Vector3(3.4, 0.0, 2.6)
+	root.add_child(palm2)
+
+	# Ребристый пустынный кактус у внутренней стены
+	var cactus_camp := PropModels3D.create_cactus_detailed()
+	cactus_camp.position = Vector3(-12.2, 0.0, 3.5)
+	root.add_child(cactus_camp)
+
 	# --- 1. ШАТЁР ТОРГОВЦА ФАРИДА (СЛЕВА У СТЕНЫ) ---
 	# Открытый восточный базар на деревянных столбах с коврами и навесом
 	var trader_pos := Vector3(-8.8, 0.0, -4.5)
@@ -1915,9 +1979,22 @@ func on_interact_completed(player: Node) -> void:
 	_add_collidable_box(body, root, Vector3(3.8, 0.90, 0.95), mat_beam_wood, trader_pos + Vector3(0.0, 0.45, 1.4))
 	_add_box(root, Vector3(4.0, 0.08, 1.05), mat_cushion, trader_pos + Vector3(0.0, 0.92, 1.4)) # коврик прилавка
 
-	# ТОВАРЫ НА ПРИЛАВКЕ: ящики патронов, аптечки, золотые монеты
-	_add_box(root, Vector3(0.55, 0.25, 0.35), mat_military_green, trader_pos + Vector3(-1.2, 1.05, 1.4)) # патронный цинк
-	_add_box(root, Vector3(0.50, 0.22, 0.32), mat_military_green, trader_pos + Vector3(-1.2, 1.28, 1.4))
+	# ТОВАРЫ НА ПРИЛАВКЕ: детальное оружие, открытые ящики патронов, аптечки, золото
+	var p_gun := PropModels3D.create_pistol_prop()
+	p_gun.position = trader_pos + Vector3(-0.4, 0.98, 1.38)
+	p_gun.rotation.y = deg_to_rad(30.0)
+	root.add_child(p_gun)
+
+	var p_ammo := PropModels3D.create_ammo_crate_open()
+	p_ammo.position = trader_pos + Vector3(-1.3, 0.94, 1.35)
+	p_ammo.scale = Vector3(0.65, 0.65, 0.65)
+	root.add_child(p_ammo)
+
+	# Склад ценного кибер-лута за прилавком (платы, батареи, рука киборга)
+	var tech_salvage := PropModels3D.create_tech_salvage_pile()
+	tech_salvage.position = trader_pos + Vector3(1.2, 0.0, -0.6)
+	root.add_child(tech_salvage)
+
 	_add_box(root, Vector3(0.38, 0.24, 0.28), mat_white_enamel, trader_pos + Vector3(0.9, 1.05, 1.4)) # армейская аптечка
 	_add_box(root, Vector3(0.08, 0.08, 0.08), mat_emergency_red, trader_pos + Vector3(0.9, 1.05, 1.55)) # красный крест
 	# Мешочки с монетами и золотой кувшин
@@ -1966,6 +2043,19 @@ func on_interact_completed(player: Node) -> void:
 
 	# Рабочий стальной верстак механика
 	_add_collidable_box(body, root, Vector3(3.6, 0.90, 1.1), mat_steel_beam, mechanic_pos + Vector3(0.0, 0.45, 1.5))
+
+	# На верстаке: разобранный череп киборга с оптическим глазом и ремонтируемый пистолет
+	var cyb_bench := PropModels3D.create_skull_cyborg()
+	cyb_bench.position = mechanic_pos + Vector3(-0.5, 0.92, 1.45)
+	cyb_bench.scale = Vector3(0.85, 0.85, 0.85)
+	cyb_bench.rotation.y = deg_to_rad(-25.0)
+	root.add_child(cyb_bench)
+
+	var mech_pistol := PropModels3D.create_pistol_prop()
+	mech_pistol.position = mechanic_pos + Vector3(0.6, 0.92, 1.48)
+	mech_pistol.rotation.y = deg_to_rad(40.0)
+	root.add_child(mech_pistol)
+
 	# Наковальня на деревянной колоде
 	_add_cyl(root, 0.55, 0.35, 0.35, mat_beam_wood, mechanic_pos + Vector3(-1.2, 0.28, 0.2))
 	_add_box(root, Vector3(0.65, 0.35, 0.35), mat_burnt_metal, mechanic_pos + Vector3(-1.2, 0.72, 0.2)) # наковальня
@@ -1977,15 +2067,38 @@ func on_interact_completed(player: Node) -> void:
 	# Кабели питания от генератора по земле
 	_add_cyl(root, 2.5, 0.03, 0.03, mat_burnt_metal, mechanic_pos + Vector3(0.8, 0.03, 0.0)).rotation.y = deg_to_rad(45.0)
 
-	# Оружейный стенд на стене с винтовками
+	# Оружейный стенд на стене с детализированными винтовками
 	_add_box(root, Vector3(0.12, 1.8, 2.6), mat_beam_wood, mechanic_pos + Vector3(2.2, 2.0, 0.0))
-	_add_box(root, Vector3(0.14, 0.12, 2.2), mat_steel_beam, mechanic_pos + Vector3(2.1, 2.4, 0.0)) # винтовка на крюках
-	_add_box(root, Vector3(0.14, 0.12, 2.0), mat_steel_beam, mechanic_pos + Vector3(2.1, 1.8, 0.0)) # дробовик
+	var wall_rifle1 := PropModels3D.create_rifle_prop()
+	wall_rifle1.position = mechanic_pos + Vector3(2.1, 2.3, 0.0)
+	wall_rifle1.rotation = Vector3(0, deg_to_rad(-90.0), 0)
+	root.add_child(wall_rifle1)
 
-	# Запасные колеса каравана у стены
-	for wi in range(2):
-		var w_wheel := _add_cyl(root, 0.22, 0.65, 0.65, mat_beam_wood, mechanic_pos + Vector3(-1.8 + wi * 0.8, 0.65, -2.4))
-		w_wheel.rotation.x = deg_to_rad(90.0)
+	var wall_rifle2 := PropModels3D.create_rifle_prop()
+	wall_rifle2.position = mechanic_pos + Vector3(2.1, 1.7, 0.0)
+	wall_rifle2.rotation = Vector3(0, deg_to_rad(-90.0), 0)
+	root.add_child(wall_rifle2)
+
+	# Стопки шин и группа бочек с топливом и смазкой
+	var tires1 := PropModels3D.create_tire_stack(4)
+	tires1.position = mechanic_pos + Vector3(-1.8, 0.0, -2.2)
+	root.add_child(tires1)
+
+	var tires2 := PropModels3D.create_tire_stack(3)
+	tires2.position = mechanic_pos + Vector3(1.8, 0.0, 2.0)
+	root.add_child(tires2)
+
+	var drum1 := PropModels3D.create_oil_drum("red")
+	drum1.position = mechanic_pos + Vector3(-1.8, 0.0, -0.8)
+	root.add_child(drum1)
+
+	var drum2 := PropModels3D.create_oil_drum("hazard")
+	drum2.position = mechanic_pos + Vector3(-1.2, 0.0, -1.2)
+	root.add_child(drum2)
+
+	var drum3 := PropModels3D.create_oil_drum("toxic")
+	drum3.position = mechanic_pos + Vector3(1.8, 0.0, -0.6)
+	root.add_child(drum3)
 
 	# Фонарь дневного света над верстаком
 	var mech_lamp := OmniLight3D.new()
@@ -2042,6 +2155,18 @@ func on_interact_completed(player: Node) -> void:
 	# Большой оперативный стол с картой боевых действий
 	_add_collidable_box(body, root, Vector3(2.4, 0.85, 1.6), mat_beam_wood, commander_pos + Vector3(0.0, 0.42, 0.6))
 	_add_box(root, Vector3(1.8, 0.02, 1.2), mat_paper, commander_pos + Vector3(0.0, 0.87, 0.6)) # карта
+
+	# Табельный пистолет командира и бинокль на карте
+	var c_gun := PropModels3D.create_pistol_prop()
+	c_gun.position = commander_pos + Vector3(0.5, 0.88, 0.7)
+	c_gun.rotation.y = deg_to_rad(-25.0)
+	root.add_child(c_gun)
+
+	# Россыпь стреляных гильз у бруствера из мешков
+	var c_casings := PropModels3D.create_spent_casings_pile(0.55)
+	c_casings.position = commander_pos + Vector3(-1.8, 1.22, 2.2)
+	root.add_child(c_casings)
+
 	# Полевая армейская рация со светящимся экраном
 	_add_box(root, Vector3(0.65, 0.35, 0.45), mat_military_green, commander_pos + Vector3(-0.7, 1.05, 0.6))
 	_add_box(root, Vector3(0.25, 0.12, 0.04), mat_neon_sign, commander_pos + Vector3(-0.7, 1.10, 0.84)) # экран

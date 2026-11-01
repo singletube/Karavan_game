@@ -1,6 +1,8 @@
 extends Node
 class_name DesertScenery3D
 
+const PropModels3D = preload("res://scripts/prop_models_3d.gd")
+
 # --- Фабрика процедурных 3D моделей окружения пустыни ---
 # Заменяет все 2D билборды на детализированные 3D меши с PBR-материалами и тенями
 
@@ -185,69 +187,40 @@ static func create_wrecked_car_3d() -> Node3D:
 	return root
 
 # =========================================================================
-# 3. 3D КАКТУС САГУАРО (Главный ствол + 2-3 изогнутые руки)
+# 3. 3D КАКТУС САГУАРО (ВЫСОКОДЕТАЛИЗИРОВАННЫЙ ИЗ БИБЛИОТЕКИ ПРОПОВ)
 # =========================================================================
 static func create_cactus_3d() -> Node3D:
-	_ensure_materials()
-	var root := Node3D.new()
-	root.name = "Cactus3D"
-
-	# Главный вертикальный ствол (сегментированный, сужающийся сверху)
-	var height: float = randf_range(2.6, 3.6)
-	_add_cyl(root, height, 0.24, 0.30, mat_cactus, Vector3(0, height * 0.5, 0), Vector3.ZERO, 10)
-	# Куполообразная верхушка
-	_add_cyl(root, 0.25, 0.12, 0.24, mat_cactus, Vector3(0, height + 0.1, 0), Vector3.ZERO, 8)
-
-	# Левая рука (горизонтальный отросток + вертикальный отросток)
-	var arm1_y: float = height * randf_range(0.38, 0.52)
-	var arm1_len: float = randf_range(0.45, 0.65)
-	# Горизонтальная часть
-	_add_cyl(root, arm1_len, 0.18, 0.18, mat_cactus, Vector3(arm1_len * 0.5, arm1_y, 0), Vector3(0, 0, PI / 2.0), 8)
-	# Вертикальная стремящаяся вверх часть
-	var arm1_up: float = randf_range(0.9, 1.4)
-	_add_cyl(root, arm1_up, 0.17, 0.18, mat_cactus, Vector3(arm1_len, arm1_y + arm1_up * 0.5, 0), Vector3.ZERO, 8)
-
-	# Правая рука (с другой стороны и на другой высоте)
-	var arm2_y: float = height * randf_range(0.55, 0.68)
-	var arm2_len: float = randf_range(0.40, 0.60)
-	var arm2_rot_y: float = randf_range(0.2, 0.6) # легкий поворот в 3D
-	var offset_x: float = -arm2_len * cos(arm2_rot_y)
-	var offset_z: float = arm2_len * sin(arm2_rot_y)
-	_add_cyl(root, arm2_len, 0.17, 0.17, mat_cactus, Vector3(offset_x * 0.5, arm2_y, offset_z * 0.5), Vector3(0, arm2_rot_y, -PI / 2.0), 8)
-	var arm2_up: float = randf_range(0.8, 1.2)
-	_add_cyl(root, arm2_up, 0.16, 0.17, mat_cactus, Vector3(offset_x, arm2_y + arm2_up * 0.5, offset_z), Vector3.ZERO, 8)
-
-	return root
+	return PropModels3D.create_cactus_detailed()
 
 # =========================================================================
-# 4. 3D ЧЕРЕП И КОСТИ В ПЕСКЕ (Череп быка с рогами + ребра)
+# 4. 3D ЧЕРЕП И КОСТИ В ПЕСКЕ (ЧЕРЕП КИБОРГА / ЧЕЛОВЕКА + РЕБРА)
 # =========================================================================
 static func create_skull_bones_3d() -> Node3D:
 	_ensure_materials()
 	var root := Node3D.new()
 	root.name = "Bones3D"
 
-	# Черепная коробка быка (частично погружена в песок)
-	_add_box(root, Vector3(0.35, 0.28, 0.45), mat_bone, Vector3(0, 0.06, 0))
-	# Вытянутая челюсть/морда
-	_add_box(root, Vector3(0.24, 0.20, 0.35), mat_bone, Vector3(0, 0.02, 0.35))
-	# Глазницы (темные углубления)
-	_add_box(root, Vector3(0.08, 0.08, 0.08), mat_metal, Vector3(-0.14, 0.10, 0.10))
-	_add_box(root, Vector3(0.08, 0.08, 0.08), mat_metal, Vector3(0.14, 0.10, 0.10))
+	# В 50% случаев — зловещий череп киборга с красным глазом, в 50% — бычий/человеческий череп
+	if randf() < 0.55:
+		var cyb_skull := PropModels3D.create_skull_cyborg()
+		cyb_skull.position = Vector3(0, 0.04, 0.1)
+		cyb_skull.rotation = Vector3(deg_to_rad(randf_range(-15, 15)), deg_to_rad(randf_range(0, 360)), deg_to_rad(randf_range(-20, 20)))
+		root.add_child(cyb_skull)
+	else:
+		# Черепная коробка быка с рогами
+		_add_box(root, Vector3(0.35, 0.28, 0.45), mat_bone, Vector3(0, 0.06, 0))
+		_add_box(root, Vector3(0.24, 0.20, 0.35), mat_bone, Vector3(0, 0.02, 0.35))
+		_add_box(root, Vector3(0.08, 0.08, 0.08), mat_metal, Vector3(-0.14, 0.10, 0.10))
+		_add_box(root, Vector3(0.08, 0.08, 0.08), mat_metal, Vector3(0.14, 0.10, 0.10))
+		_add_cyl(root, 0.45, 0.05, 0.10, mat_horn, Vector3(-0.35, 0.16, -0.05), Vector3(0.2, 0.4, -1.0))
+		_add_cyl(root, 0.30, 0.02, 0.05, mat_horn, Vector3(-0.55, 0.30, 0.05), Vector3(-0.2, 0.6, -0.6))
+		_add_cyl(root, 0.45, 0.05, 0.10, mat_horn, Vector3(0.35, 0.16, -0.05), Vector3(0.2, -0.4, 1.0))
+		_add_cyl(root, 0.30, 0.02, 0.05, mat_horn, Vector3(0.55, 0.30, 0.05), Vector3(-0.2, -0.6, 0.6))
 
-	# Левый рог (изогнутый наружу и вверх)
-	_add_cyl(root, 0.45, 0.05, 0.10, mat_horn, Vector3(-0.35, 0.16, -0.05), Vector3(0.2, 0.4, -1.0))
-	_add_cyl(root, 0.30, 0.02, 0.05, mat_horn, Vector3(-0.55, 0.30, 0.05), Vector3(-0.2, 0.6, -0.6))
-
-	# Правый рог
-	_add_cyl(root, 0.45, 0.05, 0.10, mat_horn, Vector3(0.35, 0.16, -0.05), Vector3(0.2, -0.4, 1.0))
-	_add_cyl(root, 0.30, 0.02, 0.05, mat_horn, Vector3(0.55, 0.30, 0.05), Vector3(-0.2, -0.6, 0.6))
-
-	# Рядом торчащие из песка ребра (выходят прямо из песчинок)
+	# Рядом торчащие из песка ребра
 	for r in range(4):
 		var rib_z: float = -0.3 - float(r) * 0.22
 		var rib_w: float = 0.55 - float(r) * 0.05
-		# Полудуга ребра
 		_add_cyl(root, 0.45, 0.04, 0.04, mat_bone, Vector3(-rib_w * 0.5, 0.06, rib_z), Vector3(0, 0, -0.7))
 		_add_cyl(root, 0.45, 0.04, 0.04, mat_bone, Vector3(rib_w * 0.5, 0.06, rib_z), Vector3(0, 0, 0.7))
 
@@ -394,18 +367,25 @@ static func create_road_sign_3d() -> Node3D:
 # 10. ГРУППА РЖАВЫХ БОЧЕК И БРОШЕННЫХ ШИН (OIL DRUMS & TIRES CLUSTER)
 # =========================================================================
 static func create_oil_drums_cluster_3d() -> Node3D:
-	_ensure_materials()
 	var root := Node3D.new()
 	root.name = "OilDrumsCluster3D"
 
-	# Стоящая наполовину в песке ржавая бочка
-	var b1 := _add_cyl(root, 0.95, 0.32, 0.32, mat_rust, Vector3(-0.35, 0.38, 0.0), Vector3(deg_to_rad(8.0), 0.0, deg_to_rad(6.0)))
-	_add_cyl(b1, 0.08, 0.33, 0.33, mat_metal, Vector3(0.0, 0.25, 0.0))
+	# Стоящая ржавая бочка
+	var d1 := PropModels3D.create_oil_drum("rusty")
+	d1.position = Vector3(-0.35, 0.0, 0.0)
+	d1.rotation = Vector3(deg_to_rad(6.0), 0.0, deg_to_rad(4.0))
+	root.add_child(d1)
 
-	# Поваленная набок бочка
-	_add_cyl(root, 0.95, 0.32, 0.32, mat_rust, Vector3(0.42, 0.28, -0.15), Vector3(0.0, deg_to_rad(35.0), PI * 0.5 - deg_to_rad(10.0)))
+	# Поваленная аварийная бочка
+	var d2 := PropModels3D.create_oil_drum("hazard" if randf() < 0.5 else "toxic")
+	d2.position = Vector3(0.42, 0.28, -0.15)
+	d2.rotation = Vector3(0.0, deg_to_rad(35.0), PI * 0.5 - deg_to_rad(8.0))
+	root.add_child(d2)
 
-	# Старая покрышка грузовика, прислоненная к бочке
-	_add_cyl(root, 0.24, 0.42, 0.42, mat_tire, Vector3(-0.08, 0.34, 0.45), Vector3(deg_to_rad(22.0), deg_to_rad(-18.0), PI * 0.5))
+	# Детализированная шина с диском, прислоненная к бочке
+	var tire := PropModels3D.create_tire(true, false)
+	tire.position = Vector3(-0.08, 0.32, 0.45)
+	tire.rotation = Vector3(deg_to_rad(22.0), deg_to_rad(-18.0), PI * 0.5)
+	root.add_child(tire)
 
 	return root
