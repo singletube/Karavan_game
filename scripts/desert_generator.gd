@@ -14,7 +14,6 @@ class_name DesertGenerator
 
 const TUMBLEWEED_SCENE = preload("res://scenes/tumbleweed.tscn")
 const RoadEvents3D = preload("res://scripts/road_events_3d.gd")
-const OutpostCamp3D = preload("res://scripts/outpost_camp_3d.gd")
 
 # Уникальный сид мира для полной случайности каждой новой игры (и синхронизации в мультиплеере)
 var world_seed            : int        = 0
@@ -50,6 +49,12 @@ static func get_height(wx: float, wz: float) -> float:
 	if instance and is_instance_valid(instance):
 		return instance.get_terrain_height(wx, wz)
 	return 0.0
+
+static func is_camp_coord(coord: Vector2i) -> bool:
+	if coord.x != 0 or coord.y >= 0:
+		return false
+	# Спавн лагеря в 3 раза чаще (каждые 3 чанка: y = -3, -6, -9, -12, ...)
+	return (abs(coord.y) >= 3) and (abs(coord.y) % 3 == 0)
 
 static func get_normal(wx: float, wz: float) -> Vector3:
 	if instance and is_instance_valid(instance):
@@ -118,7 +123,22 @@ func get_raw_terrain_height(wx: float, wz: float) -> float:
 func get_terrain_height(wx: float, wz: float) -> float:
 	var h: float = get_raw_terrain_height(wx, wz)
 
-	# Выравнивание фундамента под постройки и лагеря (POI & Camp Foundation Leveling)
+	# 1. Детерминированное выравнивание лагерей выживших по центру дороги (независимо от порядка стриминга)
+	var camp_chunk_y: int = int(round(wz / chunk_size))
+	if is_camp_coord(Vector2i(0, camp_chunk_y)):
+		var camp_center_z: float = float(camp_chunk_y) * chunk_size
+		var dx_c: float = wx
+		var dz_c: float = wz - camp_center_z
+		var d_c: float = sqrt(dx_c * dx_c + dz_c * dz_c)
+		var camp_outer: float = 32.0
+		var camp_inner: float = 18.0
+		if d_c < camp_outer:
+			var base_camp_h: float = get_raw_terrain_height(0.0, camp_center_z)
+			var blend_c: float = clampf((d_c - camp_inner) / (camp_outer - camp_inner), 0.0, 1.0)
+			blend_c = blend_c * blend_c * (3.0 - 2.0 * blend_c)
+			h = lerpf(base_camp_h, h, blend_c)
+
+	# 2. Выравнивание фундамента под постройки и лагеря из реестра (POI & Camp Foundation Leveling)
 	for p_coord in spawned_pois.keys():
 		var data: Dictionary = spawned_pois[p_coord]
 		var c_world_x: float = float(p_coord.x) * chunk_size
@@ -526,8 +546,8 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 	if is_spawn_center:
 		_populate_starting_location(chunk, coord, rng, exclusion_zones)
 	elif coord.x == 0 and coord.y < 0:
-		# Периодический спавн укрепленного лагеря выживших (каждые 8-10 чанков, ~1 км пути)
-		var is_camp_chunk: bool = (abs(coord.y) >= 6) and (abs(coord.y) % 8 == 0)
+		# Спавн укрепленного лагеря выживших в 3 раза чаще (каждые 3 чанка: -3, -6, -9, ...)
+		var is_camp: bool = is_camp_coord(coord)
 
 		if spawned_pois.has(coord):
 			var data: Dictionary = spawned_pois[coord]
@@ -539,29 +559,36 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			var sy: float = get_terrain_height(chunk.position.x + sx, chunk.position.z + sz)
 			node.position = Vector3(sx, sy - 0.06, sz)
 			chunk.add_child(node)
-			if node is OutpostCamp3D:
-				(node as OutpostCamp3D).camp_id = "%d_%d" % [coord.x, coord.y]
+			if node != null and ("camp_id" in node):
+				node.set("camp_id", "%d_%d" % [coord.x, coord.y])
 				# Синхронизация открытых ворот, если они уже открыты в сети
-				if NetworkManager != null and NetworkManager.opened_camp_gates.has((node as OutpostCamp3D).camp_id):
-					(node as OutpostCamp3D).apply_open_exit_gate()
+				var net_mgr := _get_net_mgr()
+				if net_mgr != null and "opened_camp_gates" in net_mgr and net_mgr.opened_camp_gates.has(node.get("camp_id")):
+					if node.has_method("apply_open_exit_gate"):
+						node.apply_open_exit_gate()
 			else:
 				_setup_poi_loot_crate(node, coord)
-			exclusion_zones.append(Vector3(sx, sz, 26.0 if p_type == "outpost_camp" else 18.0))
+			exclusion_zones.append(Vector3(sx, sz, 28.0 if p_type == "outpost_camp" else 18.0))
 
-		elif is_camp_chunk and _is_far_enough_from_pois(coord, 3):
-			# Спавн укрепленного лагеря прямо на караванном тракте (X=0)
-			var camp_node := _create_poi_node("outpost_camp") as OutpostCamp3D
-			camp_node.camp_id = "%d_%d" % [coord.x, coord.y]
-			var camp_y: float = get_terrain_height(chunk.position.x, chunk.position.z)
-			camp_node.position = Vector3(0.0, camp_y - 0.06, 0.0)
-			chunk.add_child(camp_node)
-			exclusion_zones.append(Vector3(0.0, 0.0, 26.0))
-			spawned_pois[coord] = { "type": "outpost_camp", "side_x": 0.0, "x": 0.0, "z": 0.0, "rot": 0.0 }
-			if NetworkManager != null and NetworkManager.opened_camp_gates.has(camp_node.camp_id):
-				camp_node.apply_open_exit_gate()
+		elif is_camp:
+			# Спавн укрепленного лагеря прямо на караванном тракте (X=0) с абсолютным приоритетом
+			var camp_node := _create_poi_node("outpost_camp")
+			if camp_node != null:
+				camp_node.set("camp_id", "%d_%d" % [coord.x, coord.y])
+				var camp_y: float = get_terrain_height(chunk.position.x, chunk.position.z)
+				camp_node.position = Vector3(0.0, camp_y - 0.06, 0.0)
+				chunk.add_child(camp_node)
+				exclusion_zones.append(Vector3(0.0, 0.0, 28.0))
+				spawned_pois[coord] = { "type": "outpost_camp", "side_x": 0.0, "x": 0.0, "z": 0.0, "rot": 0.0 }
+				var net_mgr_c := _get_net_mgr()
+				if net_mgr_c != null and "opened_camp_gates" in net_mgr_c and net_mgr_c.opened_camp_gates.has(camp_node.get("camp_id")):
+					if camp_node.has_method("apply_open_exit_gate"):
+						camp_node.apply_open_exit_gate()
 
 		else:
-			var can_poi: bool = (coord.y <= -1) and _is_far_enough_from_pois(coord, rng.randi_range(2, 4))
+			# Не спавним дорожные строения в чанках, вплотную примыкающих к лагерю (подступы чистые)
+			var near_camp: bool = is_camp_coord(Vector2i(0, coord.y - 1)) or is_camp_coord(Vector2i(0, coord.y + 1))
+			var can_poi: bool = (coord.y <= -1) and not near_camp and _is_far_enough_from_pois(coord, rng.randi_range(2, 3))
 
 			# 85% вероятность наличия дорожного события в чанке
 			if rng.randf() < 0.85:
@@ -590,7 +617,8 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 				else:
 					# --- ДОРОЖНОЕ ПРЕПЯТСТВИЕ ---
 					var obst_id: String = "%d_%d" % [coord.x, coord.y]
-					if NetworkManager == null or not NetworkManager.cleared_obstacles.has(obst_id):
+					var net_mgr_o := _get_net_mgr()
+					if net_mgr_o == null or not ("cleared_obstacles" in net_mgr_o) or not net_mgr_o.cleared_obstacles.has(obst_id):
 						var obst_type: int = rng.randi() % 3
 						var obst_node: Node3D = null
 						match obst_type:
@@ -869,13 +897,17 @@ func _create_bones(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void
 	model.scale = Vector3(s, s, s)
 	parent.add_child(model)
 
+func _get_net_mgr() -> Node:
+	return get_node_or_null("/root/NetworkManager")
+
 func _setup_poi_loot_crate(poi_node: Node, coord: Vector2i) -> void:
 	var crate := poi_node.find_child("LootCrate", true, false)
 	if crate:
 		var crate_id: String = "%d_%d" % [coord.x, coord.y]
 		crate.name = "LootCrate_%s" % crate_id
 		crate.set_meta("crate_id", crate_id)
-		if NetworkManager != null and NetworkManager.looted_crates.has(crate_id):
+		var net_mgr := _get_net_mgr()
+		if net_mgr != null and "looted_crates" in net_mgr and net_mgr.looted_crates.has(crate_id):
 			if crate.has_method("mark_already_looted"):
 				crate.mark_already_looted()
 

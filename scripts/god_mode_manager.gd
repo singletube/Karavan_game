@@ -75,6 +75,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif is_ui_open and event.keycode == KEY_ESCAPE:
 			close_ui()
 			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_F7:
+			var caravan := _get_first_node("caravan")
+			if caravan and caravan.has_method("toggle_boost"):
+				caravan.toggle_boost()
+			else:
+				if caravan_speed_mult >= 10.0:
+					set_caravan_speed(1.0)
+				else:
+					set_caravan_speed(10.0)
+			get_viewport().set_input_as_handled()
 
 func _process(delta: float) -> void:
 	if toast_timer > 0.0:
@@ -261,8 +271,15 @@ func teleport_to_camp() -> void:
 		var target_camp = camps[0]
 		player.global_position = target_camp.global_position + Vector3(0.0, 1.2, 0.0)
 		show_toast("⛺ ТЕЛЕПОРТАЦИЯ В ЛАГЕРЬ УСПЕШНА")
+	elif player and is_instance_valid(player):
+		var camp_z: float = -360.0
+		var camp_y: float = DesertGenerator.get_height(0.0, camp_z)
+		player.global_position = Vector3(0.0, camp_y + 1.2, camp_z)
+		if DesertGenerator.instance:
+			DesertGenerator.instance._update_chunks(true)
+		show_toast("⛺ ТЕЛЕПОРТАЦИЯ К АВАНПОСТУ #1 (Z=-360m)")
 	else:
-		show_toast("Лагерь пока не сгенерирован (пройдите дальше по дороге)")
+		show_toast("Игрок не найден")
 
 func refill_all_ammo() -> void:
 	# Восполняем обойму текущего оружия
@@ -460,16 +477,16 @@ func _build_ui() -> void:
 
 	slider_caravan_spd = HSlider.new()
 	slider_caravan_spd.min_value = 0.0
-	slider_caravan_spd.max_value = 5.0
+	slider_caravan_spd.max_value = 15.0
 	slider_caravan_spd.step = 0.25
 	slider_caravan_spd.value = 1.0
 	slider_caravan_spd.value_changed.connect(set_caravan_speed)
 	vbox.add_child(slider_caravan_spd)
 
 	var hbox_spd_btns := HBoxContainer.new()
-	for spd in [0.0, 1.0, 2.0, 5.0]:
+	for spd in [0.0, 1.0, 2.0, 5.0, 10.0]:
 		var b := Button.new()
-		b.text = ("0x (Стоп)" if spd == 0.0 else ("x%.0f%s" % [spd, " Турбо" if spd == 5.0 else ""]))
+		b.text = ("0x (Стоп)" if spd == 0.0 else ("x10 Турбо" if spd == 10.0 else ("x5.0 Форсаж" if spd == 5.0 else ("x%.0f" % spd))))
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var s_val = spd
 		b.pressed.connect(func():

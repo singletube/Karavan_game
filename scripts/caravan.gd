@@ -18,6 +18,8 @@ var health: int = MAX_HEALTH
 var is_destroyed: bool = false
 var is_blocked: bool = false
 var is_in_camp: bool = false
+var is_boosted: bool = false
+var donkey_trigger: Node3D = null
 var walk_phase: float = 0.0
 
 var track_dist: float = 0.0
@@ -36,6 +38,9 @@ const MIN_DAMAGE_INTERVAL: float = 0.18 # Кулдаун между тиками
 
 var snd_wood_hit: AudioStream = preload("res://assets/audio/shoot_revolver.mp3")
 
+func _get_sand_effects() -> Node:
+	return get_node_or_null("/root/SandEffects")
+
 func _enter_tree() -> void:
 	add_to_group("caravan")
 
@@ -47,6 +52,45 @@ func _ready() -> void:
 	if hit_sound and snd_wood_hit:
 		hit_sound.stream = snd_wood_hit
 
+	_setup_donkey_interaction()
+
+func _setup_donkey_interaction() -> void:
+	donkey_trigger = Node3D.new()
+	donkey_trigger.name = "DonkeySpurTrigger"
+	donkey_trigger.position = Vector3(0.0, 1.2, -4.2)
+	donkey_trigger.add_to_group("interactive")
+	donkey_trigger.set_meta("prompt_text", "ПОГОНЯТЬ ОСЛА (УСКОРЕНИЕ x10) [E]")
+	var scr := GDScript.new()
+	scr.source_code = """extends Node3D
+func on_interact(_player: Node) -> void:
+	var caravan := get_parent()
+	if caravan and caravan.has_method("toggle_boost"):
+		caravan.toggle_boost()
+"""
+	scr.reload()
+	donkey_trigger.set_script(scr)
+	add_child(donkey_trigger)
+
+func toggle_boost() -> void:
+	set_boost(not is_boosted)
+
+func set_boost(val: bool) -> void:
+	is_boosted = val
+	if donkey_trigger and is_instance_valid(donkey_trigger):
+		donkey_trigger.set_meta("prompt_text", "УСПОКОИТЬ ОСЛА (НОРМА x1) [E]" if is_boosted else "ПОГОНЯТЬ ОСЛА (УСКОРЕНИЕ x10) [E]")
+	if is_inside_tree():
+		var gmm = get_node_or_null("/root/GodModeManager")
+		if gmm and gmm.has_method("show_toast"):
+			gmm.show_toast("🐎 ОСЕЛ РАЗОГНАН В 10 РАЗ! (22.5 м/с)" if is_boosted else "🐪 ОСЕЛ ПЕРЕШЕЛ НА ШАГ (2.25 м/с)")
+		if multiplayer and multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+			sync_caravan_boost.rpc(is_boosted)
+
+@rpc("authority", "reliable")
+func sync_caravan_boost(boosted: bool) -> void:
+	is_boosted = boosted
+	if donkey_trigger and is_instance_valid(donkey_trigger):
+		donkey_trigger.set_meta("prompt_text", "УСПОКОИТЬ ОСЛА (НОРМА x1) [E]" if is_boosted else "ПОГОНЯТЬ ОСЛА (УСКОРЕНИЕ x10) [E]")
+
 func _physics_process(delta: float) -> void:
 	if _hit_grace_timer > 0.0:
 		_hit_grace_timer = maxf(0.0, _hit_grace_timer - delta)
@@ -55,16 +99,20 @@ func _physics_process(delta: float) -> void:
 	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
 		if _has_remote_target:
 			var prev_pos := global_position
-			global_position = global_position.lerp(_remote_target_pos, delta * 14.0)
+			var lerp_rate: float = 28.0 if is_boosted else 14.0
+			global_position = global_position.lerp(_remote_target_pos, delta * lerp_rate)
 			var moved_dist: float = global_position.distance_to(prev_pos)
 			var is_moving: bool = (not is_destroyed and not is_blocked)
 
 			if is_moving:
-				walk_phase += delta * (move_speed * 1.5)
+				var client_speed: float = move_speed * (10.0 if is_boosted else 1.0)
+				walk_phase += delta * (client_speed * 1.5)
 				track_dist += moved_dist
 				if track_dist >= 0.85:
 					track_dist = 0.0
-					SandEffects.add_caravan_wheel_tracks(global_position, move_direction)
+					var se := _get_sand_effects()
+					if se and se.has_method("add_caravan_wheel_tracks"):
+						se.add_caravan_wheel_tracks(global_position, move_direction)
 
 			var client_front_h := DesertGenerator.get_height(global_position.x, global_position.z - 2.5)
 			var client_back_h := DesertGenerator.get_height(global_position.x, global_position.z + 2.5)
@@ -101,33 +149,41 @@ func _physics_process(delta: float) -> void:
 	if gmm:
 		current_move_speed = BASE_SPEED * gmm.caravan_speed_mult
 
+	if is_boosted:
+		current_move_speed *= 10.0
+
 	var step := move_direction.normalized() * (current_move_speed * delta)
 	global_position += step
 
 	# Следование рельефу песчаных дюн (высота и наклон повозки)
 	var target_y := DesertGenerator.get_height(global_position.x, global_position.z)
-	global_position.y = lerpf(global_position.y, target_y, delta * 12.0)
+	var y_lerp_spd: float = 24.0 if (is_boosted or current_move_speed > 5.0) else 12.0
+	global_position.y = lerpf(global_position.y, target_y, minf(1.0, delta * y_lerp_spd))
 
 	var front_h := DesertGenerator.get_height(global_position.x, global_position.z - 2.5)
 	var back_h := DesertGenerator.get_height(global_position.x, global_position.z + 2.5)
 	var target_pitch := atan2(back_h - front_h, 5.0)
-	rotation.x = lerp_angle(rotation.x, target_pitch, delta * 6.0)
+	var pitch_lerp_spd: float = 16.0 if (is_boosted or current_move_speed > 5.0) else 6.0
+	rotation.x = lerp_angle(rotation.x, target_pitch, minf(1.0, delta * pitch_lerp_spd))
 
 	walk_phase += delta * (current_move_speed * 1.5)
 
 	# 1. Следы колес повозки на песке (каждые 0.85м пути)
 	track_dist += current_move_speed * delta
+	var se := _get_sand_effects()
 	if track_dist >= 0.85:
 		track_dist = 0.0
-		SandEffects.add_caravan_wheel_tracks(global_position, move_direction)
+		if se and se.has_method("add_caravan_wheel_tracks"):
+			se.add_caravan_wheel_tracks(global_position, move_direction)
 
 	# 2. Клубы пыли из-под катящихся по песку колес
 	wheel_dust_timer += delta
 	if wheel_dust_timer >= 0.35:
 		wheel_dust_timer = 0.0
 		var right := move_direction.normalized().cross(Vector3.UP).normalized()
-		SandEffects.spawn_dust_puff(global_position - right * 1.18 + Vector3(0.0, 0.05, 1.2), 0.45)
-		SandEffects.spawn_dust_puff(global_position + right * 1.18 + Vector3(0.0, 0.05, 1.2), 0.45)
+		if se and se.has_method("spawn_dust_puff"):
+			se.spawn_dust_puff(global_position - right * 1.18 + Vector3(0.0, 0.05, 1.2), 0.45)
+			se.spawn_dust_puff(global_position + right * 1.18 + Vector3(0.0, 0.05, 1.2), 0.45)
 
 	# 3. Следы копыт осла при шаге
 	var hoof_cycle: int = int(floor((walk_phase * 4.0) / PI))
@@ -137,15 +193,17 @@ func _physics_process(delta: float) -> void:
 		if is_pair_a:
 			var fl_pos: Vector3 = global_transform * Vector3(-0.24, 0.0, -4.68)
 			var br_pos: Vector3 = global_transform * Vector3(0.24, 0.0, -3.72)
-			SandEffects.add_hoofprint(fl_pos, move_direction)
-			SandEffects.add_hoofprint(br_pos, move_direction)
-			SandEffects.spawn_dust_puff(fl_pos, 0.35)
+			if se:
+				se.add_hoofprint(fl_pos, move_direction)
+				se.add_hoofprint(br_pos, move_direction)
+				se.spawn_dust_puff(fl_pos, 0.35)
 		else:
 			var fr_pos: Vector3 = global_transform * Vector3(0.24, 0.0, -4.68)
 			var bl_pos: Vector3 = global_transform * Vector3(-0.24, 0.0, -3.72)
-			SandEffects.add_hoofprint(fr_pos, move_direction)
-			SandEffects.add_hoofprint(bl_pos, move_direction)
-			SandEffects.spawn_dust_puff(fr_pos, 0.35)
+			if se:
+				se.add_hoofprint(fr_pos, move_direction)
+				se.add_hoofprint(bl_pos, move_direction)
+				se.spawn_dust_puff(fr_pos, 0.35)
 
 	if model:
 		model.update_animation(delta, true, move_speed, walk_phase)
@@ -282,15 +340,16 @@ func _on_caravan_destroyed() -> void:
 
 # --- СЕТЕВАЯ СИНХРОНИЗАЦИЯ КАРАВАНА ---
 func send_full_sync_to_peer(peer_id: int) -> void:
-	rpc_id(peer_id, "sync_full_caravan_state", global_position, health, is_blocked, is_destroyed, walk_phase)
+	rpc_id(peer_id, "sync_full_caravan_state", global_position, health, is_blocked, is_destroyed, walk_phase, is_boosted)
 
 @rpc("authority", "reliable")
-func sync_full_caravan_state(pos: Vector3, hp: int, blocked: bool, destroyed: bool, s_walk_phase: float = 0.0) -> void:
+func sync_full_caravan_state(pos: Vector3, hp: int, blocked: bool, destroyed: bool, s_walk_phase: float = 0.0, boosted: bool = false) -> void:
 	global_position = pos
 	_remote_target_pos = pos
 	_has_remote_target = true
 	walk_phase = s_walk_phase
 	health = hp
+	set_boost(boosted)
 	health_changed.emit(health, MAX_HEALTH)
 	if is_blocked != blocked:
 		is_blocked = blocked

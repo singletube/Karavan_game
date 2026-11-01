@@ -291,6 +291,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 
+	if event.keycode == KEY_H:
+		var caravan := get_tree().get_first_node_in_group("caravan")
+		if caravan and caravan.has_method("toggle_boost"):
+			caravan.toggle_boost()
+			get_viewport().set_input_as_handled()
+			return
+
 	if event.keycode in weapon_key_to_index:
 		var manager := get_node_or_null("WeaponManager") as WeaponManager
 		var index: int = weapon_key_to_index[event.keycode]

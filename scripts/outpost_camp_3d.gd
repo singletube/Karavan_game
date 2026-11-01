@@ -94,8 +94,9 @@ func open_exit_gate_by_player(player: Node) -> void:
 		return
 
 	var c_id: String = camp_id
-	if NetworkManager != null and NetworkManager.has_method("request_open_camp_gate") and not c_id.is_empty():
-		NetworkManager.request_open_camp_gate(c_id)
+	var net_mgr := get_node_or_null("/root/NetworkManager") if is_inside_tree() else null
+	if net_mgr != null and net_mgr.has_method("request_open_camp_gate") and not c_id.is_empty():
+		net_mgr.request_open_camp_gate(c_id)
 	else:
 		apply_open_exit_gate()
 
