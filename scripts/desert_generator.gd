@@ -533,7 +533,7 @@ func _populate_starting_location(chunk: Node3D, coord: Vector2i, rng: RandomNumb
 		var sy: float = get_terrain_height(chunk.position.x + sx, chunk.position.z + sz)
 		node.position = Vector3(sx, sy - 0.06, sz)
 		chunk.add_child(node)
-		_setup_poi_loot_crate(node, coord)
+		_setup_poi_loot_crate(node, coord, p_type)
 		exclusion_zones.append(Vector3(sx, sz, 18.0))
 		return
 
@@ -554,7 +554,7 @@ func _populate_starting_location(chunk: Node3D, coord: Vector2i, rng: RandomNumb
 		var sy: float = get_terrain_height(chunk.position.x + side_x, chunk.position.z + goodie_z)
 		node.position = Vector3(side_x, sy - 0.06, goodie_z)
 		chunk.add_child(node)
-		_setup_poi_loot_crate(node, coord)
+		_setup_poi_loot_crate(node, coord, p_type)
 		exclusion_zones.append(Vector3(side_x, goodie_z, 18.0))
 
 		spawned_pois[coord] = { "type": p_type, "side_x": side_x, "z": goodie_z, "rot": rot_y }
@@ -658,7 +658,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 					var sy: float = get_terrain_height(chunk.position.x + side_x, chunk.position.z + goodie_z)
 					node.position = Vector3(side_x, sy - 0.06, goodie_z)
 					chunk.add_child(node)
-					_setup_poi_loot_crate(node, coord)
+					_setup_poi_loot_crate(node, coord, p_type)
 					exclusion_zones.append(Vector3(side_x, goodie_z, 18.0))
 
 					spawned_pois[coord] = { "type": p_type, "side_x": side_x, "z": goodie_z, "rot": rot_y }
@@ -702,7 +702,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			var wy: float = get_terrain_height(chunk.position.x + wx, chunk.position.z + wz)
 			node.position = Vector3(wx, wy - 0.06, wz)
 			chunk.add_child(node)
-			_setup_poi_loot_crate(node, coord)
+			_setup_poi_loot_crate(node, coord, p_type)
 			exclusion_zones.append(Vector3(wx, wz, 18.0))
 
 		elif rng.randf() < 0.068 and _is_far_enough_from_pois(coord, 2):
@@ -717,7 +717,7 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			var wild_y: float = get_terrain_height(chunk.position.x + wild_x, chunk.position.z + wild_z)
 			wild_node.position = Vector3(wild_x, wild_y - 0.06, wild_z)
 			chunk.add_child(wild_node)
-			_setup_poi_loot_crate(wild_node, coord)
+			_setup_poi_loot_crate(wild_node, coord, p_type)
 			exclusion_zones.append(Vector3(wild_x, wild_z, 18.0))
 
 			spawned_pois[coord] = { "type": p_type, "x": wild_x, "z": wild_z, "rot": rot_y }
@@ -1006,16 +1006,27 @@ func _create_bones(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void
 func _get_net_mgr() -> Node:
 	return get_node_or_null("/root/NetworkManager")
 
-func _setup_poi_loot_crate(poi_node: Node, coord: Vector2i) -> void:
+func _setup_poi_loot_crate(poi_node: Node, coord: Vector2i, p_type: String = "") -> void:
 	var crate := poi_node.find_child("LootCrate", true, false)
+	var is_looted: bool = false
 	if crate:
 		var crate_id: String = "%d_%d" % [coord.x, coord.y]
 		crate.name = "LootCrate_%s" % crate_id
 		crate.set_meta("crate_id", crate_id)
 		var net_mgr := _get_net_mgr()
 		if net_mgr != null and "looted_crates" in net_mgr and net_mgr.looted_crates.has(crate_id):
+			is_looted = true
 			if crate.has_method("mark_already_looted"):
 				crate.mark_already_looted()
+
+	# Стражи подземелий и развалин (спавнятся на сервере/одиночно, если тайник еще не разграблен)
+	if not is_looted and p_type != "" and p_type != "oasis":
+		var ws = get_tree().get_first_node_in_group("wave_spawner")
+		if ws and ws.has_method("spawn_dungeon_guardians"):
+			var world_pos := (poi_node as Node3D).global_position if (poi_node is Node3D and poi_node.is_inside_tree()) else Vector3.ZERO
+			if world_pos == Vector3.ZERO and poi_node is Node3D:
+				world_pos = poi_node.position
+			ws.spawn_dungeon_guardians(poi_node, p_type, world_pos)
 
 func _create_bush(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
 	var model := DesertScenery3D.create_desert_bush_3d()

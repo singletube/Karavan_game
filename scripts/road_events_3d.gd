@@ -42,31 +42,62 @@ static var mat_green_screen : StandardMaterial3D
 static var mat_paper        : StandardMaterial3D
 static var mat_cushion      : StandardMaterial3D
 
+static func _load_tex(filename: String) -> Texture2D:
+	return PropModels3D._load_tex(filename)
+
 static func _ensure_materials() -> void:
 	if mat_barrel_red != null:
 		return
+
+	# Загрузка фотореалистичных PBR текстур
+	var tex_bunker := _load_tex("bunker_concrete.png")
+	var tex_temple := _load_tex("ancient_temple_stone.png")
+	var tex_plane := _load_tex("plane_rivets.png")
+	var tex_adobe := _load_tex("adobe_brick.png")
+	var tex_wood := _load_tex("walnut_wood.png")
+	var tex_burlap := _load_tex("sandbag_burlap.png")
+	var tex_rust := _load_tex("corrugated_rust.png")
+	var tex_metal := _load_tex("blued_metal.png")
+	var tex_hazard := _load_tex("barrel_hazard.png")
+	var tex_red_barrel := _load_tex("barrel_red.png")
+	var tex_palm_trunk := _load_tex("palm_bark.png")
+	var tex_palm_frond := _load_tex("palm_leaf.png")
 
 	mat_barrel_red = StandardMaterial3D.new()
 	mat_barrel_red.albedo_color = Color(0.85, 0.14, 0.10)
 	mat_barrel_red.metallic = 0.4
 	mat_barrel_red.roughness = 0.5
+	if tex_red_barrel:
+		mat_barrel_red.albedo_texture = tex_red_barrel
 
 	mat_barrel_stripe = StandardMaterial3D.new()
 	mat_barrel_stripe.albedo_color = Color(0.96, 0.78, 0.12)
 	mat_barrel_stripe.roughness = 0.4
+	if tex_hazard:
+		mat_barrel_stripe.albedo_texture = tex_hazard
 
 	mat_concrete = StandardMaterial3D.new()
-	mat_concrete.albedo_color = Color(0.56, 0.54, 0.50)
-	mat_concrete.roughness = 0.95
+	mat_concrete.albedo_color = Color(0.65, 0.64, 0.60)
+	mat_concrete.roughness = 0.92
+	if tex_bunker:
+		mat_concrete.albedo_texture = tex_bunker
+		mat_concrete.uv1_scale = Vector3(0.3, 0.3, 0.3)
+		mat_concrete.uv1_triplanar = true
 
 	mat_beam_wood = StandardMaterial3D.new()
-	mat_beam_wood.albedo_color = Color(0.35, 0.22, 0.12)
-	mat_beam_wood.roughness = 0.9
+	mat_beam_wood.albedo_color = Color(0.45, 0.32, 0.22)
+	mat_beam_wood.roughness = 0.88
+	if tex_wood:
+		mat_beam_wood.albedo_texture = tex_wood
+		mat_beam_wood.uv1_scale = Vector3(1.0, 2.5, 1.0)
 
 	mat_metal_rusty = StandardMaterial3D.new()
-	mat_metal_rusty.albedo_color = Color(0.44, 0.26, 0.18)
+	mat_metal_rusty.albedo_color = Color(0.55, 0.38, 0.28)
 	mat_metal_rusty.metallic = 0.55
 	mat_metal_rusty.roughness = 0.75
+	if tex_rust:
+		mat_metal_rusty.albedo_texture = tex_rust
+		mat_metal_rusty.uv1_scale = Vector3(1.5, 1.5, 1.5)
 
 	mat_crate_supply = StandardMaterial3D.new()
 	mat_crate_supply.albedo_color = Color(0.28, 0.38, 0.22)
@@ -80,26 +111,43 @@ static func _ensure_materials() -> void:
 	mat_water_oasis.metallic = 0.1
 
 	mat_palm_trunk = StandardMaterial3D.new()
-	mat_palm_trunk.albedo_color = Color(0.38, 0.28, 0.18)
-	mat_palm_trunk.roughness = 0.9
+	mat_palm_trunk.albedo_color = Color(0.45, 0.35, 0.25)
+	mat_palm_trunk.roughness = 0.92
+	if tex_palm_trunk:
+		mat_palm_trunk.albedo_texture = tex_palm_trunk
+		mat_palm_trunk.uv1_scale = Vector3(1.0, 3.0, 1.0)
 
 	mat_palm_frond = StandardMaterial3D.new()
-	mat_palm_frond.albedo_color = Color(0.18, 0.52, 0.15)
+	mat_palm_frond.albedo_color = Color(0.28, 0.62, 0.20)
 	mat_palm_frond.roughness = 0.65
+	if tex_palm_frond:
+		mat_palm_frond.albedo_texture = tex_palm_frond
 
 	# Песчаник для древних руин
 	mat_sandstone = StandardMaterial3D.new()
-	mat_sandstone.albedo_color = Color(0.78, 0.66, 0.48)
-	mat_sandstone.roughness = 0.92
+	mat_sandstone.albedo_color = Color(0.85, 0.74, 0.55)
+	mat_sandstone.roughness = 0.90
+	if tex_temple:
+		mat_sandstone.albedo_texture = tex_temple
+		mat_sandstone.uv1_scale = Vector3(0.25, 0.25, 0.25)
+		mat_sandstone.uv1_triplanar = true
 
 	mat_sandstone_dark = StandardMaterial3D.new()
-	mat_sandstone_dark.albedo_color = Color(0.60, 0.50, 0.35)
-	mat_sandstone_dark.roughness = 0.95
+	mat_sandstone_dark.albedo_color = Color(0.68, 0.56, 0.40)
+	mat_sandstone_dark.roughness = 0.92
+	if tex_temple:
+		mat_sandstone_dark.albedo_texture = tex_temple
+		mat_sandstone_dark.uv1_scale = Vector3(0.22, 0.22, 0.22)
+		mat_sandstone_dark.uv1_triplanar = true
 
-	# Броня и бетон военного бункера
+	# Броня и фортификационный бетон военного бункера
 	mat_bunker_wall = StandardMaterial3D.new()
-	mat_bunker_wall.albedo_color = Color(0.38, 0.39, 0.37)
+	mat_bunker_wall.albedo_color = Color(0.62, 0.64, 0.60)
 	mat_bunker_wall.roughness = 0.88
+	if tex_bunker:
+		mat_bunker_wall.albedo_texture = tex_bunker
+		mat_bunker_wall.uv1_scale = Vector3(0.26, 0.26, 0.26)
+		mat_bunker_wall.uv1_triplanar = true
 
 	mat_military_green = StandardMaterial3D.new()
 	mat_military_green.albedo_color = Color(0.24, 0.30, 0.18)
@@ -107,14 +155,21 @@ static func _ensure_materials() -> void:
 	mat_military_green.roughness = 0.70
 
 	mat_sandbag = StandardMaterial3D.new()
-	mat_sandbag.albedo_color = Color(0.62, 0.54, 0.38)
-	mat_sandbag.roughness = 0.96
+	mat_sandbag.albedo_color = Color(0.68, 0.58, 0.42)
+	mat_sandbag.roughness = 0.95
+	if tex_burlap:
+		mat_sandbag.albedo_texture = tex_burlap
+		mat_sandbag.uv1_scale = Vector3(2.0, 2.0, 2.0)
 
 	# Металл разбитого самолета
 	mat_plane_metal = StandardMaterial3D.new()
-	mat_plane_metal.albedo_color = Color(0.72, 0.74, 0.76)
+	mat_plane_metal.albedo_color = Color(0.78, 0.80, 0.82)
 	mat_plane_metal.metallic = 0.75
 	mat_plane_metal.roughness = 0.40
+	if tex_plane:
+		mat_plane_metal.albedo_texture = tex_plane
+		mat_plane_metal.uv1_scale = Vector3(0.38, 0.38, 0.38)
+		mat_plane_metal.uv1_triplanar = true
 
 	mat_burnt_metal = StandardMaterial3D.new()
 	mat_burnt_metal.albedo_color = Color(0.18, 0.16, 0.15)
@@ -122,12 +177,20 @@ static func _ensure_materials() -> void:
 
 	# Саманный глиняный кирпич для развалин пустынных хижин
 	mat_adobe_clay = StandardMaterial3D.new()
-	mat_adobe_clay.albedo_color = Color(0.68, 0.48, 0.32)
+	mat_adobe_clay.albedo_color = Color(0.75, 0.54, 0.36)
 	mat_adobe_clay.roughness = 0.95
+	if tex_adobe:
+		mat_adobe_clay.albedo_texture = tex_adobe
+		mat_adobe_clay.uv1_scale = Vector3(0.35, 0.35, 0.35)
+		mat_adobe_clay.uv1_triplanar = true
 
 	mat_clay_dark = StandardMaterial3D.new()
-	mat_clay_dark.albedo_color = Color(0.50, 0.34, 0.22)
+	mat_clay_dark.albedo_color = Color(0.58, 0.40, 0.26)
 	mat_clay_dark.roughness = 0.95
+	if tex_adobe:
+		mat_clay_dark.albedo_texture = tex_adobe
+		mat_clay_dark.uv1_scale = Vector3(0.30, 0.30, 0.30)
+		mat_clay_dark.uv1_triplanar = true
 
 	# Осколки стекла витрин
 	mat_glass_broken = StandardMaterial3D.new()
@@ -156,8 +219,11 @@ static func _ensure_materials() -> void:
 
 	# Темные конструкционные балки и стеллажи
 	mat_steel_beam = StandardMaterial3D.new()
-	mat_steel_beam.albedo_color = Color(0.22, 0.24, 0.26)
-	mat_steel_beam.metallic = 0.70
+	mat_steel_beam.albedo_color = Color(0.30, 0.32, 0.35)
+	mat_steel_beam.metallic = 0.75
+	mat_steel_beam.roughness = 0.45
+	if tex_metal:
+		mat_steel_beam.albedo_texture = tex_metal
 	mat_steel_beam.roughness = 0.45
 
 	# Картон коробок и упаковок
@@ -757,8 +823,9 @@ func on_interact(player: Node) -> void:
 	elif multiplayer.has_multiplayer_peer():
 		p_id = multiplayer.get_unique_id()
 
-	if NetworkManager != null and NetworkManager.has_method("request_loot_crate") and not crate_id.is_empty():
-		NetworkManager.request_loot_crate(crate_id, p_id)
+	var net_mgr = get_node_or_null("/root/NetworkManager")
+	if net_mgr != null and net_mgr.has_method("request_loot_crate") and not crate_id.is_empty():
+		net_mgr.request_loot_crate(crate_id, p_id)
 	else:
 		apply_loot_local(p_id)
 
@@ -785,8 +852,11 @@ func apply_loot_local(looter_peer_id: int) -> void:
 	ap.play()
 	ap.finished.connect(ap.queue_free)
 
-	# Ремонт каравана (+150 HP) на сервере или локально
+	# Ремонт каравана (+150 HP) и снижение угрозы штурма (-30%) на сервере или локально
 	if not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
+		var ws = get_tree().get_first_node_in_group("wave_spawner")
+		if ws and ws.has_method("reduce_threat"):
+			ws.reduce_threat(30.0)
 		var caravan = get_tree().get_first_node_in_group("caravan")
 		if caravan and is_instance_valid(caravan) and not caravan.get("is_destroyed"):
 			var cur_hp: int = int(caravan.get("health"))
@@ -1178,100 +1248,125 @@ static func create_ancient_ruins() -> Node3D:
 	body.collision_mask = 1
 	root.add_child(body)
 
-	# 1. Платформа-стилобат и ступени святилища с резными карнизами
-	_add_collidable_box(body, root, Vector3(14.0, 0.5, 14.0), mat_sandstone, Vector3(0.0, 0.25, 0.0))
-	_add_collidable_box(body, root, Vector3(8.0, 0.25, 2.5), mat_sandstone_dark, Vector3(0.0, 0.12, 7.8))
-	# Декоративный каменный карниз стилобата
-	_add_box(root, Vector3(14.4, 0.18, 0.3), mat_sandstone_dark, Vector3(0.0, 0.42, 7.0))
-	_add_box(root, Vector3(14.4, 0.18, 0.3), mat_sandstone_dark, Vector3(0.0, 0.42, -7.0))
+	# 1. Многоступенчатый монументальный стилобат (3 яруса каменных ступеней)
+	_add_collidable_box(body, root, Vector3(15.2, 0.35, 15.2), mat_sandstone_dark, Vector3(0.0, 0.175, 0.0))
+	_add_collidable_box(body, root, Vector3(14.0, 0.35, 14.0), mat_sandstone, Vector3(0.0, 0.525, 0.0))
+	_add_collidable_box(body, root, Vector3(12.8, 0.30, 12.8), mat_sandstone_dark, Vector3(0.0, 0.85, 0.0))
 
-	# СНАРУЖИ: Древний каменный обелиск перед храмом (Obelisk Monument)
-	_add_collidable_box(body, root, Vector3(1.4, 0.8, 1.4), mat_sandstone_dark, Vector3(5.2, 0.4, 8.5))
-	_add_collidable_cyl(body, root, 4.2, 0.35, 0.55, mat_sandstone, Vector3(5.2, 2.8, 8.5))
-	_add_box(root, Vector3(0.5, 0.6, 0.5), mat_gold_treasure, Vector3(5.2, 5.0, 8.5), Vector3(0.0, deg_to_rad(45.0), 0.0))
+	# Ступени парадного входа
+	_add_collidable_box(body, root, Vector3(7.2, 0.25, 2.2), mat_sandstone, Vector3(0.0, 0.55, 7.5))
+	_add_collidable_box(body, root, Vector3(8.0, 0.25, 2.2), mat_sandstone_dark, Vector3(0.0, 0.25, 8.5))
 
-	# Рассыпанные каменные квадры и обломки барабанов в песке вокруг храма
-	_add_collidable_box(body, root, Vector3(1.6, 0.9, 1.2), mat_sandstone_dark, Vector3(-7.2, 0.45, 3.4), Vector3(deg_to_rad(8.0), deg_to_rad(30.0), 0.0))
-	_add_collidable_box(body, root, Vector3(1.4, 0.7, 1.0), mat_sandstone, Vector3(-6.8, 0.35, -3.2), Vector3(0.0, deg_to_rad(-40.0), deg_to_rad(12.0)))
-	_add_collidable_cyl(body, root, 1.4, 0.42, 0.42, mat_sandstone, Vector3(-5.8, 0.35, 7.6), Vector3(0.0, 0.0, PI * 0.5))
+	# Профилированные каменные карнизы по периметру подиума
+	_add_box(root, Vector3(14.4, 0.20, 0.4), mat_sandstone_dark, Vector3(0.0, 0.95, 6.5))
+	_add_box(root, Vector3(14.4, 0.20, 0.4), mat_sandstone_dark, Vector3(0.0, 0.95, -6.5))
 
-	# 2. 4 массивные античные колонны
-	# Передняя левая колонна:
-	_add_collidable_box(body, root, Vector3(1.5, 0.45, 1.5), mat_sandstone_dark, Vector3(-4.5, 0.45, 4.2))
-	_add_collidable_cyl(body, root, 5.2, 0.44, 0.48, mat_sandstone, Vector3(-4.5, 3.2, 4.2))
-	_add_box(root, Vector3(1.4, 0.4, 1.4), mat_sandstone_dark, Vector3(-4.5, 5.9, 4.2))
+	# Древний каменный обелиск с золотым наконечником перед храмом
+	_add_collidable_box(body, root, Vector3(1.6, 1.0, 1.6), mat_sandstone_dark, Vector3(5.6, 0.5, 9.2))
+	_add_collidable_cyl(body, root, 4.6, 0.35, 0.60, mat_sandstone, Vector3(5.6, 3.2, 9.2), Vector3.ZERO, 8)
+	_add_box(root, Vector3(0.55, 0.75, 0.55), mat_gold_treasure, Vector3(5.6, 5.8, 9.2), Vector3(0.0, deg_to_rad(45.0), 0.0))
 
-	# Передняя правая колонна:
-	_add_collidable_box(body, root, Vector3(1.5, 0.45, 1.5), mat_sandstone_dark, Vector3(4.5, 0.45, 4.2))
-	_add_collidable_cyl(body, root, 5.2, 0.44, 0.48, mat_sandstone, Vector3(4.5, 3.2, 4.2))
-	_add_box(root, Vector3(1.4, 0.4, 1.4), mat_sandstone_dark, Vector3(4.5, 5.9, 4.2))
+	# 2. 6 монументальных каннелированных колонн с капителями
+	# Колонны фасада:
+	var col_x_coords := [-4.8, 0.0, 4.8]
+	for cx in col_x_coords:
+		# Квадратный цоколь-плинт базы
+		_add_collidable_box(body, root, Vector3(1.6, 0.45, 1.6), mat_sandstone_dark, Vector3(cx, 1.15, 4.6))
+		# Профилированный валик базы
+		_add_cyl(root, 0.3, 0.65, 0.75, mat_sandstone, Vector3(cx, 1.5, 4.6), Vector3.ZERO, 16)
+		# Каннелированный ствол колонны
+		_add_collidable_cyl(body, root, 4.8, 0.46, 0.52, mat_sandstone, Vector3(cx, 4.0, 4.6), Vector3.ZERO, 16)
+		# Двухуровневая капитель с валютами
+		_add_cyl(root, 0.4, 0.72, 0.50, mat_sandstone_dark, Vector3(cx, 6.55, 4.6), Vector3.ZERO, 16)
+		_add_box(root, Vector3(1.5, 0.35, 1.5), mat_sandstone_dark, Vector3(cx, 6.85, 4.6))
 
-	# Архитрав и фронтон над передними колоннами
-	_add_collidable_box(body, root, Vector3(10.6, 0.7, 1.5), mat_sandstone, Vector3(0.0, 6.35, 4.2))
-	_add_box(root, Vector3(7.2, 0.6, 1.3), mat_sandstone_dark, Vector3(0.0, 7.0, 4.2))
+	# Архитрав и треугольный фронтон над передним портиком
+	_add_collidable_box(body, root, Vector3(12.4, 0.8, 1.6), mat_sandstone, Vector3(0.0, 7.3, 4.6))
+	_add_box(root, Vector3(9.6, 0.6, 1.4), mat_sandstone_dark, Vector3(0.0, 8.0, 4.6))
+	# Треугольный сломанный фронтон
+	_add_box(root, Vector3(5.4, 0.8, 1.2), mat_sandstone, Vector3(0.0, 8.6, 4.6))
+	_add_box(root, Vector3(2.4, 0.6, 1.1), mat_sandstone_dark, Vector3(0.0, 9.2, 4.6))
 
 	# Задняя левая накренившаяся колонна:
-	var lean_c := Vector3(deg_to_rad(12.0), 0.0, deg_to_rad(-6.0))
-	_add_collidable_box(body, root, Vector3(1.5, 0.45, 1.5), mat_sandstone_dark, Vector3(-4.5, 0.45, -4.2))
-	_add_collidable_cyl(body, root, 5.0, 0.44, 0.48, mat_sandstone, Vector3(-4.2, 3.1, -3.9), lean_c)
+	var lean_c := Vector3(deg_to_rad(10.0), 0.0, deg_to_rad(-8.0))
+	_add_collidable_box(body, root, Vector3(1.6, 0.45, 1.6), mat_sandstone_dark, Vector3(-4.8, 1.15, -3.8))
+	_add_collidable_cyl(body, root, 4.6, 0.46, 0.52, mat_sandstone, Vector3(-4.5, 3.8, -3.5), lean_c, 16)
 
-	# Задняя правая разрушенная колонна (обрубок + упавшие барабаны в песке):
-	_add_collidable_box(body, root, Vector3(1.5, 0.45, 1.5), mat_sandstone_dark, Vector3(4.5, 0.45, -4.2))
-	_add_collidable_cyl(body, root, 2.2, 0.44, 0.48, mat_sandstone, Vector3(4.5, 1.6, -4.2))
-	_add_collidable_cyl(body, root, 1.8, 0.44, 0.44, mat_sandstone, Vector3(3.2, 0.45, -2.8), Vector3(0.0, deg_to_rad(45.0), deg_to_rad(85.0)))
-	_add_collidable_box(body, root, Vector3(1.4, 0.8, 1.1), mat_sandstone_dark, Vector3(4.8, 0.4, -1.6), Vector3(deg_to_rad(10.0), deg_to_rad(25.0), 0.0))
+	# Задняя правая обрушенная колонна (обрубок + упавшие барабаны в песке)
+	_add_collidable_box(body, root, Vector3(1.6, 0.45, 1.6), mat_sandstone_dark, Vector3(4.8, 1.15, -3.8))
+	_add_collidable_cyl(body, root, 1.8, 0.46, 0.52, mat_sandstone, Vector3(4.8, 2.2, -3.8), Vector3.ZERO, 16)
+	# Упавшие барабаны колонны на полу
+	_add_collidable_cyl(body, root, 2.2, 0.46, 0.46, mat_sandstone, Vector3(3.4, 1.3, -2.2), Vector3(0.0, deg_to_rad(35.0), deg_to_rad(85.0)), 16)
+	_add_collidable_box(body, root, Vector3(1.5, 0.8, 1.2), mat_sandstone_dark, Vector3(4.6, 1.2, -1.0), Vector3(deg_to_rad(12.0), deg_to_rad(20.0), 0.0))
 
-	# 3. Стены целлы святилища
-	# Задняя стена:
-	_add_collidable_box(body, root, Vector3(11.2, 3.8, 1.0), mat_sandstone_dark, Vector3(0.0, 2.1, -5.2))
+	# Рассыпанные блоки в песке вокруг храма
+	_add_collidable_box(body, root, Vector3(1.8, 1.0, 1.4), mat_sandstone_dark, Vector3(-7.8, 0.5, 4.2), Vector3(deg_to_rad(6.0), deg_to_rad(25.0), 0.0))
+	_add_collidable_box(body, root, Vector3(1.5, 0.8, 1.1), mat_sandstone, Vector3(-7.2, 0.4, -4.0), Vector3(0.0, deg_to_rad(-35.0), deg_to_rad(14.0)))
+
+	# 3. Стены святилища с рельефным поясом и карнизом
+	# Задняя стена целлы:
+	_add_collidable_box(body, root, Vector3(11.8, 4.4, 1.1), mat_sandstone_dark, Vector3(0.0, 3.1, -4.8))
 	# Левая боковая стена:
-	_add_collidable_box(body, root, Vector3(1.0, 2.8, 6.8), mat_sandstone_dark, Vector3(-5.5, 1.6, -1.2))
+	_add_collidable_box(body, root, Vector3(1.1, 3.6, 7.8), mat_sandstone_dark, Vector3(-5.8, 2.7, -0.8))
 	# Правая боковая стена:
-	_add_collidable_box(body, root, Vector3(1.0, 2.2, 5.2), mat_sandstone_dark, Vector3(5.5, 1.3, -1.8))
+	_add_collidable_box(body, root, Vector3(1.1, 2.8, 6.2), mat_sandstone_dark, Vector3(5.8, 2.3, -1.6))
 
-	# Ниши и древние погребальные урны в левой стене
-	_add_box(root, Vector3(0.3, 0.9, 1.2), mat_burnt_metal, Vector3(-4.95, 2.0, -2.4))
-	_add_cyl(root, 0.55, 0.16, 0.12, mat_clay_dark, Vector3(-4.85, 1.85, -2.4))
-	_add_box(root, Vector3(0.3, 0.9, 1.2), mat_burnt_metal, Vector3(-4.95, 2.0, 0.2))
-	_add_cyl(root, 0.55, 0.16, 0.12, mat_clay_dark, Vector3(-4.85, 1.85, 0.2))
+	# Арочные ниши в левой стене с древними погребальными урнами
+	_add_box(root, Vector3(0.35, 1.1, 1.4), mat_burnt_metal, Vector3(-5.2, 2.6, -2.6))
+	_add_cyl(root, 0.65, 0.18, 0.12, mat_clay_dark, Vector3(-5.0, 2.45, -2.6))
+	_add_box(root, Vector3(0.35, 1.1, 1.4), mat_burnt_metal, Vector3(-5.2, 2.6, 0.4))
+	_add_cyl(root, 0.65, 0.18, 0.12, mat_clay_dark, Vector3(-5.0, 2.45, 0.4))
 
-	# ВНУТРИ: Древний каменный саркофаг с приоткрытой тяжелой крышкой
-	_add_collidable_box(body, root, Vector3(1.5, 1.0, 2.8), mat_sandstone_dark, Vector3(-3.2, 0.8, -2.2))
-	_add_box(root, Vector3(1.6, 0.25, 2.9), mat_sandstone, Vector3(-3.0, 1.4, -2.1), Vector3(deg_to_rad(14.0), 0.0, deg_to_rad(8.0))) # Сдвинутая крышка
+	# Древний каменный саркофаг с приоткрытой резной крышкой
+	var sarc := _add_collidable_box(body, root, Vector3(1.6, 1.1, 3.0), mat_sandstone_dark, Vector3(-3.4, 1.5, -2.2))
+	sarc.name = "Sarcophagus"
+	_add_box(root, Vector3(1.8, 0.25, 3.2), mat_sandstone, Vector3(-3.2, 2.15, -2.1), Vector3(deg_to_rad(14.0), 0.0, deg_to_rad(8.0)))
+	# Золотое сияние из приоткрытого саркофага
+	_add_box(root, Vector3(0.6, 0.1, 1.8), mat_gold_treasure, Vector3(-3.3, 1.85, -2.2))
+	var sarc_light := OmniLight3D.new()
+	sarc_light.light_color = Color(1.0, 0.8, 0.25)
+	sarc_light.light_energy = 2.2
+	sarc_light.omni_range = 4.5
+	sarc_light.position = Vector3(-3.2, 2.2, -2.2)
+	root.add_child(sarc_light)
 
-	# Настенные факельные бра на задней стене
-	for tx in [-2.5, 2.5]:
-		_add_box(root, Vector3(0.15, 0.5, 0.35), mat_burnt_metal, Vector3(tx, 2.6, -4.6))
-		_add_cyl(root, 0.25, 0.08, 0.04, mat_neon_sign, Vector3(tx, 2.85, -4.4))
+	# Настенные факельные чаши на задней стене
+	for tx in [-2.8, 2.8]:
+		_add_box(root, Vector3(0.2, 0.6, 0.4), mat_burnt_metal, Vector3(tx, 3.2, -4.2))
+		_add_cyl(root, 0.3, 0.12, 0.06, mat_neon_sign, Vector3(tx, 3.5, -4.0))
 		var wl := OmniLight3D.new()
-		wl.light_color = Color(1.0, 0.60, 0.12)
-		wl.light_energy = 2.4
-		wl.omni_range = 6.0
-		wl.position = Vector3(tx, 2.8, -4.3)
+		wl.light_color = Color(1.0, 0.62, 0.15)
+		wl.light_energy = 2.8
+		wl.omni_range = 7.5
+		wl.position = Vector3(tx, 3.5, -3.9)
 		root.add_child(wl)
 
-	# 4. Центральный жертвенник и чаши с вечным огнем
-	_add_collidable_box(body, root, Vector3(2.8, 0.8, 2.8), mat_sandstone_dark, Vector3(0.0, 0.65, 0.0))
-	_add_collidable_box(body, root, Vector3(2.4, 0.3, 2.4), mat_sandstone, Vector3(0.0, 1.15, 0.0))
+	# 4. Центральный ступенчатый жертвенник
+	_add_collidable_box(body, root, Vector3(3.2, 0.8, 3.2), mat_sandstone_dark, Vector3(0.0, 1.35, 0.0))
+	_add_collidable_box(body, root, Vector3(2.6, 0.35, 2.6), mat_sandstone, Vector3(0.0, 1.9, 0.0))
 
-	# Золотые чаши и реликвии на алтаре рядом с сундуком
-	_add_cyl(root, 0.24, 0.14, 0.08, mat_gold_treasure, Vector3(-0.7, 1.4, -0.6))
-	_add_cyl(root, 0.20, 0.12, 0.07, mat_gold_treasure, Vector3(0.7, 1.38, -0.6))
-	_add_box(root, Vector3(0.3, 0.15, 0.3), mat_gold_treasure, Vector3(-0.7, 1.36, 0.6), Vector3(0.0, deg_to_rad(30.0), 0.0))
+	# Золотые чаши, слитки и человеческий череп на алтаре
+	_add_cyl(root, 0.28, 0.16, 0.08, mat_gold_treasure, Vector3(-0.8, 2.2, -0.6))
+	_add_cyl(root, 0.24, 0.14, 0.08, mat_gold_treasure, Vector3(0.8, 2.18, -0.6))
+	var skull := PropModels3D.create_skull_human()
+	skull.position = Vector3(-0.7, 2.2, 0.6)
+	skull.rotation.y = deg_to_rad(35.0)
+	root.add_child(skull)
 
-	# 2 факельные каменные чаши по бокам алтаря
-	for sx in [-2.2, 2.2]:
-		_add_collidable_cyl(body, root, 1.2, 0.3, 0.2, mat_sandstone_dark, Vector3(sx, 0.85, 0.0))
+	# 2 факельные каменные чаши с пылающим огнем по бокам алтаря
+	for sx in [-2.5, 2.5]:
+		_add_collidable_cyl(body, root, 1.4, 0.35, 0.25, mat_sandstone_dark, Vector3(sx, 1.6, 0.0))
+		_add_cyl(root, 0.2, 0.38, 0.15, mat_gold_treasure, Vector3(sx, 2.3, 0.0))
 		var fl := OmniLight3D.new()
-		fl.light_color = Color(1.0, 0.65, 0.15)
-		fl.light_energy = 2.2
-		fl.omni_range = 7.0
-		fl.position = Vector3(sx, 1.6, 0.0)
+		fl.light_color = Color(1.0, 0.65, 0.18)
+		fl.light_energy = 2.6
+		fl.omni_range = 8.0
+		fl.position = Vector3(sx, 2.5, 0.0)
 		root.add_child(fl)
 
 	# Древний сундук на алтаре
 	var chest := _create_loot_crate("ОТКРЫТЬ ДРЕВНИЙ СУНДУК [E]", false)
-	chest.position = Vector3(0.0, 1.32, 0.0)
+	chest.position = Vector3(0.0, 2.1, 0.0)
 	root.add_child(chest)
 
 	return root
@@ -1289,102 +1384,150 @@ static func create_bunker_ruins() -> Node3D:
 	body.collision_mask = 1
 	root.add_child(body)
 
-	# ПОЛНОСТЬЮ ПОЛЫЙ ВНУТРИ БУНКЕР С ОТДЕЛЬНЫМИ СТЕНАМИ И КОЛЛИЗИЯМИ!
-	# Задняя стена:
-	_add_collidable_box(body, root, Vector3(11.8, 3.6, 1.2), mat_bunker_wall, Vector3(0.0, 1.8, -4.8))
-	# Левая стена:
-	_add_collidable_box(body, root, Vector3(1.2, 3.6, 10.0), mat_bunker_wall, Vector3(-5.3, 1.8, 0.2))
+	# 1. Фортификационный железобетонный капонир с массивными скошенными стенами
+	# Задняя глухая стена:
+	_add_collidable_box(body, root, Vector3(12.4, 3.8, 1.4), mat_bunker_wall, Vector3(0.0, 1.9, -5.0))
+	# Левая стена с амбразурами:
+	_add_collidable_box(body, root, Vector3(1.4, 3.8, 10.4), mat_bunker_wall, Vector3(-5.6, 1.9, 0.2))
 	# Правая стена:
-	_add_collidable_box(body, root, Vector3(1.2, 3.6, 10.0), mat_bunker_wall, Vector3(5.3, 1.8, 0.2))
+	_add_collidable_box(body, root, Vector3(1.4, 3.8, 10.4), mat_bunker_wall, Vector3(5.6, 1.9, 0.2))
 	# Передняя стена (левое крыло):
-	_add_collidable_box(body, root, Vector3(4.2, 3.6, 1.2), mat_bunker_wall, Vector3(-3.8, 1.8, 5.2))
+	_add_collidable_box(body, root, Vector3(4.4, 3.8, 1.4), mat_bunker_wall, Vector3(-4.0, 1.9, 5.4))
 	# Передняя стена (правое крыло):
-	_add_collidable_box(body, root, Vector3(4.2, 3.6, 1.2), mat_bunker_wall, Vector3(3.8, 1.8, 5.2))
-	# Перемычка над дверным проемом бункера (ширина проема 3.4м):
-	_add_collidable_box(body, root, Vector3(3.6, 0.9, 1.2), mat_bunker_wall, Vector3(0.0, 3.15, 5.2))
-	# Бронированная крыша бункера:
-	_add_collidable_box(body, root, Vector3(12.2, 0.6, 11.6), mat_bunker_wall, Vector3(0.0, 3.9, 0.2))
+	_add_collidable_box(body, root, Vector3(4.4, 3.8, 1.4), mat_bunker_wall, Vector3(4.0, 1.9, 5.4))
+	# Перемычка над порталом шлюза (высота проема 3.2м):
+	_add_collidable_box(body, root, Vector3(3.8, 1.0, 1.4), mat_bunker_wall, Vector3(0.0, 3.4, 5.4))
+	# Бронированная крыша-плита со скошенными карнизами:
+	_add_collidable_box(body, root, Vector3(13.2, 0.7, 12.2), mat_bunker_wall, Vector3(0.0, 4.15, 0.2))
 
-	# Выносной входной шлюз с волнорезами
-	_add_collidable_box(body, root, Vector3(0.8, 3.0, 3.0), mat_bunker_wall, Vector3(-2.2, 1.5, 7.0))
-	_add_collidable_box(body, root, Vector3(0.8, 3.0, 3.0), mat_bunker_wall, Vector3(2.2, 1.5, 7.0))
+	# Массивные угловые контрфорсы-волнорезы для гашения взрывной волны (Corner Blast Buttresses)
+	for cx in [-6.1, 6.1]:
+		for cz in [-5.5, 5.8]:
+			_add_collidable_box(body, root, Vector3(1.8, 4.0, 1.8), mat_concrete, Vector3(cx, 2.0, cz), Vector3(0.0, deg_to_rad(45.0), 0.0))
 
-	# Сорванная взрывом гермодверь лежит на полу
-	_add_box(root, Vector3(2.6, 0.12, 3.0), mat_burnt_metal, Vector3(0.3, 0.04, 6.2), Vector3(deg_to_rad(4.0), deg_to_rad(-22.0), deg_to_rad(4.0)))
-	# Полосатая маркировка на пороге
-	_add_box(root, Vector3(4.4, 0.12, 0.3), mat_barrel_stripe, Vector3(0.0, 0.06, 8.2))
+	# Прорезанные пулеметные амбразуры (Armor-plated firing slits)
+	_add_box(root, Vector3(1.6, 0.6, 0.2), mat_steel_beam, Vector3(-5.65, 2.0, -1.5), Vector3(0.0, deg_to_rad(90.0), 0.0))
+	_add_box(root, Vector3(1.6, 0.6, 0.2), mat_steel_beam, Vector3(5.65, 2.0, -1.5), Vector3(0.0, deg_to_rad(90.0), 0.0))
 
-	# СНАРУЖИ: Мешки с песком у амбразур и пулеметное гнездо (Machine Gun Post)
-	for i in range(4):
-		_add_collidable_box(body, root, Vector3(1.1, 0.35, 0.55), mat_sandbag, Vector3(-3.6 + float(i) * 1.05, 0.2, 7.8), Vector3(0.0, deg_to_rad(randf_range(-6.0, 6.0)), 0.0))
-	for i in range(3):
-		_add_collidable_box(body, root, Vector3(1.1, 0.35, 0.55), mat_sandbag, Vector3(-3.2 + float(i) * 1.05, 0.55, 7.8), Vector3(0.0, deg_to_rad(randf_range(-4.0, 4.0)), 0.0))
-	# Станок пулемета и тяжелый ствол
-	_add_cyl(root, 0.65, 0.04, 0.06, mat_burnt_metal, Vector3(-2.2, 0.85, 7.6))
-	_add_box(root, Vector3(0.2, 0.25, 0.8), mat_burnt_metal, Vector3(-2.2, 1.15, 7.8))
-	_add_cyl(root, 0.75, 0.03, 0.03, mat_burnt_metal, Vector3(-2.2, 1.15, 8.35), Vector3(PI * 0.5, 0.0, 0.0))
-	# Стреляные гильзы на полу у пулемета
-	for gi in range(5):
-		_add_cyl(root, 0.08, 0.02, 0.02, mat_gold_treasure, Vector3(-2.2 + randf_range(-0.3, 0.3), 0.04, 7.4 + randf_range(-0.3, 0.3)), Vector3(0.0, 0.0, PI * 0.5))
+	# Пробитый снарядом пролом в правой стене с торчащей ржавой арматурой!
+	for rb in range(4):
+		var r_y := 1.2 + float(rb) * 0.55
+		_add_cyl(root, 1.8, 0.02, 0.02, mat_steel_beam, Vector3(5.6, r_y, 2.0 + float(rb) * 0.3), Vector3(deg_to_rad(20.0), deg_to_rad(45.0), deg_to_rad(85.0)), 6)
 
-	# Противотанковые ежи из скрещенных балок перед бункером (Czech Hedgehogs)
-	for hx in [-4.6, 4.6]:
-		_add_collidable_box(body, root, Vector3(0.2, 1.8, 0.2), mat_steel_beam, Vector3(hx, 0.75, 9.5), Vector3(deg_to_rad(35.0), 0.0, deg_to_rad(45.0)))
-		_add_collidable_box(body, root, Vector3(0.2, 1.8, 0.2), mat_steel_beam, Vector3(hx, 0.75, 9.5), Vector3(deg_to_rad(-35.0), 0.0, deg_to_rad(-45.0)))
-		_add_collidable_box(body, root, Vector3(0.2, 1.8, 0.2), mat_steel_beam, Vector3(hx, 0.75, 9.5), Vector3(0.0, deg_to_rad(90.0), deg_to_rad(45.0)))
+	# 2. Массивный входной броне-шлюз с предупреждающими полосами опасности
+	_add_collidable_box(body, root, Vector3(0.9, 3.2, 3.4), mat_bunker_wall, Vector3(-2.4, 1.6, 7.2))
+	_add_collidable_box(body, root, Vector3(0.9, 3.2, 3.4), mat_bunker_wall, Vector3(2.4, 1.6, 7.2))
+	_add_box(root, Vector3(4.8, 0.15, 0.4), mat_barrel_stripe, Vector3(0.0, 0.08, 8.6)) # Полосатый порог
 
-	# Прожектор наблюдения и антенна радиосвязи на крыше
-	_add_cyl(root, 3.2, 0.06, 0.08, mat_metal_rusty, Vector3(3.8, 5.4, -2.5))
-	_add_cyl(root, 2.8, 0.05, 0.06, mat_metal_rusty, Vector3(4.8, 6.4, -2.5), Vector3(deg_to_rad(50.0), 0.0, deg_to_rad(26.0)))
-	_add_cyl(root, 0.8, 0.35, 0.40, mat_military_green, Vector3(0.0, 4.4, 4.8))
-	_add_cyl(root, 0.2, 0.28, 0.28, mat_neon_sign, Vector3(0.0, 4.4, 5.2), Vector3(PI * 0.5, 0.0, 0.0))
+	# Распахнутая тяжелая гермодверь с запорным штурвалом и гидравлическими поршнями
+	var door_pivot := Vector3(-1.9, 1.6, 6.2)
+	_add_collidable_box(body, root, Vector3(0.25, 2.8, 2.2), mat_steel_beam, door_pivot, Vector3(0.0, deg_to_rad(-55.0), 0.0))
+	# Запорный круглый штурвал на гермодвери
+	_add_cyl(root, 0.08, 0.35, 0.35, mat_barrel_stripe, door_pivot + Vector3(0.2, 0.0, 0.2), Vector3(0.0, deg_to_rad(-55.0), PI * 0.5), 12)
 
-	# ВНУТРИ БУНКЕРА:
-	# Тактическая радиостанция / серверные стойки у стены
-	_add_collidable_box(body, root, Vector3(3.2, 2.2, 0.9), mat_military_green, Vector3(-3.4, 1.1, -3.8))
-	_add_box(root, Vector3(2.8, 0.2, 0.92), mat_neon_sign, Vector3(-3.4, 1.4, -3.8))
+	# 3. Наружный укрепрайон: мешки с песком, пулемет, ежи и ящики
+	var sandbags := PropModels3D.create_sandbag_wall(3.2, 3)
+	sandbags.position = Vector3(-3.2, 0.0, 8.2)
+	root.add_child(sandbags)
 
-	# Центральный тактический стол с подсвеченным зеленым экраном радара (Command Table)
-	_add_collidable_box(body, root, Vector3(2.2, 0.9, 1.6), mat_military_green, Vector3(0.0, 0.45, 1.0))
-	_add_box(root, Vector3(1.6, 0.04, 1.0), mat_green_screen, Vector3(0.0, 0.92, 1.0))
+	# Станок крупнокалиберного пулемета на позиции
+	_add_cyl(root, 0.75, 0.05, 0.07, mat_burnt_metal, Vector3(-2.2, 0.95, 8.0))
+	_add_box(root, Vector3(0.25, 0.28, 0.95), mat_steel_beam, Vector3(-2.2, 1.30, 8.2))
+	_add_cyl(root, 0.85, 0.035, 0.035, mat_steel_beam, Vector3(-2.2, 1.30, 8.8), Vector3(PI * 0.5, 0.0, 0.0))
+
+	# Рассыпанные стреляные гильзы и открытый патронный ящик
+	var casings := PropModels3D.create_spent_casings_pile(0.7)
+	casings.position = Vector3(-2.2, 0.02, 7.6)
+	root.add_child(casings)
+
+	var ammo_crate := PropModels3D.create_ammo_crate_open()
+	ammo_crate.position = Vector3(-1.2, 0.0, 8.0)
+	ammo_crate.rotation.y = deg_to_rad(-25.0)
+	root.add_child(ammo_crate)
+
+	# Противотанковые ежи
+	var hedge1 := PropModels3D.create_tank_trap_hedgehog()
+	hedge1.position = Vector3(-4.8, 0.0, 9.8)
+	root.add_child(hedge1)
+	var hedge2 := PropModels3D.create_tank_trap_hedgehog()
+	hedge2.position = Vector3(4.8, 0.0, 9.8)
+	root.add_child(hedge2)
+
+	# Предупреждающий знак киборг-угрозы с кибер-черепом
+	var sign_prop := PropModels3D.create_hazard_warning_sign_mesh(1)
+	sign_prop.position = Vector3(3.6, 0.0, 8.6)
+	sign_prop.rotation.y = deg_to_rad(-30.0)
+	root.add_child(sign_prop)
+
+	# Стопка бочек на обочине бункера
+	var drum1 := PropModels3D.create_oil_drum("hazard")
+	drum1.position = Vector3(4.2, 0.0, 7.2)
+	root.add_child(drum1)
+	var drum2 := PropModels3D.create_oil_drum("rusty")
+	drum2.position = Vector3(4.8, 0.0, 6.8)
+	root.add_child(drum2)
+
+	# Крыша: выносная мачта дальней связи, радарная тарелка и прожектор
+	_add_cyl(root, 3.8, 0.06, 0.09, mat_steel_beam, Vector3(4.2, 5.8, -2.5))
+	_add_cyl(root, 0.25, 0.9, 0.1, mat_plane_metal, Vector3(4.2, 7.2, -2.5), Vector3(deg_to_rad(35.0), 0.0, deg_to_rad(15.0)), 12)
+	# Прожектор
+	_add_cyl(root, 0.8, 0.35, 0.40, mat_military_green, Vector3(0.0, 4.8, 5.0))
+	_add_cyl(root, 0.2, 0.30, 0.30, mat_neon_sign, Vector3(0.0, 4.8, 5.4), Vector3(PI * 0.5, 0.0, 0.0))
+
+	# 4. ВНУТРЕННЕЕ ОСНАЩЕНИЕ БУНКЕРА (ИНТЕРЬЕР КОМАНДНОГО ПУНКТА)
+	# Тактический стол со светящимся зеленым радаром
+	_add_collidable_box(body, root, Vector3(2.4, 0.9, 1.8), mat_military_green, Vector3(0.0, 0.45, 1.0))
+	_add_box(root, Vector3(1.8, 0.04, 1.2), mat_green_screen, Vector3(0.0, 0.92, 1.0))
 	var radar_light := OmniLight3D.new()
+	radar_light.name = "RadarCRT"
 	radar_light.light_color = Color(0.15, 1.0, 0.4)
-	radar_light.light_energy = 2.0
-	radar_light.omni_range = 4.5
-	radar_light.position = Vector3(0.0, 1.1, 1.0)
+	radar_light.light_energy = 2.4
+	radar_light.omni_range = 5.0
+	radar_light.position = Vector3(0.0, 1.2, 1.0)
 	root.add_child(radar_light)
 
-	# Двухъярусная металлическая солдатская койка у правой стены
-	_add_collidable_box(body, root, Vector3(1.2, 2.2, 2.6), mat_steel_beam, Vector3(3.8, 1.1, -1.8))
-	_add_box(root, Vector3(1.0, 0.15, 2.3), mat_cushion, Vector3(3.8, 0.55, -1.8))
-	_add_box(root, Vector3(1.0, 0.15, 2.3), mat_cushion, Vector3(3.8, 1.65, -1.8))
+	# Стойка с детализированными штурмовыми винтовками на стене
+	var rifle1 := PropModels3D.create_rifle_prop()
+	rifle1.position = Vector3(-4.8, 1.8, -1.0)
+	rifle1.rotation = Vector3(0.0, deg_to_rad(90.0), deg_to_rad(10.0))
+	root.add_child(rifle1)
+	var rifle2 := PropModels3D.create_rifle_prop()
+	rifle2.position = Vector3(-4.8, 1.4, -1.0)
+	rifle2.rotation = Vector3(0.0, deg_to_rad(90.0), deg_to_rad(5.0))
+	root.add_child(rifle2)
 
-	# Ряд армейских оружейных шкафов-локеров
-	_add_collidable_box(body, root, Vector3(1.8, 2.4, 0.7), mat_military_green, Vector3(3.8, 1.2, 2.4))
-	_add_box(root, Vector3(0.05, 2.2, 0.6), mat_steel_beam, Vector3(3.4, 1.2, 2.2), Vector3(0.0, deg_to_rad(-40.0), 0.0)) # Приоткрытая дверца
+	# Электронный мусор и резервная светящаяся кибер-батарея в углу
+	var tech_pile := PropModels3D.create_tech_salvage_pile()
+	tech_pile.position = Vector3(-3.8, 0.0, -3.8)
+	root.add_child(tech_pile)
 
-	# Трубы вентиляции под потолком бункера
-	_add_cyl(root, 9.5, 0.22, 0.22, mat_plane_metal, Vector3(-2.2, 3.4, 0.0), Vector3(PI * 0.5, 0.0, 0.0))
-	_add_cyl(root, 9.5, 0.22, 0.22, mat_plane_metal, Vector3(2.2, 3.4, 0.0), Vector3(PI * 0.5, 0.0, 0.0))
+	# Двухъярусная армейская койка
+	_add_collidable_box(body, root, Vector3(1.2, 2.2, 2.6), mat_steel_beam, Vector3(4.2, 1.1, -1.8))
+	_add_box(root, Vector3(1.0, 0.15, 2.3), mat_cushion, Vector3(4.2, 0.55, -1.8))
+	_add_box(root, Vector3(1.0, 0.15, 2.3), mat_cushion, Vector3(4.2, 1.65, -1.8))
 
-	# Аптечка первой помощи на стене
-	_add_box(root, Vector3(0.12, 0.55, 0.45), mat_white_enamel, Vector3(-4.65, 1.9, 0.0))
-	_add_box(root, Vector3(0.14, 0.35, 0.10), mat_emergency_red, Vector3(-4.64, 1.9, 0.0))
-	_add_box(root, Vector3(0.14, 0.10, 0.35), mat_emergency_red, Vector3(-4.64, 1.9, 0.0))
+	# Оружейные шкафы-локеры
+	_add_collidable_box(body, root, Vector3(1.8, 2.4, 0.7), mat_military_green, Vector3(4.2, 1.2, 2.4))
+	_add_box(root, Vector3(0.05, 2.2, 0.6), mat_steel_beam, Vector3(3.8, 1.2, 2.2), Vector3(0.0, deg_to_rad(-40.0), 0.0))
 
-	# Аварийный красный фонарь на потолке бункера
-	_add_box(root, Vector3(0.3, 0.3, 0.3), mat_emergency_red, Vector3(0.0, 3.4, -1.5))
+	# Вентиляционные магистрали под потолком
+	_add_cyl(root, 10.2, 0.22, 0.22, mat_plane_metal, Vector3(-2.4, 3.6, 0.0), Vector3(PI * 0.5, 0.0, 0.0))
+	_add_cyl(root, 10.2, 0.22, 0.22, mat_plane_metal, Vector3(2.4, 3.6, 0.0), Vector3(PI * 0.5, 0.0, 0.0))
+
+	# Аварийный красный пульсирующий маяк на потолке бункера
+	_add_box(root, Vector3(0.35, 0.35, 0.35), mat_emergency_red, Vector3(0.0, 3.6, -1.5))
 	var red_beacon := OmniLight3D.new()
+	red_beacon.name = "BunkerAlarm"
 	red_beacon.light_color = Color(1.0, 0.15, 0.1)
-	red_beacon.light_energy = 3.2
-	red_beacon.omni_range = 9.5
-	red_beacon.position = Vector3(0.0, 3.2, -1.5)
+	red_beacon.light_energy = 3.5
+	red_beacon.omni_range = 10.0
+	red_beacon.position = Vector3(0.0, 3.4, -1.5)
 	root.add_child(red_beacon)
 
-	# Военный контейнер внутри бункера на деревянном поддоне
-	_add_collidable_box(body, root, Vector3(1.8, 0.2, 1.8), mat_beam_wood, Vector3(0.0, 0.1, -2.4))
+	# Защищенный военный контейнер на деревянном поддоне
+	_add_collidable_box(body, root, Vector3(1.8, 0.2, 1.8), mat_beam_wood, Vector3(0.0, 0.1, -2.5))
 	var crate := _create_loot_crate("ОТКРЫТЬ ВОЕННЫЙ КОНТЕЙНЕР [E]", true)
-	crate.position = Vector3(0.0, 0.35, -2.4)
+	crate.position = Vector3(0.0, 0.35, -2.5)
 	root.add_child(crate)
 
 	return root
@@ -1439,9 +1582,20 @@ static func create_plane_wreck_ruins() -> Node3D:
 	# 4. Хвостовой стабилизатор, воткнутый в дюну
 	_add_collidable_box(body, root, Vector3(0.3, 4.4, 2.4), mat_plane_metal, Vector3(3.8, 1.9, -4.5), Vector3(deg_to_rad(18.0), deg_to_rad(-32.0), deg_to_rad(12.0)))
 
-	# 5. Разбросанные грузовые контейнеры
+	# 5. Разбросанные грузовые контейнеры и аварийный спасательный запас
 	_add_collidable_box(body, root, Vector3(1.2, 1.0, 1.4), mat_military_green, Vector3(2.5, 0.5, -1.8))
 	_add_collidable_box(body, root, Vector3(1.0, 0.8, 1.1), mat_sandbag, Vector3(1.4, 0.4, 2.8))
+
+	# Электронный бортовой самописец («черный ящик») и куча авионики
+	var plane_tech := PropModels3D.create_tech_salvage_pile()
+	plane_tech.position = Vector3(3.2, 0.0, -0.8)
+	plane_tech.rotation.y = deg_to_rad(45.0)
+	root.add_child(plane_tech)
+
+	# Аварийные бочки с авиакеросином
+	var plane_drum := PropModels3D.create_oil_drum("hazard")
+	plane_drum.position = Vector3(3.6, 0.0, 2.8)
+	root.add_child(plane_drum)
 
 	# ВНУТРИ САЛОНА И КАБИНЫ:
 	# Сдвоенные пассажирские кресла вдоль борта
@@ -1517,6 +1671,11 @@ static func create_clay_ruins() -> Node3D:
 	# Стопки сохнущего необожженного саманного кирпича во дворе
 	_add_collidable_box(body, root, Vector3(1.2, 0.7, 1.4), mat_adobe_clay, Vector3(4.2, 0.35, 7.2))
 	_add_box(root, Vector3(0.9, 0.4, 1.1), mat_adobe_clay, Vector3(4.2, 0.90, 7.2))
+
+	# Финиковая пальма, дающая тень во внутреннем дворе караван-сарая
+	var clay_palm := PropModels3D.create_palm_tree(5.6, 0.12)
+	clay_palm.position = Vector3(4.5, 0.0, 4.0)
+	root.add_child(clay_palm)
 
 	# Внутренняя перегородка с проходом в тайную комнату
 	_add_collidable_box(body, root, Vector3(4.6, 2.6, 0.7), mat_adobe_clay, Vector3(-1.8, 1.3, 0.0))
@@ -2250,12 +2409,13 @@ static func _add_box(parent: Node3D, sz: Vector3, mat: Material, pos: Vector3 = 
 	parent.add_child(mi)
 	return mi
 
-static func _add_cyl(parent: Node3D, height: float, top_r: float, bot_r: float, mat: Material, pos: Vector3 = Vector3.ZERO, rot: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+static func _add_cyl(parent: Node3D, height: float, top_r: float, bot_r: float, mat: Material, pos: Vector3 = Vector3.ZERO, rot: Vector3 = Vector3.ZERO, radial_segments: int = 16) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
 	cyl.height = height
 	cyl.top_radius = top_r
 	cyl.bottom_radius = bot_r
+	cyl.radial_segments = radial_segments
 	cyl.material = mat
 	mi.mesh = cyl
 	mi.position = pos
@@ -2287,8 +2447,8 @@ static func _add_collidable_box(body: StaticBody3D, parent_visual: Node3D, sz: V
 	body.add_child(col)
 	return mi
 
-static func _add_collidable_cyl(body: StaticBody3D, parent_visual: Node3D, height: float, top_r: float, bot_r: float, mat: Material, pos: Vector3 = Vector3.ZERO, rot: Vector3 = Vector3.ZERO) -> MeshInstance3D:
-	var mi := _add_cyl(parent_visual, height, top_r, bot_r, mat, pos, rot)
+static func _add_collidable_cyl(body: StaticBody3D, parent_visual: Node3D, height: float, top_r: float, bot_r: float, mat: Material, pos: Vector3 = Vector3.ZERO, rot: Vector3 = Vector3.ZERO, radial_segments: int = 16) -> MeshInstance3D:
+	var mi := _add_cyl(parent_visual, height, top_r, bot_r, mat, pos, rot, radial_segments)
 	var col := CollisionShape3D.new()
 	var cyl := CylinderShape3D.new()
 	cyl.height = height

@@ -454,6 +454,178 @@ def generate_cactus_skin():
     img.save(path)
     print("Saved:", path)
 
+# -------------------------------------------------------------
+# 16. FORTIFIED BUNKER CONCRETE (512x512)
+# -------------------------------------------------------------
+def generate_bunker_concrete():
+    img = Image.new("RGBA", (512, 512), (105, 108, 106, 255))
+    draw = ImageDraw.Draw(img)
+    pixels = img.load()
+
+    # Heavy aggregate concrete with noise and formwork pitting
+    for y in range(512):
+        for x in range(512):
+            base_n = fbm(x * 0.04, y * 0.04, 4, seed=331)
+            fine_n = pseudo_noise(x, y, 77)
+            c = clamp(100 + (base_n - 0.5) * 36 + (fine_n - 0.5) * 14)
+            # Slight cold military olive tint
+            r = clamp(c * 0.96)
+            g = clamp(c * 1.0)
+            b = clamp(c * 0.94)
+
+            # Concrete formwork panel seam grooves at y=128, 256, 384 and x=256
+            if y % 128 in [0, 1] or x in [255, 256]:
+                r, g, b = clamp(r * 0.6), clamp(g * 0.6), clamp(b * 0.6)
+
+            # Rust/grime water drip stains running down from rebar anchors
+            if x % 64 in [31, 32] and y > 32:
+                drip = math.exp(-((x % 64 - 31.5) ** 2) / 2.0) * math.sin(y * 0.05 + 1.0)
+                if drip > 0.2:
+                    r = clamp(r + drip * 45)
+                    g = clamp(g - drip * 15)
+                    b = clamp(b - drip * 25)
+
+            pixels[x, y] = (r, g, b, 255)
+
+    # Formwork tie-rod circular indentations with rust cores
+    for py in [64, 192, 320, 448]:
+        for px in [64, 192, 320, 448]:
+            draw.ellipse([px - 6, py - 6, px + 6, py + 6], fill=(55, 58, 56, 255), outline=(130, 135, 130, 255))
+            draw.ellipse([px - 2, py - 2, px + 2, py + 2], fill=(120, 60, 30, 255))
+
+    path = os.path.join(OUTPUT_DIR, "bunker_concrete.png")
+    img.save(path)
+    print("Saved:", path)
+
+# -------------------------------------------------------------
+# 17. ANCIENT TEMPLE SANDSTONE (512x512)
+# -------------------------------------------------------------
+def generate_ancient_temple_stone():
+    img = Image.new("RGBA", (512, 512), (195, 168, 125, 255))
+    draw = ImageDraw.Draw(img)
+    pixels = img.load()
+
+    # Sandstone grain and mineral strata
+    for y in range(512):
+        for x in range(512):
+            grain = fbm(x * 0.035, y * 0.015, 4, seed=512)
+            fine = pseudo_noise(x, y, 99)
+            base = 175 + (grain - 0.5) * 45 + (fine - 0.5) * 12
+            r = clamp(base * 1.12)
+            g = clamp(base * 0.96)
+            b = clamp(base * 0.72)
+
+            # Carved ashlar block mortar lines
+            # Courses every 96 pixels with alternating staggered vertical joints
+            course = y // 96
+            in_course_y = y % 96
+            x_shift = 128 if (course % 2 == 1) else 0
+            in_block_x = (x + x_shift) % 256
+
+            if in_course_y in [0, 1, 2] or in_block_x in [0, 1, 2]:
+                r = clamp(r * 0.55)
+                g = clamp(g * 0.52)
+                b = clamp(b * 0.45)
+            elif in_course_y in [3, 4] or in_block_x in [3, 4]:
+                # Chiseled block bevel highlight
+                r = clamp(r * 1.15)
+                g = clamp(g * 1.12)
+                b = clamp(b * 1.08)
+
+            pixels[x, y] = (r, g, b, 255)
+
+    # Decorative carved frieze meander / chevron relief band across y in [240..272]
+    for x in range(0, 512, 32):
+        draw.line([(x, 244), (x + 16, 268), (x + 32, 244)], fill=(130, 110, 80, 255), width=3)
+        draw.line([(x, 242), (x + 16, 266), (x + 32, 242)], fill=(225, 200, 160, 255), width=1)
+
+    path = os.path.join(OUTPUT_DIR, "ancient_temple_stone.png")
+    img.save(path)
+    print("Saved:", path)
+
+# -------------------------------------------------------------
+# 18. CRASHED PLANE RIVETED METAL (512x512)
+# -------------------------------------------------------------
+def generate_plane_rivets():
+    img = Image.new("RGBA", (512, 512), (180, 184, 188, 255))
+    draw = ImageDraw.Draw(img)
+    pixels = img.load()
+
+    # Brushed aircraft duralumin skin with scratches and oxidation
+    for y in range(512):
+        for x in range(512):
+            brushed = (pseudo_noise(x, y // 2, 401) - 0.5) * 18.0
+            panel_n = fbm(x * 0.02, y * 0.02, 3, seed=88)
+            val = clamp(178 + brushed + (panel_n - 0.5) * 22)
+            r = clamp(val * 0.98)
+            g = clamp(val * 1.00)
+            b = clamp(val * 1.04)
+
+            # Overlapping lap joint seams every 128px horizontally & 256px vertically
+            if y % 128 in [0, 1]:
+                r, g, b = clamp(r * 0.6), clamp(g * 0.6), clamp(b * 0.62)
+            elif y % 128 in [2, 3]:
+                r, g, b = clamp(r * 1.25), clamp(g * 1.25), clamp(b * 1.28)
+
+            # Scorched black / thermal distress streak
+            if 340 < x < 460 and y > 200:
+                dist = math.exp(-((x - 400) ** 2) / 800.0) * math.sin(y * 0.02)
+                if dist > 0.15:
+                    r = clamp(r * (1.0 - dist * 0.75))
+                    g = clamp(g * (1.0 - dist * 0.80))
+                    b = clamp(b * (1.0 - dist * 0.85))
+
+            pixels[x, y] = (r, g, b, 255)
+
+    # Rivet lines along panel seams
+    for y_seam in [128, 256, 384]:
+        for x_rivet in range(8, 512, 16):
+            draw.ellipse([x_rivet - 3, y_seam - 10 - 3, x_rivet + 3, y_seam - 10 + 3], fill=(135, 138, 142, 255), outline=(220, 225, 230, 255))
+            draw.ellipse([x_rivet - 3, y_seam + 10 - 3, x_rivet + 3, y_seam + 10 + 3], fill=(135, 138, 142, 255), outline=(220, 225, 230, 255))
+
+    path = os.path.join(OUTPUT_DIR, "plane_rivets.png")
+    img.save(path)
+    print("Saved:", path)
+
+# -------------------------------------------------------------
+# 19. ADOBE MUD BRICK (512x512)
+# -------------------------------------------------------------
+def generate_adobe_brick():
+    img = Image.new("RGBA", (512, 512), (180, 125, 85, 255))
+    draw = ImageDraw.Draw(img)
+    pixels = img.load()
+
+    # Earthy terracotta mud brick with chopped straw flecks and drying cracks
+    for y in range(512):
+        for x in range(512):
+            clay_n = fbm(x * 0.04, y * 0.04, 4, seed=702)
+            speck = pseudo_noise(x, y, 313)
+            base = 145 + (clay_n - 0.5) * 40
+            r = clamp(base * 1.25)
+            g = clamp(base * 0.88)
+            b = clamp(base * 0.60)
+
+            # Straw fiber flecks
+            if speck > 0.94:
+                r, g, b = 220, 195, 110
+
+            # Irregular clay brick courses
+            course = y // 64
+            in_c_y = y % 64
+            x_off = 100 if (course % 2 == 1) else 0
+            in_b_x = (x + x_off) % 200
+
+            if in_c_y in [0, 1, 2] or in_b_x in [0, 1, 2]:
+                r = clamp(r * 0.65)
+                g = clamp(g * 0.60)
+                b = clamp(b * 0.52)
+
+            pixels[x, y] = (r, g, b, 255)
+
+    path = os.path.join(OUTPUT_DIR, "adobe_brick.png")
+    img.save(path)
+    print("Saved:", path)
+
 if __name__ == "__main__":
     print("Generating comprehensive PBR texture library for apocalypse models...")
     generate_tire_tread()
@@ -471,4 +643,8 @@ if __name__ == "__main__":
     generate_red_canyon_rock()
     generate_toxic_sludge_ground()
     generate_cactus_skin()
+    generate_bunker_concrete()
+    generate_ancient_temple_stone()
+    generate_plane_rivets()
+    generate_adobe_brick()
     print("All textures generated successfully!")

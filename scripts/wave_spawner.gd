@@ -3,28 +3,40 @@ extends Node3D
 # --- Константы ---
 const ENEMY_SCENE: PackedScene = preload("res://scenes/enemy.tscn")
 
-# --- Настройки волн ---
+# --- Настройки штурмов и спавна ---
 @export var min_spawn_dist    : float = 18.0
-@export var max_spawn_dist    : float = 42.0
-@export var wave_break        : float = 15.0
-@export var max_alive_enemies : int   = 30
+@export var max_spawn_dist    : float = 40.0
+@export var assault_break     : float = 24.0 # Передышка между штурмами (сек)
+@export var max_alive_enemies : int   = 32
 
-# --- Состояние спавнера ---
-var current_wave       : int   = 0
-var wave_active        : bool  = false
-var enemies_alive      : int   = 0
-var enemies_to_spawn   : Array[String] = []
-var spawn_timer        : float = 0.0
+# --- Динамическая система угрозы и прогрессии сложности ---
+# Угроза Роя (Threat Meter): от 0% до 100%
+var threat_level          : float = 0.0
+var difficulty_tier       : int   = 1
+var assault_number        : int   = 0
 
-var is_in_break        : bool  = false
-var is_camp_paused     : bool  = false
-var break_timer        : float = 0.0
-var last_countdown_sec : int   = -1
+# Состояния боевой обстановки (Combat Alert Phases):
+# 0: CALM (Затишье, накопление угрозы, редкие разведчики)
+# 1: AMBUSH (Тактическая засада с флангов)
+# 2: ASSAULT (Массированный скоординированный штурм каравана)
+enum ThreatPhase { CALM, AMBUSH, ASSAULT }
+var current_phase: ThreatPhase = ThreatPhase.CALM
+
+var wave_active           : bool  = false
+var is_in_break           : bool  = false
+var is_camp_paused        : bool  = false
+var break_timer           : float = 0.0
+var scout_timer           : float = 0.0
+var hud_update_timer      : float = 0.0
+var last_countdown_sec    : int   = -1
+var enemies_alive         : int   = 0
+var enemies_to_spawn      : Array[String] = []
+var spawn_timer           : float = 0.0
 
 # --- Контейнер для врагов ---
-var enemies_container  : Node3D = null
+var enemies_container     : Node3D = null
 
-# --- Аудио для волн ---
+# --- Аудио для штурмов ---
 var snd_wave_start : AudioStream = preload("res://assets/audio/wave_start.wav")
 var snd_wave_win   : AudioStream = preload("res://assets/audio/wave_win.wav")
 var audio_player   : AudioStreamPlayer = null
@@ -44,9 +56,9 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_find_and_connect_hud()
 
-	# Стартовая передышка перед первой волной (только на сервере / в одиночке)
+	# Начальная передышка перед первой активностью в пустоши
 	if not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
-		_start_break(wave_break)
+		_start_break(assault_break)
 
 func _setup_container() -> void:
 	var existing: Node = get_node_or_null("EnemiesContainer")
@@ -64,14 +76,19 @@ func _find_and_connect_hud() -> void:
 	if hud and hud.has_method("connect_spawner"):
 		hud.connect_spawner(self)
 
+func _get_caravan() -> Node3D:
+	return get_tree().get_first_node_in_group("caravan") as Node3D
+
 func _process(delta: float) -> void:
-	# На клиенте волнами управляет хост/сервер
+	# На клиенте логикой спавна и фаз управляет хост/сервер
 	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
 		return
 
 	if is_camp_paused:
+		threat_level = 0.0
 		return
 
+	# 1. Период передышки после отбитого штурма
 	if is_in_break:
 		break_timer -= delta
 		var sec_left: int = int(ceil(maxf(0.0, break_timer)))
@@ -83,43 +100,145 @@ func _process(delta: float) -> void:
 
 		if break_timer <= 0.0:
 			is_in_break = false
-			_start_next_wave()
+			threat_level = 12.0
+			_notify_hud_threat()
 		return
 
-	if not wave_active:
+	# 2. Боевой режим (засада или штурм активны)
+	if wave_active:
+		if not enemies_to_spawn.is_empty():
+			spawn_timer -= delta
+			if spawn_timer <= 0.0:
+				_spawn_wave_batch()
+		elif enemies_alive <= 0:
+			# Все нападающие ликвидированы!
+			_complete_assault()
 		return
 
-	if not enemies_to_spawn.is_empty():
-		spawn_timer -= delta
-		if spawn_timer <= 0.0:
-			_spawn_wave_batch()
+	# 3. Режим исследования и движения каравана: накопление угрозы и прогрессия
+	var caravan := _get_caravan()
+	var dist_traveled: float = 0.0
+	if caravan and is_instance_valid(caravan):
+		dist_traveled = absf(caravan.global_position.z)
+
+	# Уровень сложности (Tier) растет каждые 360 метров вглубь пустыни
+	var new_tier: int = maxi(1, 1 + int(dist_traveled / 360.0))
+	difficulty_tier = new_tier
+
+	# Накопление шкалы Угрозы Роя
+	var growth_rate: float = 1.0 + float(difficulty_tier) * 0.25
+	# В Красном Каньоне и Токсичной Пустоши угроза нарастает быстрее
+	if dist_traveled >= 550.0 and dist_traveled <= 1250.0:
+		growth_rate *= 1.30 # Красный каньон
+	elif dist_traveled > 1250.0 and dist_traveled <= 1850.0:
+		growth_rate *= 1.60 # Токсичная кибер-пустошь
+
+	threat_level = minf(100.0, threat_level + delta * growth_rate * 0.6)
+
+	# Периодическое обновление статуса на HUD
+	hud_update_timer += delta
+	if hud_update_timer >= 1.0:
+		hud_update_timer = 0.0
+		_notify_hud_threat()
+
+	# Одиночные разведчики во время затишья (Scouts)
+	scout_timer += delta
+	if scout_timer >= 20.0 and threat_level < 60.0 and enemies_alive < 3:
+		scout_timer = 0.0
+		_spawn_scout_ambush()
+
+	# Фланговая засада при накоплении 55% угрозы
+	if threat_level >= 55.0 and current_phase == ThreatPhase.CALM and enemies_alive < 2:
+		_trigger_flank_ambush()
+
+	# Полномасштабный штурм каравана при 100% угрозе
+	elif threat_level >= 100.0:
+		_trigger_full_assault()
+
+func _notify_hud_threat() -> void:
+	var caravan := _get_caravan()
+	var dist: int = int(absf(caravan.global_position.z)) if (caravan and is_instance_valid(caravan)) else 0
+	var status_text: String = "УГРОЗА РОЯ: %d%% · ЭТАП %d" % [int(threat_level), difficulty_tier]
+	var sub_text: String = "Караван в пути (%dм). Следите за барханами" % dist
+	wave_started.emit(difficulty_tier, status_text)
+	enemies_remaining.emit(enemies_alive)
+
+func reduce_threat(amount: float) -> void:
+	threat_level = maxf(0.0, threat_level - amount)
+	_notify_hud_threat()
 
 func _start_break(duration: float) -> void:
 	is_in_break = true
 	break_timer = duration
 	last_countdown_sec = -1
+	current_phase = ThreatPhase.CALM
 	var sec: int = int(ceil(duration))
 	wave_countdown.emit(sec)
 	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
 		sync_wave_countdown.rpc(sec)
 
-func _start_next_wave() -> void:
-	current_wave += 1
+# Одиночный разведчик на барханах (Scout)
+func _spawn_scout_ambush() -> void:
+	var z_type := "Runner" if randf() < 0.65 else "Walker"
+	var caravan := _get_caravan()
+	var base_pos: Vector3 = caravan.global_position if (caravan and is_instance_valid(caravan)) else Vector3.ZERO
+	var side_x: float = (randf_range(18.0, 30.0)) * (1.0 if randf() < 0.5 else -1.0)
+	var spawn_z: float = base_pos.z + randf_range(-15.0, 15.0)
+	var spawn_y: float = DesertGenerator.get_height(base_pos.x + side_x, spawn_z) + 0.8
+	_spawn_single_enemy(z_type, Vector3(base_pos.x + side_x, spawn_y, spawn_z))
+
+# -------------------------------------------------------------------------
+# ФЛАНГОВАЯ ЗАСАДА (FLANK AMBUSH)
+# -------------------------------------------------------------------------
+func _trigger_flank_ambush() -> void:
+	current_phase = ThreatPhase.AMBUSH
 	wave_active = true
-	is_in_break = false
 	spawn_timer = 0.0
 
-	var data: Dictionary = _get_wave_composition(current_wave)
-	var wave_name: String = data["name"] as String
-	var list: Array[String] = (data["enemies"] as Array[String]).duplicate()
-	enemies_to_spawn = list
+	var count: int = randi_range(2, 4)
+	enemies_to_spawn.clear()
+	for i in range(count):
+		if difficulty_tier >= 2 and randf() < 0.45:
+			enemies_to_spawn.append("Crawler")
+		elif randf() < 0.5:
+			enemies_to_spawn.append("Runner")
+		else:
+			enemies_to_spawn.append("Walker")
 
 	var rem: int = enemies_alive + enemies_to_spawn.size()
-	wave_started.emit(current_wave, wave_name)
+	var title := "⚠️ ВНИМАНИЕ: ЗАСАДА НА ФЛАНГАХ!"
+	wave_started.emit(difficulty_tier, title)
 	enemies_remaining.emit(rem)
 
 	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
-		sync_wave_started.rpc(current_wave, wave_name, rem)
+		sync_wave_started.rpc(difficulty_tier, title, rem)
+
+	if has_node("/root/MusicManager"):
+		get_node("/root/MusicManager").set_combat_mode(true)
+
+# -------------------------------------------------------------------------
+# ПОЛНОМАСШТАБНЫЙ ШТУРМ КАРАВАНА (FULL ASSAULT HORDE)
+# -------------------------------------------------------------------------
+func _trigger_full_assault() -> void:
+	current_phase = ThreatPhase.ASSAULT
+	assault_number += 1
+	wave_active = true
+	threat_level = 100.0
+	spawn_timer = 0.0
+
+	var caravan := _get_caravan()
+	var dist: float = absf(caravan.global_position.z) if (caravan and is_instance_valid(caravan)) else 0.0
+
+	var enemies: Array[String] = _build_assault_roster(difficulty_tier, dist)
+	enemies_to_spawn = enemies
+
+	var rem: int = enemies_alive + enemies_to_spawn.size()
+	var wave_title := "ШТУРМ КАРАВАНА: ЭТАП %d" % assault_number
+	wave_started.emit(assault_number, wave_title)
+	enemies_remaining.emit(rem)
+
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		sync_wave_started.rpc(assault_number, wave_title, rem)
 
 	if has_node("/root/MusicManager"):
 		get_node("/root/MusicManager").set_combat_mode(true)
@@ -128,164 +247,123 @@ func _start_next_wave() -> void:
 		audio_player.stream = snd_wave_start
 		audio_player.play()
 
-func _get_wave_composition(wave_num: int) -> Dictionary:
-	var w_name: String = ""
-	var enemies: Array[String] = []
+# Построение прогрессирующего состава штурмовой группы
+func _build_assault_roster(tier: int, dist_z: float) -> Array[String]:
+	var list: Array[String] = []
 
-	match wave_num:
-		1:
-			w_name = "Разведка"
-			for i: int in range(5):
-				enemies.append("Walker")
-		2:
-			w_name = "Патруль"
-			for i: int in range(8):
-				enemies.append("Walker")
-			for i: int in range(2):
-				enemies.append("Runner")
-			enemies.shuffle()
-		3:
-			w_name = "Стая"
-			for i: int in range(4):
-				enemies.append("Walker")
-			for i: int in range(4):
-				enemies.append("Runner")
-			for i: int in range(2):
-				enemies.append("Crawler")
-			enemies.shuffle()
-		4:
-			w_name = "Осада"
-			for i: int in range(6):
-				enemies.append("Walker")
-			for i: int in range(4):
-				enemies.append("Runner")
-			for i: int in range(2):
-				enemies.append("Spitter")
-			enemies.append("Brute")
-			enemies.shuffle()
-		5:
-			w_name = "Нашествие"
-			for i: int in range(8):
-				enemies.append("Walker")
-			for i: int in range(6):
-				enemies.append("Runner")
-			for i: int in range(3):
-				enemies.append("Crawler")
-			for i: int in range(2):
-				enemies.append("Screamer")
-			enemies.append("Brute")
-			enemies.shuffle()
-		6:
-			w_name = "Ад"
-			for i: int in range(10):
-				enemies.append("Walker")
-			for i: int in range(8):
-				enemies.append("Runner")
-			for i: int in range(4):
-				enemies.append("Crawler")
-			for i: int in range(3):
-				enemies.append("Spitter")
-			for i: int in range(2):
-				enemies.append("Screamer")
-			for i: int in range(2):
-				enemies.append("Brute")
-			enemies.append("Exploder")
-			enemies.shuffle()
-		_:
-			w_name = "Бесконечность"
-			enemies = _build_endless_composition(wave_num)
+	match tier:
+		1: # 0 - 360m: Развед-отряд
+			for i in range(5): list.append("Walker")
+			for i in range(2): list.append("Runner")
+		2: # 360 - 720m (перед лагерем #1): Налет стаи
+			for i in range(6): list.append("Walker")
+			for i in range(4): list.append("Runner")
+			for i in range(2): list.append("Crawler")
+		3: # 720 - 1080m (Красный каньон): Осада с артиллерией
+			for i in range(6): list.append("Walker")
+			for i in range(4): list.append("Runner")
+			for i in range(3): list.append("Crawler")
+			list.append("Spitter")
+			list.append("Brute")
+		4: # 1080 - 1440m (Глубины каньона / перед лагерем #2): Тяжелый штурм
+			for i in range(8): list.append("Walker")
+			for i in range(5): list.append("Runner")
+			for i in range(3): list.append("Crawler")
+			for i in range(2): list.append("Spitter")
+			list.append("Brute")
+		5: # 1440 - 1800m (Токсичная пустошь): Кибер-нашествие
+			for i in range(8): list.append("Walker")
+			for i in range(6): list.append("Runner")
+			for i in range(4): list.append("Crawler")
+			for i in range(2): list.append("Spitter")
+			for i in range(2): list.append("Screamer")
+			list.append("Brute")
+			list.append("Exploder")
+		_: # 1800m+: Бесконечная нарастающая сложность
+			var mult: float = 1.0 + float(tier - 5) * 0.35
+			var counts := {
+				"Walker": int(round(8 * mult)),
+				"Runner": int(round(6 * mult)),
+				"Crawler": int(round(4 * mult)),
+				"Spitter": int(round(2 * mult)),
+				"Screamer": int(round(2 * mult)),
+				"Brute": int(round(1 * mult)),
+				"Exploder": int(round(1 * mult))
+			}
+			for z_type: String in counts:
+				for i in range(mini(12, counts[z_type])):
+					list.append(z_type)
 
-	return {
-		"name": w_name,
-		"enemies": enemies
-	}
+	list.shuffle()
+	return list
 
-func _build_endless_composition(wave_num: int) -> Array[String]:
-	# Масштабирование состава волны 6 множителем (wave - 5) * 0.5, максимум 60 врагов
-	var mult: float = (float(wave_num) - 5.0) * 0.5
-	var base_counts: Dictionary = {
-		"Walker": 10,
-		"Runner": 8,
-		"Crawler": 4,
-		"Spitter": 3,
-		"Screamer": 2,
-		"Brute": 2,
-		"Exploder": 1
-	}
+# -------------------------------------------------------------------------
+# СТРАЖИ ПОДЗЕМЕЛИЙ И РАЗВАЛИН (DUNGEON GUARDIANS)
+# -------------------------------------------------------------------------
+func spawn_dungeon_guardians(poi_node: Node, poi_type: String, world_pos: Vector3) -> void:
+	if not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
+		var guard_types: Array[String] = []
+		match poi_type:
+			"bunker_ruins":
+				guard_types = ["Brute", "Walker", "Runner"]
+			"ancient_ruins":
+				guard_types = ["Runner", "Runner", "Walker"]
+			"plane_wreck":
+				guard_types = ["Crawler", "Runner"]
+			"clay_ruins":
+				guard_types = ["Crawler", "Walker"]
+			_:
+				guard_types = ["Walker", "Runner"]
 
-	var scaled: Dictionary = {}
-	var total_count: int = 0
+		for i in range(guard_types.size()):
+			var z_type: String = guard_types[i]
+			var offset := Vector3(randf_range(-3.0, 3.0), 0.0, randf_range(-3.0, 3.0))
+			var g_pos := world_pos + offset
+			g_pos.y = DesertGenerator.get_height(g_pos.x, g_pos.z) + 0.8
+			_spawn_single_enemy(z_type, g_pos, "Guardian_%s_%d" % [poi_type, _next_enemy_id()])
 
-	for z_type: String in base_counts:
-		var c: int = int(round(float(base_counts[z_type]) * mult))
-		if c < 1:
-			c = 1
-		scaled[z_type] = c
-		total_count += c
+func _complete_assault() -> void:
+	wave_active = false
+	current_phase = ThreatPhase.CALM
+	threat_level = 10.0 # Сброс угрозы на базовый уровень после отбитого штурма
 
-	# Ограничение максимума в 60 врагов
-	if total_count > 60:
-		var ratio: float = 60.0 / float(total_count)
-		var re_total: int = 0
-		for z_type: String in scaled:
-			var trimmed: int = int(round(float(scaled[z_type]) * ratio))
-			if trimmed < 1:
-				trimmed = 1
-			scaled[z_type] = trimmed
-			re_total += trimmed
+	wave_completed.emit(assault_number)
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		sync_wave_completed.rpc(assault_number)
 
-		while re_total > 60:
-			if scaled["Walker"] > 1:
-				scaled["Walker"] -= 1
-				re_total -= 1
-			elif scaled["Runner"] > 1:
-				scaled["Runner"] -= 1
-				re_total -= 1
-			else:
-				break
+	if has_node("/root/MusicManager"):
+		get_node("/root/MusicManager").set_combat_mode(false)
 
-	var result: Array[String] = []
-	for z_type: String in scaled:
-		var count: int = scaled[z_type] as int
-		for i: int in range(count):
-			result.append(z_type)
+	if audio_player and snd_wave_win:
+		audio_player.stream = snd_wave_win
+		audio_player.play()
 
-	result.shuffle()
-	return result
+	_start_break(assault_break)
 
 func _spawn_wave_batch() -> void:
 	if enemies_to_spawn.is_empty() or enemies_alive >= max_alive_enemies:
 		return
 
 	var available_slots: int = max_alive_enemies - enemies_alive
-	var group_size: int = 1
-	var next_delay: float = 1.0
-
-	if current_wave == 1:
-		group_size = 2
-		next_delay = 1.2
-	else:
-		group_size = randi_range(3, 5)
-		next_delay = randf_range(0.8, 1.8)
-
-	group_size = mini(group_size, enemies_to_spawn.size())
+	var group_size: int = mini(randi_range(2, 4), enemies_to_spawn.size())
 	group_size = mini(group_size, available_slots)
-
 	if group_size <= 0:
 		return
 
-	var center_pos: Vector3 = _get_random_spawn_point()
+	# Фланговый спавн с барханов слева или справа от тракта
+	var caravan := _get_caravan()
+	var base_z: float = caravan.global_position.z if (caravan and is_instance_valid(caravan)) else 0.0
+	var side_sign: float = 1.0 if randf() < 0.5 else -1.0
+	var flank_x: float = (randf_range(min_spawn_dist, max_spawn_dist)) * side_sign
 
-	for i: int in range(group_size):
+	for i in range(group_size):
 		var z_type: String = enemies_to_spawn.pop_front()
-		var offset_x: float = randf_range(-2.5, 2.5)
-		var offset_z: float = randf_range(-2.5, 2.5)
-		var ex: float = center_pos.x + offset_x
-		var ez: float = center_pos.z + offset_z
+		var ex: float = flank_x + randf_range(-3.0, 3.0)
+		var ez: float = base_z + randf_range(-14.0, 14.0)
 		var ey: float = DesertGenerator.get_height(ex, ez) + 0.8
 		_spawn_single_enemy(z_type, Vector3(ex, ey, ez))
 
-	spawn_timer = next_delay
+	spawn_timer = randf_range(1.0, 2.2)
 
 var _enemy_id_counter: int = 0
 var _enemy_sync_timer: float = 0.0
@@ -342,7 +420,6 @@ func _spawn_single_enemy(z_type: String, pos: Vector3, custom_name: String = "")
 	else:
 		enemy.name = custom_name
 
-	# Устанавливаем тип зомби ДО добавления в дерево сцены
 	enemy.zombie_type = z_type
 
 	var spawn_y: float = DesertGenerator.get_height(pos.x, pos.z) + 0.8
@@ -376,29 +453,6 @@ func sync_spawn_enemy(e_name: String, z_type: String, spawn_pos: Vector3) -> voi
 	if enemy.has_signal("enemy_died"):
 		enemy.enemy_died.connect(_on_enemy_died.bind(enemy))
 
-func _get_random_spawn_point() -> Vector3:
-	var anchor_pos: Vector3 = Vector3.ZERO
-	var caravan := get_tree().get_first_node_in_group("caravan") as Node3D
-	if caravan and is_instance_valid(caravan):
-		anchor_pos = caravan.global_position
-	else:
-		var players: Array = get_tree().get_nodes_in_group("player")
-		var alive_players: Array[Node3D] = []
-		for p: Node in players:
-			if p is Node3D and is_instance_valid(p) and not (p.get("is_dead") == true):
-				alive_players.append(p as Node3D)
-		if alive_players.size() > 0:
-			var chosen_player: Node3D = alive_players[randi() % alive_players.size()]
-			anchor_pos = chosen_player.global_position
-
-	var angle: float = randf() * TAU
-	var dist: float = randf_range(min_spawn_dist, max_spawn_dist)
-	var spawn_x: float = anchor_pos.x + cos(angle) * dist
-	var spawn_z: float = anchor_pos.z + sin(angle) * dist
-	var spawn_y: float = DesertGenerator.get_height(spawn_x, spawn_z) + 0.8
-
-	return Vector3(spawn_x, spawn_y, spawn_z)
-
 func _on_enemy_died(_enemy: Node) -> void:
 	enemies_alive = maxi(0, enemies_alive - 1)
 	var remaining: int = enemies_alive + enemies_to_spawn.size()
@@ -407,27 +461,13 @@ func _on_enemy_died(_enemy: Node) -> void:
 		sync_enemies_remaining.rpc(remaining)
 
 	if remaining <= 0 and wave_active:
-		_complete_wave()
-
-func _complete_wave() -> void:
-	wave_active = false
-	wave_completed.emit(current_wave)
-	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
-		sync_wave_completed.rpc(current_wave)
-
-	if has_node("/root/MusicManager"):
-		get_node("/root/MusicManager").set_combat_mode(false)
-
-	if audio_player and snd_wave_win:
-		audio_player.stream = snd_wave_win
-		audio_player.play()
-
-	_start_break(wave_break)
+		_complete_assault()
 
 func set_camp_peaceful_zone(in_camp: bool) -> void:
 	is_camp_paused = in_camp
 	if in_camp:
-		# Уничтожаем оставшихся внешних зомби у входа в безопасный лагерь
+		threat_level = 0.0
+		current_phase = ThreatPhase.CALM
 		if enemies_container:
 			for child: Node in enemies_container.get_children():
 				if is_instance_valid(child):
@@ -438,10 +478,11 @@ func set_camp_peaceful_zone(in_camp: bool) -> void:
 		enemies_remaining.emit(0)
 		if has_node("/root/MusicManager"):
 			get_node("/root/MusicManager").set_combat_mode(false)
-		wave_started.emit(current_wave, "БЕЗОПАСНАЯ ЗОНА: ЛАГЕРЬ ВЫЖИВШИХ")
+		wave_started.emit(difficulty_tier, "БЕЗОПАСНАЯ ЗОНА: АВАНПОСТ ВЫЖИВШИХ")
 	else:
-		# При выходе из лагеря даем короткую передышку перед следующей волной
-		_start_break(10.0)
+		# При выходе из лагеря даем короткую передышку перед новым этапом
+		threat_level = 0.0
+		_start_break(12.0)
 
 	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
 		sync_camp_peaceful_zone.rpc(in_camp)
@@ -450,19 +491,23 @@ func set_camp_peaceful_zone(in_camp: bool) -> void:
 func sync_camp_peaceful_zone(in_camp: bool) -> void:
 	is_camp_paused = in_camp
 	if in_camp:
-		wave_started.emit(current_wave, "БЕЗОПАСНАЯ ЗОНА: ЛАГЕРЬ ВЫЖИВШИХ")
+		threat_level = 0.0
+		current_phase = ThreatPhase.CALM
+		wave_started.emit(difficulty_tier, "БЕЗОПАСНАЯ ЗОНА: АВАНПОСТ ВЫЖИВШИХ")
 		if has_node("/root/MusicManager"):
 			get_node("/root/MusicManager").set_combat_mode(false)
 
 func reset_to_wave_zero() -> void:
 	wave_active = false
 	is_in_break = false
+	threat_level = 0.0
+	current_phase = ThreatPhase.CALM
 	enemies_to_spawn.clear()
 	if enemies_container:
 		for child: Node in enemies_container.get_children():
 			child.queue_free()
 	enemies_alive = 0
-	current_wave = 0
+	assault_number = 0
 	enemies_remaining.emit(0)
 
 	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
@@ -471,14 +516,13 @@ func reset_to_wave_zero() -> void:
 	if has_node("/root/MusicManager"):
 		get_node("/root/MusicManager").set_combat_mode(false)
 
-	_start_break(wave_break)
+	_start_break(assault_break)
 
-# --- СЕТЕВАЯ СИНХРОНИЗАЦИЯ ВОЛН ---
+# --- СЕТЕВАЯ СИНХРОНИЗАЦИЯ ---
 func send_full_sync_to_peer(peer_id: int) -> void:
 	var rem: int = enemies_alive + enemies_to_spawn.size()
-	rpc_id(peer_id, "sync_full_spawner_state", current_wave, wave_active, is_in_break, int(ceil(maxf(0.0, break_timer))), rem, is_camp_paused)
+	rpc_id(peer_id, "sync_full_spawner_state", assault_number, wave_active, is_in_break, int(ceil(maxf(0.0, break_timer))), rem, is_camp_paused, threat_level)
 
-	# Отправляем список всех живых врагов новому клиенту
 	var existing_enemies: Array = []
 	if enemies_container:
 		for child in enemies_container.get_children():
@@ -518,27 +562,27 @@ func sync_all_existing_enemies(enemies_list: Array) -> void:
 			enemy.enemy_died.connect(_on_enemy_died.bind(enemy))
 
 @rpc("authority", "reliable")
-func sync_full_spawner_state(w_num: int, is_active: bool, in_break: bool, break_sec: int, rem: int, s_camp_paused: bool = false) -> void:
-	current_wave = w_num
+func sync_full_spawner_state(w_num: int, is_active: bool, in_break: bool, break_sec: int, rem: int, s_camp_paused: bool = false, s_threat: float = 0.0) -> void:
+	assault_number = w_num
 	wave_active = is_active
 	is_in_break = in_break
 	is_camp_paused = s_camp_paused
+	threat_level = s_threat
 	if is_camp_paused:
-		wave_started.emit(current_wave, "БЕЗОПАСНАЯ ЗОНА: ЛАГЕРЬ ВЫЖИВШИХ")
+		wave_started.emit(difficulty_tier, "БЕЗОПАСНАЯ ЗОНА: АВАНПОСТ ВЫЖИВШИХ")
 		if has_node("/root/MusicManager"):
 			get_node("/root/MusicManager").set_combat_mode(false)
 	elif is_in_break:
 		wave_countdown.emit(break_sec)
 	elif wave_active:
-		var data: Dictionary = _get_wave_composition(current_wave)
-		wave_started.emit(current_wave, data.get("name", "Волна %d" % current_wave))
+		wave_started.emit(assault_number, "ШТУРМ КАРАВАНА #%d" % assault_number)
 		enemies_remaining.emit(rem)
 		if has_node("/root/MusicManager"):
 			get_node("/root/MusicManager").set_combat_mode(true)
 
 @rpc("authority", "reliable")
 func sync_wave_started(w_num: int, w_name: String, rem: int) -> void:
-	current_wave = w_num
+	assault_number = w_num
 	wave_active = true
 	is_in_break = false
 	wave_started.emit(w_num, w_name)
@@ -552,6 +596,7 @@ func sync_wave_started(w_num: int, w_name: String, rem: int) -> void:
 @rpc("authority", "reliable")
 func sync_wave_completed(w_num: int) -> void:
 	wave_active = false
+	current_phase = ThreatPhase.CALM
 	wave_completed.emit(w_num)
 	if has_node("/root/MusicManager"):
 		get_node("/root/MusicManager").set_combat_mode(false)
