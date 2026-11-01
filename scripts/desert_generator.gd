@@ -14,6 +14,7 @@ class_name DesertGenerator
 
 const TUMBLEWEED_SCENE = preload("res://scenes/tumbleweed.tscn")
 const RoadEvents3D = preload("res://scripts/road_events_3d.gd")
+const PropModels3D = preload("res://scripts/prop_models_3d.gd")
 
 # Уникальный сид мира для полной случайности каждой новой игры (и синхронизации в мультиплеере)
 var world_seed            : int        = 0
@@ -34,6 +35,8 @@ var shared_floor_shape    : BoxShape3D
 var sand_material         : ShaderMaterial
 var mat_rock              : StandardMaterial3D
 var mat_rock_dark         : StandardMaterial3D
+var mat_canyon_terrain    : StandardMaterial3D
+var mat_toxic_terrain     : StandardMaterial3D
 
 static var instance: DesertGenerator = null
 
@@ -53,8 +56,8 @@ static func get_height(wx: float, wz: float) -> float:
 static func is_camp_coord(coord: Vector2i) -> bool:
 	if coord.x != 0 or coord.y >= 0:
 		return false
-	# Спавн лагеря в 3 раза чаще (каждые 3 чанка: y = -3, -6, -9, -12, ...)
-	return (abs(coord.y) >= 3) and (abs(coord.y) % 3 == 0)
+	# Спавн лагеря в 2 раза реже (каждые 6 чанков: y = -6, -12, -18, ... Z = -720м, -1440м, ...)
+	return (abs(coord.y) >= 6) and (abs(coord.y) % 6 == 0)
 
 static func get_normal(wx: float, wz: float) -> Vector3:
 	if instance and is_instance_valid(instance):
@@ -100,6 +103,25 @@ func get_raw_terrain_height(wx: float, wz: float) -> float:
 	big_mountain *= road_mount_mask
 
 	var wild_h: float = gentle_dunes + big_mountain
+
+	# 2.1 Особенности биомов террейна вдали от центра тракта
+	# А. Красный Каньон (Z от -550м до -1250м): ступенчатые террасы и монолитные стены ущелья
+	if wz <= -550.0 and wz >= -1250.0:
+		var canyon_blend: float = clampf((-550.0 - wz) / 80.0, 0.0, 1.0) * clampf((wz - (-1250.0)) / 80.0, 0.0, 1.0)
+		if absf(wx) > 7.5:
+			var cliff_t: float = clampf((absf(wx) - 7.5) / 15.0, 0.0, 1.0)
+			var step_f: float = floor(cliff_t * 3.5) / 3.5
+			var mesa_noise: float = sin(wz * 0.035 + seed_f * 2.1) * 1.5 + cos(wx * 0.025 + seed_f) * 1.0
+			var canyon_wall: float = (step_f * 5.4 + mesa_noise) * canyon_blend
+			wild_h += canyon_wall
+
+	# Б. Токсичная Кибер-Пустошь (Z от -1250м до -1850м): кислотные провалы, радиоактивные кратеры
+	if wz <= -1250.0 and wz >= -1850.0:
+		var toxic_blend: float = clampf((-1250.0 - wz) / 80.0, 0.0, 1.0) * clampf((wz - (-1850.0)) / 80.0, 0.0, 1.0)
+		if absf(wx) > 7.0:
+			var crater_sample: float = sin(wx * 0.045 + wz * 0.032 + seed_f) * cos(wx * 0.034 - wz * 0.042 + seed_f * 1.7)
+			var crater_h: float = crater_sample * 2.8 * toxic_blend
+			wild_h += crater_h
 
 	# 3. Сглаженный тракт каравана по центру дороги (|wx| < 5.0м)
 	# Дорога практически плоская и комфортная для каравана (перепад всего ±0.2м)
@@ -254,6 +276,29 @@ func _init_shared_resources() -> void:
 	mat_rock_dark.albedo_color = Color(0.42, 0.32, 0.20)
 	mat_rock_dark.roughness = 0.95
 
+	# PBR-материал Красного Каньона (Red Canyon Badlands)
+	mat_canyon_terrain = StandardMaterial3D.new()
+	mat_canyon_terrain.albedo_color = Color(0.74, 0.40, 0.28)
+	mat_canyon_terrain.roughness = 0.90
+	var tex_canyon := PropModels3D._load_tex("red_canyon_rock.png")
+	if tex_canyon:
+		mat_canyon_terrain.albedo_texture = tex_canyon
+		mat_canyon_terrain.uv1_scale = Vector3(0.08, 0.08, 0.08)
+		mat_canyon_terrain.uv1_triplanar = true
+
+	# PBR-материал Токсичной Кибер-Пустоши (Toxic Cyber-Wasteland)
+	mat_toxic_terrain = StandardMaterial3D.new()
+	mat_toxic_terrain.albedo_color = Color(0.25, 0.35, 0.22)
+	mat_toxic_terrain.roughness = 0.60
+	mat_toxic_terrain.emission_enabled = true
+	mat_toxic_terrain.emission = Color(0.12, 0.45, 0.16)
+	mat_toxic_terrain.emission_energy_multiplier = 0.7
+	var tex_toxic := PropModels3D._load_tex("toxic_sludge_ground.png")
+	if tex_toxic:
+		mat_toxic_terrain.albedo_texture = tex_toxic
+		mat_toxic_terrain.uv1_scale = Vector3(0.06, 0.06, 0.06)
+		mat_toxic_terrain.uv1_triplanar = true
+
 # =========================================================================
 # УПРАВЛЕНИЕ ЧАНКАМИ (СТРИМИНГ МИРА)
 # =========================================================================
@@ -329,16 +374,24 @@ func _build_chunk_floor(chunk: Node3D, coord: Vector2i) -> void:
 	var body := StaticBody3D.new()
 	body.name = "ChunkFloor"
 
+	var chunk_origin_x: float = float(coord.x) * chunk_size
+	var chunk_origin_z: float = float(coord.y) * chunk_size
+
+	# Выбор биомного материала пола чанка
+	var chosen_mat: Material = sand_material
+	if chunk_origin_z <= -550.0 and chunk_origin_z >= -1250.0 and mat_canyon_terrain:
+		chosen_mat = mat_canyon_terrain
+	elif chunk_origin_z < -1250.0 and chunk_origin_z >= -1850.0 and mat_toxic_terrain:
+		chosen_mat = mat_toxic_terrain
+
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	if sand_material:
-		st.set_material(sand_material)
+	if chosen_mat:
+		st.set_material(chosen_mat)
 
 	var steps: int = 16
 	var step_sz: float = chunk_size / float(steps)
 	var half: float = chunk_size * 0.5
-	var chunk_origin_x: float = float(coord.x) * chunk_size
-	var chunk_origin_z: float = float(coord.y) * chunk_size
 
 	# 1. Генерация вершин песчаных дюн
 	for iz in range(steps + 1):
@@ -383,8 +436,8 @@ func _build_chunk_floor(chunk: Node3D, coord: Vector2i) -> void:
 
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
-	if sand_material:
-		mi.material_override = sand_material
+	if chosen_mat:
+		mi.material_override = chosen_mat
 	body.add_child(mi)
 
 	var col_shape := mesh.create_trimesh_shape()
@@ -786,6 +839,59 @@ func _populate_chunk_scenery(chunk: Node3D, coord: Vector2i, rng: RandomNumberGe
 			var s: float = rng.randf_range(0.9, 1.25)
 			var rot_y: float = rng.randf_range(0.0, TAU)
 			_create_oil_drums(chunk, pos, s, rot_y)
+
+	# 12. ДЕКОРАЦИИ КРАСНОГО КАНЬОНА (Z от -550м до -1250м)
+	var chunk_wz: float = float(coord.y) * chunk_size
+	if chunk_wz <= -550.0 and chunk_wz >= -1250.0:
+		# Монументальная арка каньона прямо над дорогой в чанке Y = -8 (Z = -960м)
+		if coord.x == 0 and coord.y == -8:
+			var arch := PropModels3D.create_canyon_arch(16.0, 9.5)
+			var arch_y: float = get_terrain_height(chunk.position.x, chunk.position.z)
+			arch.position = Vector3(0.0, arch_y - 0.2, 0.0)
+			chunk.add_child(arch)
+			exclusion_zones.append(Vector3(0.0, 0.0, 15.0))
+
+		# Предупреждающие знаки киборгов на скалах (40% шанс)
+		if rng.randf() < 0.40:
+			var sign_side: float = (8.5 + rng.randf_range(1.0, 4.0)) * (1.0 if rng.randf() < 0.5 else -1.0)
+			var sign_z: float = rng.randf_range(-half * 0.7, half * 0.7)
+			var sign_y: float = get_terrain_height(chunk.position.x + sign_side, chunk.position.z + sign_z)
+			var c_sign := PropModels3D.create_hazard_warning_sign_mesh(1 if rng.randf() < 0.5 else 0)
+			c_sign.position = Vector3(sign_side, sign_y, sign_z)
+			c_sign.rotation.y = deg_to_rad(-90.0 if sign_side > 0.0 else 90.0)
+			chunk.add_child(c_sign)
+
+	# 13. ДЕКОРАЦИИ ТОКСИЧНОЙ КИБЕР-ПУСТОШИ (Z от -1250м до -1850м)
+	elif chunk_wz < -1250.0 and chunk_wz >= -1850.0:
+		# Кислотные бассейны со светящейся жижей (50% шанс)
+		if rng.randf() < 0.50:
+			var pool_side: float = (12.0 + rng.randf_range(2.0, 16.0)) * (1.0 if rng.randf() < 0.5 else -1.0)
+			var pool_z: float = rng.randf_range(-half * 0.65, half * 0.65)
+			var pool_y: float = get_terrain_height(chunk.position.x + pool_side, chunk.position.z + pool_z)
+			var pool := PropModels3D.create_toxic_pool(rng.randf_range(2.8, 4.2))
+			pool.position = Vector3(pool_side, pool_y - 0.05, pool_z)
+			chunk.add_child(pool)
+			exclusion_zones.append(Vector3(pool_side, pool_z, 5.0))
+
+		# Кучи электронного мусора и кибер-деталей (45% шанс)
+		if rng.randf() < 0.45:
+			var scrap_pos := _get_prop_pos(chunk.position.x, chunk.position.z, half, rng, true, 2.0)
+			if not is_in_exclusion.call(scrap_pos):
+				var scrap := PropModels3D.create_tech_salvage_pile()
+				scrap.position = scrap_pos
+				scrap.rotation.y = rng.randf_range(0.0, TAU)
+				chunk.add_child(scrap)
+				exclusion_zones.append(Vector3(scrap_pos.x, scrap_pos.z, 2.5))
+
+		# Пики с кибер-черепами (трофеи) вдоль обочины (35% шанс)
+		if abs(coord.x) <= 1 and rng.randf() < 0.35:
+			var trophy_side: float = 6.2 * (1.0 if rng.randf() < 0.5 else -1.0)
+			var trophy_z: float = rng.randf_range(-half * 0.7, half * 0.7)
+			var trophy_y: float = get_terrain_height(chunk.position.x + trophy_side, chunk.position.z + trophy_z)
+			var trophy := PropModels3D.create_cyborg_spike_trophy()
+			trophy.position = Vector3(trophy_side, trophy_y, trophy_z)
+			trophy.rotation.y = rng.randf_range(0.0, TAU)
+			chunk.add_child(trophy)
 
 # Расчет позиции объекта с обязательной проверкой свободного коридора дороги каравана
 func _get_prop_pos(chunk_wx: float, chunk_wz: float, half: float, rng: RandomNumberGenerator, is_obstacle: bool, extra_clearance: float = 0.0) -> Vector3:

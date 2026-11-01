@@ -19,6 +19,19 @@ static var mat_stone_cairn : StandardMaterial3D
 static var mat_scrub_bush  : StandardMaterial3D
 static var mat_insulator   : StandardMaterial3D
 
+static func _load_tex(filename: String) -> Texture2D:
+	var path := "res://assets/textures/props/" + filename
+	if ResourceLoader.exists(path):
+		var res = ResourceLoader.load(path)
+		if res is Texture2D:
+			return res
+	var os_path: String = ProjectSettings.globalize_path(path)
+	if FileAccess.file_exists(path):
+		var img := Image.load_from_file(os_path)
+		if img and not img.is_empty():
+			return ImageTexture.create_from_image(img)
+	return null
+
 static func _ensure_materials() -> void:
 	if mat_bark != null:
 		return
@@ -27,33 +40,55 @@ static func _ensure_materials() -> void:
 	mat_bark = StandardMaterial3D.new()
 	mat_bark.albedo_color = Color(0.24, 0.20, 0.17)
 	mat_bark.roughness = 0.95
+	var tex_bark := _load_tex("palm_bark.png")
+	if tex_bark:
+		mat_bark.albedo_texture = tex_bark
+		mat_bark.uv1_scale = Vector3(1.0, 3.0, 1.0)
 
 	# Пустынный кактус Сагуаро (ребристый зеленый с восковым налетом)
 	mat_cactus = StandardMaterial3D.new()
 	mat_cactus.albedo_color = Color(0.22, 0.46, 0.20)
 	mat_cactus.roughness = 0.80
+	var tex_cactus := _load_tex("cactus_skin.png")
+	if tex_cactus:
+		mat_cactus.albedo_texture = tex_cactus
+		mat_cactus.uv1_scale = Vector3(2.0, 4.0, 2.0)
 
 	# Ржавый металл остова машины
 	mat_rust = StandardMaterial3D.new()
 	mat_rust.albedo_color = Color(0.38, 0.22, 0.15)
 	mat_rust.metallic = 0.35
 	mat_rust.roughness = 0.88
+	var tex_rust := _load_tex("corrugated_rust.png")
+	if tex_rust:
+		mat_rust.albedo_texture = tex_rust
+		mat_rust.uv1_scale = Vector3(1.5, 1.5, 1.5)
 
 	# Темный обгоревший каркас и детали
 	mat_metal = StandardMaterial3D.new()
 	mat_metal.albedo_color = Color(0.18, 0.18, 0.19)
 	mat_metal.metallic = 0.8
 	mat_metal.roughness = 0.45
+	var tex_metal := _load_tex("blued_metal.png")
+	if tex_metal:
+		mat_metal.albedo_texture = tex_metal
 
 	# Резина полуспущенных колес
 	mat_tire = StandardMaterial3D.new()
 	mat_tire.albedo_color = Color(0.10, 0.10, 0.10)
 	mat_tire.roughness = 0.95
+	var tex_tire := _load_tex("tire_tread.png")
+	if tex_tire:
+		mat_tire.albedo_texture = tex_tire
+		mat_tire.uv1_scale = Vector3(3.0, 1.0, 1.0)
 
 	# Выбеленный солнцем череп и кости
 	mat_bone = StandardMaterial3D.new()
 	mat_bone.albedo_color = Color(0.85, 0.82, 0.74)
 	mat_bone.roughness = 0.70
+	var tex_bone := _load_tex("skull_bone.png")
+	if tex_bone:
+		mat_bone.albedo_texture = tex_bone
 
 	# Рога буйвола
 	mat_horn = StandardMaterial3D.new()
@@ -69,11 +104,18 @@ static func _ensure_materials() -> void:
 	mat_sign_yellow = StandardMaterial3D.new()
 	mat_sign_yellow.albedo_color = Color(0.85, 0.68, 0.15)
 	mat_sign_yellow.roughness = 0.60
+	var tex_sign := _load_tex("warning_sign_cyborg.png")
+	if tex_sign:
+		mat_sign_yellow.albedo_texture = tex_sign
 
 	# Каменные плиты тура караванщиков
 	mat_stone_cairn = StandardMaterial3D.new()
 	mat_stone_cairn.albedo_color = Color(0.55, 0.45, 0.34)
 	mat_stone_cairn.roughness = 0.92
+	var tex_cairn := _load_tex("red_canyon_rock.png")
+	if tex_cairn:
+		mat_stone_cairn.albedo_texture = tex_cairn
+		mat_stone_cairn.uv1_scale = Vector3(1.2, 1.2, 1.2)
 
 	# Сухой пустынный кустарник
 	mat_scrub_bush = StandardMaterial3D.new()

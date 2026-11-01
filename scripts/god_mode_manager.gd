@@ -272,12 +272,12 @@ func teleport_to_camp() -> void:
 		player.global_position = target_camp.global_position + Vector3(0.0, 1.2, 0.0)
 		show_toast("⛺ ТЕЛЕПОРТАЦИЯ В ЛАГЕРЬ УСПЕШНА")
 	elif player and is_instance_valid(player):
-		var camp_z: float = -360.0
+		var camp_z: float = -720.0
 		var camp_y: float = DesertGenerator.get_height(0.0, camp_z)
 		player.global_position = Vector3(0.0, camp_y + 1.2, camp_z)
 		if DesertGenerator.instance:
 			DesertGenerator.instance._update_chunks(true)
-		show_toast("⛺ ТЕЛЕПОРТАЦИЯ К АВАНПОСТУ #1 (Z=-360m)")
+		show_toast("⛺ ТЕЛЕПОРТАЦИЯ К АВАНПОСТУ #1 (Z=-720m)")
 	else:
 		show_toast("Игрок не найден")
 

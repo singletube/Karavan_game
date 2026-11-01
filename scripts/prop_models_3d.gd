@@ -45,19 +45,38 @@ static var mat_barbed_wire     : StandardMaterial3D
 static var mat_ammo_box_green  : StandardMaterial3D
 static var mat_pcb_board       : StandardMaterial3D
 static var mat_sign_hazard     : StandardMaterial3D
+static var mat_canyon_rock     : StandardMaterial3D
+
+static func _load_tex(filename: String) -> Texture2D:
+	var path: String = "res://assets/textures/props/" + filename
+	if ResourceLoader.exists(path):
+		var res = load(path)
+		if res is Texture2D:
+			return res
+	# Надежный фолбэк прямой загрузки через Image (работает до генерации .import файлов)
+	var os_path: String = ProjectSettings.globalize_path(path)
+	if FileAccess.file_exists(path):
+		var img := Image.load_from_file(os_path)
+		if img and not img.is_empty():
+			return ImageTexture.create_from_image(img)
+	return null
 
 static func _ensure_materials() -> void:
 	if mat_tire_rubber != null:
 		return
 
-	# Резина шины с глубокой шероховатостью
+	# Резина шины с глубокой шероховатостью и текстурой протектора
 	mat_tire_rubber = StandardMaterial3D.new()
-	mat_tire_rubber.albedo_color = Color(0.11, 0.11, 0.12)
+	mat_tire_rubber.albedo_color = Color(0.12, 0.12, 0.13)
 	mat_tire_rubber.roughness = 0.95
+	var tex_tire := _load_tex("tire_tread.png")
+	if tex_tire:
+		mat_tire_rubber.albedo_texture = tex_tire
+		mat_tire_rubber.uv1_scale = Vector3(2, 2, 2)
 
 	# Стальной диск колеса
 	mat_rim_metal = StandardMaterial3D.new()
-	mat_rim_metal.albedo_color = Color(0.35, 0.32, 0.30)
+	mat_rim_metal.albedo_color = Color(0.38, 0.35, 0.32)
 	mat_rim_metal.metallic = 0.75
 	mat_rim_metal.roughness = 0.55
 
@@ -67,82 +86,113 @@ static func _ensure_materials() -> void:
 	mat_rim_chrome.metallic = 0.95
 	mat_rim_chrome.roughness = 0.20
 
-	# Бочки: ржавая, аварийная и горючая
+	# Бочки: ржавая, аварийная и горючая с текстурами коррозии и трафаретов
 	mat_drum_rusty = StandardMaterial3D.new()
-	mat_drum_rusty.albedo_color = Color(0.42, 0.23, 0.14)
+	mat_drum_rusty.albedo_color = Color(0.48, 0.28, 0.18)
 	mat_drum_rusty.metallic = 0.40
 	mat_drum_rusty.roughness = 0.85
+	var tex_rust := _load_tex("corrugated_rust.png")
+	if tex_rust:
+		mat_drum_rusty.albedo_texture = tex_rust
 
 	mat_drum_hazard = StandardMaterial3D.new()
-	mat_drum_hazard.albedo_color = Color(0.88, 0.72, 0.12)
+	mat_drum_hazard.albedo_color = Color(0.95, 0.85, 0.20)
 	mat_drum_hazard.metallic = 0.30
 	mat_drum_hazard.roughness = 0.65
+	var tex_hazard := _load_tex("barrel_hazard.png")
+	if tex_hazard:
+		mat_drum_hazard.albedo_texture = tex_hazard
 
 	mat_drum_red = StandardMaterial3D.new()
-	mat_drum_red.albedo_color = Color(0.78, 0.15, 0.10)
+	mat_drum_red.albedo_color = Color(0.85, 0.22, 0.15)
 	mat_drum_red.metallic = 0.35
 	mat_drum_red.roughness = 0.55
+	var tex_drum_red := _load_tex("barrel_red.png")
+	if tex_drum_red:
+		mat_drum_red.albedo_texture = tex_drum_red
 
 	mat_toxic_sludge = StandardMaterial3D.new()
-	mat_toxic_sludge.albedo_color = Color(0.18, 0.85, 0.25)
+	mat_toxic_sludge.albedo_color = Color(0.20, 0.92, 0.30)
 	mat_toxic_sludge.emission_enabled = true
-	mat_toxic_sludge.emission = Color(0.20, 0.95, 0.30)
-	mat_toxic_sludge.emission_energy_multiplier = 2.2
+	mat_toxic_sludge.emission = Color(0.22, 0.98, 0.35)
+	mat_toxic_sludge.emission_energy_multiplier = 2.4
 	mat_toxic_sludge.roughness = 0.10
+	var tex_toxic := _load_tex("toxic_sludge_ground.png")
+	if tex_toxic:
+		mat_toxic_sludge.albedo_texture = tex_toxic
 
-	# Пальма: кора, крона и кокосы
+	# Пальма: кора, крона и кокосы с фотореалистичными текстурами волокон
 	mat_palm_trunk = StandardMaterial3D.new()
-	mat_palm_trunk.albedo_color = Color(0.32, 0.24, 0.18)
+	mat_palm_trunk.albedo_color = Color(0.38, 0.28, 0.20)
 	mat_palm_trunk.roughness = 0.95
+	var tex_bark := _load_tex("palm_bark.png")
+	if tex_bark:
+		mat_palm_trunk.albedo_texture = tex_bark
+		mat_palm_trunk.uv1_scale = Vector3(1, 4, 1)
 
 	mat_palm_frond = StandardMaterial3D.new()
-	mat_palm_frond.albedo_color = Color(0.24, 0.48, 0.18)
-	mat_palm_frond.roughness = 0.70
+	mat_palm_frond.albedo_color = Color(0.28, 0.55, 0.20)
+	mat_palm_frond.roughness = 0.65
 	mat_palm_frond.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var tex_leaf := _load_tex("palm_leaf.png")
+	if tex_leaf:
+		mat_palm_frond.albedo_texture = tex_leaf
 
 	mat_coconut = StandardMaterial3D.new()
 	mat_coconut.albedo_color = Color(0.28, 0.20, 0.14)
 	mat_coconut.roughness = 0.85
 
-	# Оружейные материалы
+	# Оружейные материалы (вороненая сталь с микроцарапинами, ореховое дерево с кольцами)
 	mat_gun_blued_steel = StandardMaterial3D.new()
-	mat_gun_blued_steel.albedo_color = Color(0.16, 0.18, 0.20)
-	mat_gun_blued_steel.metallic = 0.90
-	mat_gun_blued_steel.roughness = 0.30
+	mat_gun_blued_steel.albedo_color = Color(0.20, 0.22, 0.26)
+	mat_gun_blued_steel.metallic = 0.92
+	mat_gun_blued_steel.roughness = 0.28
+	var tex_steel := _load_tex("blued_metal.png")
+	if tex_steel:
+		mat_gun_blued_steel.albedo_texture = tex_steel
 
 	mat_gun_walnut = StandardMaterial3D.new()
-	mat_gun_walnut.albedo_color = Color(0.38, 0.22, 0.12)
-	mat_gun_walnut.roughness = 0.65
+	mat_gun_walnut.albedo_color = Color(0.42, 0.25, 0.14)
+	mat_gun_walnut.roughness = 0.60
+	var tex_wood := _load_tex("walnut_wood.png")
+	if tex_wood:
+		mat_gun_walnut.albedo_texture = tex_wood
 
 	mat_brass_shell = StandardMaterial3D.new()
-	mat_brass_shell.albedo_color = Color(0.92, 0.78, 0.32)
+	mat_brass_shell.albedo_color = Color(0.95, 0.80, 0.35)
 	mat_brass_shell.metallic = 0.95
-	mat_brass_shell.roughness = 0.25
+	mat_brass_shell.roughness = 0.20
 
 	# Кости и кибернетика
 	mat_bone_ivory = StandardMaterial3D.new()
-	mat_bone_ivory.albedo_color = Color(0.88, 0.84, 0.76)
+	mat_bone_ivory.albedo_color = Color(0.92, 0.88, 0.80)
 	mat_bone_ivory.roughness = 0.75
+	var tex_bone := _load_tex("skull_bone.png")
+	if tex_bone:
+		mat_bone_ivory.albedo_texture = tex_bone
 
 	mat_cyber_chrome = StandardMaterial3D.new()
-	mat_cyber_chrome.albedo_color = Color(0.75, 0.78, 0.82)
+	mat_cyber_chrome.albedo_color = Color(0.80, 0.82, 0.88)
 	mat_cyber_chrome.metallic = 0.95
-	mat_cyber_chrome.roughness = 0.25
+	mat_cyber_chrome.roughness = 0.22
+	var tex_circuit := _load_tex("cyber_circuit.png")
+	if tex_circuit:
+		mat_cyber_chrome.albedo_texture = tex_circuit
 
 	mat_cyber_glow_red = StandardMaterial3D.new()
 	mat_cyber_glow_red.albedo_color = Color(1.0, 0.05, 0.05)
 	mat_cyber_glow_red.emission_enabled = true
 	mat_cyber_glow_red.emission = Color(1.0, 0.10, 0.08)
-	mat_cyber_glow_red.emission_energy_multiplier = 3.5
+	mat_cyber_glow_red.emission_energy_multiplier = 4.0
 
 	mat_cyber_glow_cyan = StandardMaterial3D.new()
-	mat_cyber_glow_cyan.albedo_color = Color(0.05, 0.75, 1.0)
+	mat_cyber_glow_cyan.albedo_color = Color(0.05, 0.80, 1.0)
 	mat_cyber_glow_cyan.emission_enabled = true
-	mat_cyber_glow_cyan.emission = Color(0.10, 0.85, 1.0)
-	mat_cyber_glow_cyan.emission_energy_multiplier = 2.8
+	mat_cyber_glow_cyan.emission = Color(0.10, 0.90, 1.0)
+	mat_cyber_glow_cyan.emission_energy_multiplier = 3.2
 
 	mat_wire_copper = StandardMaterial3D.new()
-	mat_wire_copper.albedo_color = Color(0.85, 0.45, 0.22)
+	mat_wire_copper.albedo_color = Color(0.88, 0.48, 0.24)
 	mat_wire_copper.metallic = 0.85
 	mat_wire_copper.roughness = 0.35
 
@@ -150,52 +200,77 @@ static func _ensure_materials() -> void:
 	mat_wire_insulation.albedo_color = Color(0.12, 0.45, 0.80)
 	mat_wire_insulation.roughness = 0.50
 
-	# Кактус
+	# Кактус с текстурой ребристой кожи и ареол с колючками
 	mat_cactus_stem = StandardMaterial3D.new()
-	mat_cactus_stem.albedo_color = Color(0.20, 0.42, 0.18)
-	mat_cactus_stem.roughness = 0.85
+	mat_cactus_stem.albedo_color = Color(0.24, 0.48, 0.20)
+	mat_cactus_stem.roughness = 0.80
+	var tex_cactus := _load_tex("cactus_skin.png")
+	if tex_cactus:
+		mat_cactus_stem.albedo_texture = tex_cactus
+		mat_cactus_stem.uv1_scale = Vector3(2, 4, 2)
 
 	mat_cactus_rib = StandardMaterial3D.new()
-	mat_cactus_rib.albedo_color = Color(0.26, 0.50, 0.22)
-	mat_cactus_rib.roughness = 0.80
+	mat_cactus_rib.albedo_color = Color(0.28, 0.55, 0.24)
+	mat_cactus_rib.roughness = 0.75
 
 	mat_cactus_flower = StandardMaterial3D.new()
-	mat_cactus_flower.albedo_color = Color(0.95, 0.78, 0.15)
+	mat_cactus_flower.albedo_color = Color(0.96, 0.80, 0.18)
 	mat_cactus_flower.roughness = 0.60
 
-	# Фортификация и укрытия
+	# Фортификация и укрытия (грубая текстура мешковины и рифленого ржавого листа)
 	mat_sandbag_burlap = StandardMaterial3D.new()
-	mat_sandbag_burlap.albedo_color = Color(0.60, 0.52, 0.40)
+	mat_sandbag_burlap.albedo_color = Color(0.65, 0.56, 0.44)
 	mat_sandbag_burlap.roughness = 0.95
+	var tex_burlap := _load_tex("sandbag_burlap.png")
+	if tex_burlap:
+		mat_sandbag_burlap.albedo_texture = tex_burlap
+		mat_sandbag_burlap.uv1_scale = Vector3(2, 2, 2)
 
 	mat_corrugated_iron = StandardMaterial3D.new()
-	mat_corrugated_iron.albedo_color = Color(0.48, 0.42, 0.38)
+	mat_corrugated_iron.albedo_color = Color(0.55, 0.48, 0.42)
 	mat_corrugated_iron.metallic = 0.65
 	mat_corrugated_iron.roughness = 0.70
+	if tex_rust:
+		mat_corrugated_iron.albedo_texture = tex_rust
+		mat_corrugated_iron.uv1_scale = Vector3(2, 2, 2)
 
 	mat_rebar_steel = StandardMaterial3D.new()
-	mat_rebar_steel.albedo_color = Color(0.30, 0.26, 0.24)
+	mat_rebar_steel.albedo_color = Color(0.32, 0.28, 0.26)
 	mat_rebar_steel.metallic = 0.80
 	mat_rebar_steel.roughness = 0.60
 
 	mat_barbed_wire = StandardMaterial3D.new()
-	mat_barbed_wire.albedo_color = Color(0.22, 0.22, 0.24)
+	mat_barbed_wire.albedo_color = Color(0.24, 0.24, 0.26)
 	mat_barbed_wire.metallic = 0.85
 	mat_barbed_wire.roughness = 0.45
 
 	# Припасы и электроника
 	mat_ammo_box_green = StandardMaterial3D.new()
-	mat_ammo_box_green.albedo_color = Color(0.25, 0.34, 0.20)
+	mat_ammo_box_green.albedo_color = Color(0.26, 0.36, 0.22)
 	mat_ammo_box_green.metallic = 0.35
 	mat_ammo_box_green.roughness = 0.65
 
 	mat_pcb_board = StandardMaterial3D.new()
-	mat_pcb_board.albedo_color = Color(0.10, 0.35, 0.18)
+	mat_pcb_board.albedo_color = Color(0.12, 0.40, 0.20)
 	mat_pcb_board.roughness = 0.40
+	if tex_circuit:
+		mat_pcb_board.albedo_texture = tex_circuit
 
 	mat_sign_hazard = StandardMaterial3D.new()
-	mat_sign_hazard.albedo_color = Color(0.90, 0.70, 0.15)
+	mat_sign_hazard.albedo_color = Color(0.96, 0.75, 0.18)
 	mat_sign_hazard.roughness = 0.55
+	var tex_sign := _load_tex("warning_sign_cyborg.png")
+	if tex_sign:
+		mat_sign_hazard.albedo_texture = tex_sign
+
+	# Красный песчаник каньона
+	mat_canyon_rock = StandardMaterial3D.new()
+	mat_canyon_rock.albedo_color = Color(0.72, 0.38, 0.25)
+	mat_canyon_rock.roughness = 0.92
+	var tex_canyon := _load_tex("red_canyon_rock.png")
+	if tex_canyon:
+		mat_canyon_rock.albedo_texture = tex_canyon
+		mat_canyon_rock.uv1_scale = Vector3(1.5, 1.5, 1.5)
 
 # -------------------------------------------------------------------------
 # Базовые хелперы геометрии
@@ -692,5 +767,107 @@ static func create_tech_salvage_pile() -> Node3D:
 	# Оторванная механическая рука киборга
 	_cyl(root, 0.45, 0.04, 0.05, mat_cyber_chrome, Vector3(-0.05, 0.04, -0.28), Vector3(0, deg_to_rad(45.0), PI * 0.5), 6)
 	_box(root, Vector3(0.08, 0.04, 0.10), mat_cyber_chrome, Vector3(0.12, 0.04, -0.42)) # манипулятор-клешня
+
+	return root
+
+# =========================================================================
+# 11. МОНУМЕНТАЛЬНАЯ АРКА КРАСНОГО КАНЬОНА (RED CANYON ROCK ARCH)
+# =========================================================================
+static func create_canyon_arch(span_width: float = 16.0, arch_height: float = 9.5) -> Node3D:
+	_ensure_materials()
+	var root := Node3D.new()
+	root.name = "PropCanyonArch"
+
+	var half_w := span_width * 0.5
+	# Левый монолитный пилон со ступенчатыми уступами
+	for i in range(4):
+		var y_pos := float(i) * 2.2 + 1.1
+		var x_pos := -half_w - float(i) * 0.4
+		var sz := Vector3(4.8 - float(i) * 0.4, 2.4, 5.2 - float(i) * 0.3)
+		var rot := Vector3(0.04 * float(i), 0.08 * float(i), 0.06)
+		_box(root, sz, mat_canyon_rock, Vector3(x_pos, y_pos, 0.0), rot)
+
+	# Правый монолитный пилон со ступенчатыми уступами
+	for i in range(4):
+		var y_pos := float(i) * 2.2 + 1.1
+		var x_pos := half_w + float(i) * 0.4
+		var sz := Vector3(4.8 - float(i) * 0.4, 2.4, 5.2 - float(i) * 0.3)
+		var rot := Vector3(-0.03 * float(i), -0.07 * float(i), -0.06)
+		_box(root, sz, mat_canyon_rock, Vector3(x_pos, y_pos, 0.0), rot)
+
+	# Верхний свод арки, нависающий над трактом
+	var segs := 6
+	for s in range(segs):
+		var t := float(s) / float(segs - 1)
+		var t_norm := (t - 0.5) * 2.0 # -1.0 to 1.0
+		var x_s := t_norm * (half_w * 0.85)
+		var y_s := arch_height - (t_norm * t_norm) * 1.6
+		var rot_z := -t_norm * 0.28
+		_box(root, Vector3(span_width / float(segs) * 1.25, 2.8, 4.4), mat_canyon_rock, Vector3(x_s, y_s, 0.0), Vector3(0.02, 0.0, rot_z))
+
+	# Карнизы и отвалившиеся песчаниковые валуны у подножья
+	_box(root, Vector3(2.4, 1.4, 2.2), mat_canyon_rock, Vector3(-half_w + 1.8, 0.7, 1.4), Vector3(0.1, 0.3, 0.05))
+	_box(root, Vector3(2.2, 1.2, 2.6), mat_canyon_rock, Vector3(half_w - 1.8, 0.6, -1.2), Vector3(-0.08, -0.25, -0.04))
+
+	return root
+
+# =========================================================================
+# 12. КИСЛОТНО-ТОКСИЧЕСКИЙ БАССЕЙН С ПУЗЫРЯМИ (TOXIC SLUDGE POOL)
+# =========================================================================
+static func create_toxic_pool(radius: float = 3.6) -> Node3D:
+	_ensure_materials()
+	var root := Node3D.new()
+	root.name = "PropToxicSludgePool"
+
+	# Зеркало кипящей ядовитой жижи
+	_cyl(root, 0.12, radius, radius * 1.08, mat_toxic_sludge, Vector3(0.0, 0.06, 0.0), Vector3.ZERO, 16)
+
+	# Светящееся радиоактивное освещение
+	var glow := OmniLight3D.new()
+	glow.light_color = Color(0.25, 1.0, 0.4)
+	glow.light_energy = 2.5
+	glow.omni_range = radius * 2.6
+	glow.position = Vector3(0.0, 0.8, 0.0)
+	root.add_child(glow)
+
+	# Всплывшие радиоактивные пузыри
+	_sph(root, 0.35, mat_toxic_sludge, Vector3(-0.4 * radius, 0.15, 0.2 * radius))
+	_sph(root, 0.22, mat_toxic_sludge, Vector3(0.3 * radius, 0.12, -0.3 * radius))
+	_sph(root, 0.28, mat_toxic_sludge, Vector3(0.1 * radius, 0.14, 0.5 * radius))
+
+	# Обугленные кислотой камни и обломки по кромке лужи
+	var rock_count := 8
+	for i in range(rock_count):
+		var ang := float(i) / float(rock_count) * TAU + 0.15
+		var r_dist := radius * (0.95 + 0.25 * sin(float(i) * 2.3))
+		var r_pos := Vector3(cos(ang) * r_dist, 0.25, sin(ang) * r_dist)
+		var r_sz := Vector3(0.9, 0.5, 0.8)
+		_box(root, r_sz, mat_drum_rusty, r_pos, Vector3(0.1, ang, 0.15))
+
+	# Утопленная полузатопленная бочка с радиацией
+	_cyl(root, 0.88, 0.30, 0.30, mat_drum_hazard, Vector3(-0.35 * radius, 0.25, -0.2 * radius), Vector3(deg_to_rad(35.0), deg_to_rad(20.0), 0.0), 12)
+
+	return root
+
+# =========================================================================
+# 13. ПРЕДУПРЕЖДАЮЩИЙ ЗНАК КИБОРГ-УГРОЗЫ НА СТОЙКЕ (CYBORG WARNING SIGN)
+# =========================================================================
+static func create_hazard_warning_sign_mesh(variant: int = 0) -> Node3D:
+	_ensure_materials()
+	var root := Node3D.new()
+	root.name = "PropWarningSign"
+
+	# Стальная несущая стойка из швеллера
+	_cyl(root, 2.6, 0.045, 0.055, mat_rebar_steel, Vector3(0.0, 1.3, 0.0), Vector3.ZERO, 8)
+
+	# Ромбовидный / прямоугольный предупреждающий щит
+	_box(root, Vector3(0.85, 0.85, 0.04), mat_sign_hazard, Vector3(0.0, 2.1, 0.05), Vector3(0.0, 0.0, deg_to_rad(45.0) if variant == 0 else 0.0))
+
+	# Насаженный кибер-череп на острие стойки
+	if variant >= 1:
+		var skull := create_skull_cyborg()
+		skull.position = Vector3(0.0, 2.8, 0.0)
+		skull.scale = Vector3(0.7, 0.7, 0.7)
+		root.add_child(skull)
 
 	return root
