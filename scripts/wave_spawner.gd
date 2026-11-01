@@ -27,6 +27,8 @@ var is_in_break           : bool  = false
 var is_camp_paused        : bool  = false
 var break_timer           : float = 0.0
 var scout_timer           : float = 0.0
+var march_encounter_timer : float = 2.5 # Таймер постоянных дорожных столкновений на марше
+var straggler_cleanup_timer: float = 0.0 # Таймер очистки отставших далеко позади врагов
 var hud_update_timer      : float = 0.0
 var last_countdown_sec    : int   = -1
 var enemies_alive         : int   = 0
@@ -56,9 +58,10 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_find_and_connect_hud()
 
-	# Начальная передышка перед первой активностью в пустоши
-	if not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
-		_start_break(assault_break)
+	# Готовность к бою сразу со старта пути (без долгой искусственной задержки)
+	is_in_break = false
+	threat_level = 15.0
+	march_encounter_timer = 2.5
 
 func _setup_container() -> void:
 	var existing: Node = get_node_or_null("EnemiesContainer")
@@ -115,25 +118,33 @@ func _process(delta: float) -> void:
 			_complete_assault()
 		return
 
-	# 3. Режим исследования и движения каравана: накопление угрозы и прогрессия
+	# 3. Режим исследования и движения каравана: накопление угрозы и постоянные столкновения
 	var caravan := _get_caravan()
 	var dist_traveled: float = 0.0
+	var is_moving: bool = false
+	var is_boosted: bool = false
 	if caravan and is_instance_valid(caravan):
 		dist_traveled = absf(caravan.global_position.z)
+		is_moving = not caravan.get("is_destroyed") and not caravan.get("is_blocked")
+		is_boosted = caravan.get("is_boosted") == true
 
 	# Уровень сложности (Tier) растет каждые 360 метров вглубь пустыни
 	var new_tier: int = maxi(1, 1 + int(dist_traveled / 360.0))
 	difficulty_tier = new_tier
 
 	# Накопление шкалы Угрозы Роя
-	var growth_rate: float = 1.0 + float(difficulty_tier) * 0.25
-	# В Красном Каньоне и Токсичной Пустоши угроза нарастает быстрее
+	var growth_rate: float = 1.0 + float(difficulty_tier) * 0.35
+	# В Красном Каньоне и Выжженной Пустоши угроза нарастает быстрее
 	if dist_traveled >= 550.0 and dist_traveled <= 1250.0:
-		growth_rate *= 1.30 # Красный каньон
+		growth_rate *= 1.35 # Красный каньон
 	elif dist_traveled > 1250.0 and dist_traveled <= 1850.0:
-		growth_rate *= 1.60 # Токсичная кибер-пустошь
+		growth_rate *= 1.70 # Выжженная кибер-пустошь
 
-	threat_level = minf(100.0, threat_level + delta * growth_rate * 0.6)
+	# Скорость нарастания: активная при ходьбе, бешеная при ускорении осла
+	var threat_mult: float = 2.2 if is_moving else 0.45
+	if is_boosted:
+		threat_mult = 4.2
+	threat_level = minf(100.0, threat_level + delta * growth_rate * threat_mult)
 
 	# Периодическое обновление статуса на HUD
 	hud_update_timer += delta
@@ -141,14 +152,31 @@ func _process(delta: float) -> void:
 		hud_update_timer = 0.0
 		_notify_hud_threat()
 
-	# Одиночные разведчики во время затишья (Scouts)
+	# Очистка зомби, отставших далеко позади каравана (>75м), чтобы не висели в воздухе и не блокировали лимиты
+	straggler_cleanup_timer += delta
+	if straggler_cleanup_timer >= 2.0:
+		straggler_cleanup_timer = 0.0
+		_cleanup_stragglers(caravan)
+
+	# --- РЕГУЛЯРНЫЕ СТОЛКНОВЕНИЯ НА МАРШЕ (ROAD ENCOUNTERS) ---
+	# Пока караван идет, прямо впереди на дороге и барханах непрерывно спавнятся бродячие киборги!
+	if is_moving and enemies_alive < 12:
+		march_encounter_timer -= delta
+		if march_encounter_timer <= 0.0:
+			var next_interval: float = randf_range(5.0, 9.5)
+			if is_boosted:
+				next_interval = randf_range(3.0, 5.5)
+			march_encounter_timer = next_interval
+			_spawn_march_encounter(caravan, is_boosted)
+
+	# Одиночные разведчики во время затишья при медленном продвижении
 	scout_timer += delta
-	if scout_timer >= 20.0 and threat_level < 60.0 and enemies_alive < 3:
+	if scout_timer >= 12.0 and threat_level < 60.0 and enemies_alive < 4:
 		scout_timer = 0.0
 		_spawn_scout_ambush()
 
 	# Фланговая засада при накоплении 55% угрозы
-	if threat_level >= 55.0 and current_phase == ThreatPhase.CALM and enemies_alive < 2:
+	if threat_level >= 55.0 and current_phase == ThreatPhase.CALM and enemies_alive < 4:
 		_trigger_flank_ambush()
 
 	# Полномасштабный штурм каравана при 100% угрозе
@@ -177,13 +205,82 @@ func _start_break(duration: float) -> void:
 	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
 		sync_wave_countdown.rpc(sec)
 
-# Одиночный разведчик на барханах (Scout)
+# Выбор типа врага в зависимости от глубины и биома
+func _pick_enemy_for_tier() -> String:
+	var roll := randf()
+	match difficulty_tier:
+		1:
+			return "Runner" if roll < 0.60 else "Walker"
+		2:
+			if roll < 0.35: return "Crawler"
+			elif roll < 0.70: return "Runner"
+			else: return "Walker"
+		3:
+			if roll < 0.25: return "Spitter"
+			elif roll < 0.45: return "Brute"
+			elif roll < 0.75: return "Runner"
+			else: return "Crawler"
+		_:
+			if roll < 0.20: return "Screamer"
+			elif roll < 0.40: return "Exploder"
+			elif roll < 0.60: return "Brute"
+			elif roll < 0.80: return "Spitter"
+			else: return "Runner"
+
+# Регулярный спавн столкновений прямо ВПЕРЕДИ по курсу движения каравана
+func _spawn_march_encounter(caravan: Node3D, boosted: bool) -> void:
+	if not caravan or not is_instance_valid(caravan):
+		return
+	var c_pos := caravan.global_position
+	# Спавним ВПЕРЕДИ каравана по направлению движения (по -Z)
+	var spawn_dist_ahead: float = randf_range(42.0, 70.0) if boosted else randf_range(26.0, 46.0)
+	var pack_size: int = randi_range(2, 4)
+	if difficulty_tier >= 3:
+		pack_size = randi_range(3, 5)
+
+	var center_x := randf_range(-14.0, 14.0)
+	var center_z := c_pos.z - spawn_dist_ahead
+
+	for i in range(pack_size):
+		var offset_x := randf_range(-4.0, 4.0)
+		var offset_z := randf_range(-4.0, 4.0)
+		var ex := center_x + offset_x
+		var ez := center_z + offset_z
+		var ey := DesertGenerator.get_height(ex, ez) + 0.8
+
+		var z_type := _pick_enemy_for_tier()
+		_spawn_single_enemy(z_type, Vector3(ex, ey, ez))
+
+# Очистка зомби, отставших далеко позади каравана (караван ушел вперед по -Z)
+func _cleanup_stragglers(caravan: Node3D) -> void:
+	if not caravan or not is_instance_valid(caravan) or not enemies_container:
+		return
+	var c_z := caravan.global_position.z
+	var players := get_tree().get_nodes_in_group("player")
+
+	for child: Node in enemies_container.get_children():
+		if child is Node3D and is_instance_valid(child):
+			var ez := (child as Node3D).global_position.z
+			# Караван идет в сторону -Z. Если враг остался далеко позади (ez > c_z + 75.0)
+			if ez > c_z + 75.0:
+				var near_player := false
+				for p in players:
+					if p is Node3D and is_instance_valid(p):
+						if (child as Node3D).global_position.distance_to((p as Node3D).global_position) < 28.0:
+							near_player = true
+							break
+				if not near_player:
+					child.queue_free()
+					enemies_alive = maxi(0, enemies_alive - 1)
+
+# Одиночный разведчик на барханах (Scout) - появляется в поле видимости
 func _spawn_scout_ambush() -> void:
-	var z_type := "Runner" if randf() < 0.65 else "Walker"
+	var z_type := _pick_enemy_for_tier()
 	var caravan := _get_caravan()
 	var base_pos: Vector3 = caravan.global_position if (caravan and is_instance_valid(caravan)) else Vector3.ZERO
-	var side_x: float = (randf_range(18.0, 30.0)) * (1.0 if randf() < 0.5 else -1.0)
-	var spawn_z: float = base_pos.z + randf_range(-15.0, 15.0)
+	var side_x: float = (randf_range(16.0, 26.0)) * (1.0 if randf() < 0.5 else -1.0)
+	# Впереди каравана
+	var spawn_z: float = base_pos.z - randf_range(15.0, 35.0)
 	var spawn_y: float = DesertGenerator.get_height(base_pos.x + side_x, spawn_z) + 0.8
 	_spawn_single_enemy(z_type, Vector3(base_pos.x + side_x, spawn_y, spawn_z))
 

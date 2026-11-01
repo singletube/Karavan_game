@@ -292,8 +292,9 @@ func on_interact_completed(player: Node) -> void:
 	if is_cleared:
 		return
 	var obst_id: String = str(get_meta("obstacle_id", ""))
-	if NetworkManager != null and NetworkManager.has_method("request_clear_obstacle") and not obst_id.is_empty():
-		NetworkManager.request_clear_obstacle(obst_id, false)
+	var net_mgr = get_node_or_null("/root/NetworkManager")
+	if net_mgr != null and net_mgr.has_method("request_clear_obstacle") and not obst_id.is_empty():
+		net_mgr.request_clear_obstacle(obst_id, false)
 	else:
 		clear_local(false)
 
@@ -314,8 +315,9 @@ func detonate() -> void:
 	if is_cleared:
 		return
 	var obst_id: String = str(get_meta("obstacle_id", ""))
-	if NetworkManager != null and NetworkManager.has_method("request_clear_obstacle") and not obst_id.is_empty():
-		NetworkManager.request_clear_obstacle(obst_id, true)
+	var net_mgr = get_node_or_null("/root/NetworkManager")
+	if net_mgr != null and net_mgr.has_method("request_clear_obstacle") and not obst_id.is_empty():
+		net_mgr.request_clear_obstacle(obst_id, true)
 	else:
 		clear_local(true)
 
@@ -944,8 +946,9 @@ func on_interact_completed(player: Node) -> void:
 	if is_cleared:
 		return
 	var obst_id: String = str(get_meta("obstacle_id", ""))
-	if NetworkManager != null and NetworkManager.has_method("request_clear_obstacle") and not obst_id.is_empty():
-		NetworkManager.request_clear_obstacle(obst_id, false)
+	var net_mgr = get_node_or_null("/root/NetworkManager")
+	if net_mgr != null and net_mgr.has_method("request_clear_obstacle") and not obst_id.is_empty():
+		net_mgr.request_clear_obstacle(obst_id, false)
 	else:
 		clear_local(false)
 
@@ -966,8 +969,9 @@ func detonate() -> void:
 	if is_cleared:
 		return
 	var obst_id: String = str(get_meta("obstacle_id", ""))
-	if NetworkManager != null and NetworkManager.has_method("request_clear_obstacle") and not obst_id.is_empty():
-		NetworkManager.request_clear_obstacle(obst_id, true)
+	var net_mgr = get_node_or_null("/root/NetworkManager")
+	if net_mgr != null and net_mgr.has_method("request_clear_obstacle") and not obst_id.is_empty():
+		net_mgr.request_clear_obstacle(obst_id, true)
 	else:
 		clear_local(true)
 
@@ -1129,8 +1133,9 @@ func on_interact_completed(player: Node) -> void:
 	if is_cleared:
 		return
 	var obst_id: String = str(get_meta("obstacle_id", ""))
-	if NetworkManager != null and NetworkManager.has_method("request_clear_obstacle") and not obst_id.is_empty():
-		NetworkManager.request_clear_obstacle(obst_id, false)
+	var net_mgr = get_node_or_null("/root/NetworkManager")
+	if net_mgr != null and net_mgr.has_method("request_clear_obstacle") and not obst_id.is_empty():
+		net_mgr.request_clear_obstacle(obst_id, false)
 	else:
 		clear_local(false)
 
@@ -1151,8 +1156,9 @@ func detonate() -> void:
 	if is_cleared:
 		return
 	var obst_id: String = str(get_meta("obstacle_id", ""))
-	if NetworkManager != null and NetworkManager.has_method("request_clear_obstacle") and not obst_id.is_empty():
-		NetworkManager.request_clear_obstacle(obst_id, true)
+	var net_mgr = get_node_or_null("/root/NetworkManager")
+	if net_mgr != null and net_mgr.has_method("request_clear_obstacle") and not obst_id.is_empty():
+		net_mgr.request_clear_obstacle(obst_id, true)
 	else:
 		clear_local(true)
 

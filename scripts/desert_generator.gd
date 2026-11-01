@@ -250,7 +250,9 @@ func _init_shared_resources() -> void:
 	shared_floor_shape.size = Vector3(chunk_size, 0.4, chunk_size)
 
 	# Получение шейдера песка от WorldSetup или создание резервного
-	var world_node := get_tree().current_scene
+	var world_node : Node = null
+	if get_tree():
+		world_node = get_tree().current_scene
 	if world_node and world_node.has_method("get_sand_material"):
 		sand_material = world_node.get_sand_material()
 
@@ -286,17 +288,15 @@ func _init_shared_resources() -> void:
 		mat_canyon_terrain.uv1_scale = Vector3(0.08, 0.08, 0.08)
 		mat_canyon_terrain.uv1_triplanar = true
 
-	# PBR-материал Токсичной Кибер-Пустоши (Toxic Cyber-Wasteland)
+	# PBR-материал Выжженной Кибер-Пустоши (Scorched Wasteland - черная/пепельная растрескавшаяся земля без зелени)
 	mat_toxic_terrain = StandardMaterial3D.new()
-	mat_toxic_terrain.albedo_color = Color(0.25, 0.35, 0.22)
-	mat_toxic_terrain.roughness = 0.60
-	mat_toxic_terrain.emission_enabled = true
-	mat_toxic_terrain.emission = Color(0.12, 0.45, 0.16)
-	mat_toxic_terrain.emission_energy_multiplier = 0.7
-	var tex_toxic := PropModels3D._load_tex("toxic_sludge_ground.png")
-	if tex_toxic:
-		mat_toxic_terrain.albedo_texture = tex_toxic
-		mat_toxic_terrain.uv1_scale = Vector3(0.06, 0.06, 0.06)
+	mat_toxic_terrain.albedo_color = Color(0.85, 0.82, 0.80)
+	mat_toxic_terrain.roughness = 0.88
+	mat_toxic_terrain.emission_enabled = false
+	var tex_scorched := PropModels3D._load_tex("scorched_earth.png")
+	if tex_scorched:
+		mat_toxic_terrain.albedo_texture = tex_scorched
+		mat_toxic_terrain.uv1_scale = Vector3(0.08, 0.08, 0.08)
 		mat_toxic_terrain.uv1_triplanar = true
 
 # =========================================================================
@@ -1021,12 +1021,14 @@ func _setup_poi_loot_crate(poi_node: Node, coord: Vector2i, p_type: String = "")
 
 	# Стражи подземелий и развалин (спавнятся на сервере/одиночно, если тайник еще не разграблен)
 	if not is_looted and p_type != "" and p_type != "oasis":
-		var ws = get_tree().get_first_node_in_group("wave_spawner")
-		if ws and ws.has_method("spawn_dungeon_guardians"):
-			var world_pos := (poi_node as Node3D).global_position if (poi_node is Node3D and poi_node.is_inside_tree()) else Vector3.ZERO
-			if world_pos == Vector3.ZERO and poi_node is Node3D:
-				world_pos = poi_node.position
-			ws.spawn_dungeon_guardians(poi_node, p_type, world_pos)
+		var tree := get_tree()
+		if tree:
+			var ws = tree.get_first_node_in_group("wave_spawner")
+			if ws and ws.has_method("spawn_dungeon_guardians"):
+				var world_pos := (poi_node as Node3D).global_position if (poi_node is Node3D and poi_node.is_inside_tree()) else Vector3.ZERO
+				if world_pos == Vector3.ZERO and poi_node is Node3D:
+					world_pos = poi_node.position
+				ws.spawn_dungeon_guardians(poi_node, p_type, world_pos)
 
 func _create_bush(parent: Node3D, pos: Vector3, s: float, rot_y: float) -> void:
 	var model := DesertScenery3D.create_desert_bush_3d()

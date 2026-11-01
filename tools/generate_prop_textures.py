@@ -626,6 +626,180 @@ def generate_adobe_brick():
     img.save(path)
     print("Saved:", path)
 
+# -------------------------------------------------------------
+# 20. SCORCHED WASTELAND EARTH (512x512) - No green!
+# -------------------------------------------------------------
+def generate_scorched_earth():
+    img = Image.new("RGBA", (512, 512), (48, 44, 40, 255))
+    pixels = img.load()
+    for y in range(512):
+        for x in range(512):
+            ash_n = fbm(x * 0.03, y * 0.03, 4, seed=801)
+            soot_n = fbm(x * 0.08, y * 0.08, 3, seed=802)
+            speck = pseudo_noise(x, y, 803)
+
+            # Deep heat fracture crack network
+            c1 = math.sin(x * 0.045 + fbm(x * 0.02, y * 0.02, 3, seed=804) * 6.0)
+            c2 = math.cos(y * 0.045 + fbm(y * 0.02, x * 0.02, 3, seed=805) * 6.0)
+            crack = abs(c1 * c2)
+
+            # Charred basalt / charcoal / ash base
+            base = 50.0 + (ash_n - 0.5) * 32.0 + (soot_n - 0.5) * 16.0
+            r = clamp(base * 1.08)
+            g = clamp(base * 0.95)
+            b = clamp(base * 0.88)
+
+            # Deep scorched fissure crack
+            if crack < 0.09:
+                edge_factor = crack / 0.09
+                r = clamp(20 + 25 * edge_factor)
+                g = clamp(18 + 22 * edge_factor)
+                b = clamp(16 + 20 * edge_factor)
+            elif crack < 0.14:
+                # Crack edge soot/scorch
+                r = clamp(r * 0.75)
+                g = clamp(g * 0.75)
+                b = clamp(b * 0.75)
+
+            # Ash flakes and soot cinders
+            if speck > 0.95:
+                r, g, b = 88, 85, 82 # Grey ash dusting
+            elif speck < 0.04:
+                r, g, b = 24, 22, 20 # Carbon chunk
+
+            pixels[x, y] = (r, g, b, 255)
+
+    path = os.path.join(OUTPUT_DIR, "scorched_earth.png")
+    img.save(path)
+    print("Saved:", path)
+
+# -------------------------------------------------------------
+# 21. DONKEY WOOLLY FUR (512x512)
+# -------------------------------------------------------------
+def generate_donkey_fur():
+    img = Image.new("RGBA", (512, 512), (125, 118, 110, 255))
+    pixels = img.load()
+    for y in range(512):
+        for x in range(512):
+            wool_n = fbm(x * 0.035, y * 0.06, 4, seed=901)
+            hair_strand = math.sin(x * 0.6 + pseudo_noise(x, y, 902) * 2.5) * 9.0
+            speck = pseudo_noise(x, y, 903)
+
+            base = 124.0 + (wool_n - 0.5) * 36.0 + hair_strand
+            r = clamp(base * 1.05)
+            g = clamp(base * 0.97)
+            b = clamp(base * 0.90)
+
+            # Soft lighter woolly tufts
+            if speck > 0.93:
+                r = clamp(r + 18)
+                g = clamp(g + 16)
+                b = clamp(b + 14)
+            elif speck < 0.05:
+                # Darker hair root
+                r = clamp(r - 16)
+                g = clamp(g - 16)
+                b = clamp(b - 16)
+
+            pixels[x, y] = (r, g, b, 255)
+
+    path = os.path.join(OUTPUT_DIR, "donkey_fur.png")
+    img.save(path)
+    print("Saved:", path)
+
+# -------------------------------------------------------------
+# 22. CARAVAN WOOD PLANKS (512x512)
+# -------------------------------------------------------------
+def generate_caravan_wood():
+    img = Image.new("RGBA", (512, 512), (135, 92, 55, 255))
+    pixels = img.load()
+    for y in range(512):
+        plank_idx = y // 64
+        in_plank_y = y % 64
+        for x in range(512):
+            grain_flow = fbm(x * 0.015, (y + plank_idx * 40) * 0.008, 3, seed=910 + plank_idx)
+            wood_grain = math.sin(x * 0.12 + grain_flow * 14.0) * 20.0
+            base = 130.0 + (grain_flow - 0.5) * 28.0 + wood_grain
+
+            r = clamp(base * 1.16)
+            g = clamp(base * 0.82)
+            b = clamp(base * 0.50)
+
+            # Plank gap and beveled edge shadow
+            if in_plank_y in [0, 1, 62, 63]:
+                r = clamp(r * 0.50)
+                g = clamp(g * 0.45)
+                b = clamp(b * 0.38)
+
+            # Iron carriage bolt head near plank ends
+            if in_plank_y in range(28, 36) and (x in range(36, 44) or x in range(468, 476)):
+                dist = math.hypot(x - (40 if x < 256 else 472), in_plank_y - 32)
+                if dist < 4.0:
+                    r, g, b = 45, 45, 48 # Iron bolt
+
+            pixels[x, y] = (r, g, b, 255)
+
+    path = os.path.join(OUTPUT_DIR, "caravan_wood_planks.png")
+    img.save(path)
+    print("Saved:", path)
+
+# -------------------------------------------------------------
+# 23. CANOPY CANVAS TARP (512x512)
+# -------------------------------------------------------------
+def generate_canopy_canvas():
+    img = Image.new("RGBA", (512, 512), (210, 195, 168, 255))
+    pixels = img.load()
+    for y in range(512):
+        for x in range(512):
+            tarp_n = fbm(x * 0.03, y * 0.03, 4, seed=921)
+            weave_x = math.sin(x * 0.75) * 7.0
+            weave_y = math.sin(y * 0.75) * 7.0
+            speck = pseudo_noise(x, y, 922)
+
+            base = 205.0 + (tarp_n - 0.5) * 26.0 + (weave_x + weave_y) * 0.5
+            r = clamp(base * 1.04)
+            g = clamp(base * 0.96)
+            b = clamp(base * 0.84)
+
+            # Desert dust staining
+            if speck > 0.94:
+                r = clamp(r * 1.05)
+                g = clamp(g * 0.98)
+                b = clamp(b * 0.88)
+
+            pixels[x, y] = (r, g, b, 255)
+
+    path = os.path.join(OUTPUT_DIR, "canopy_canvas.png")
+    img.save(path)
+    print("Saved:", path)
+
+# -------------------------------------------------------------
+# 24. HARNESS LEATHER (512x512)
+# -------------------------------------------------------------
+def generate_harness_leather():
+    img = Image.new("RGBA", (512, 512), (105, 62, 35, 255))
+    pixels = img.load()
+    for y in range(512):
+        for x in range(512):
+            pebble = fbm(x * 0.12, y * 0.12, 3, seed=931)
+            crease = math.sin(x * 0.06 + y * 0.04 + pebble * 6.0) * 12.0
+            speck = pseudo_noise(x, y, 932)
+
+            base = 100.0 + (pebble - 0.5) * 24.0 + crease
+            r = clamp(base * 1.15)
+            g = clamp(base * 0.72)
+            b = clamp(base * 0.44)
+
+            # Saddle stitch dotted line along borders
+            if (y in range(14, 18) or y in range(494, 498)) and (x // 8) % 2 == 0:
+                r, g, b = 215, 195, 140 # Heavy wax thread
+
+            pixels[x, y] = (r, g, b, 255)
+
+    path = os.path.join(OUTPUT_DIR, "harness_leather.png")
+    img.save(path)
+    print("Saved:", path)
+
 if __name__ == "__main__":
     print("Generating comprehensive PBR texture library for apocalypse models...")
     generate_tire_tread()
@@ -647,4 +821,9 @@ if __name__ == "__main__":
     generate_ancient_temple_stone()
     generate_plane_rivets()
     generate_adobe_brick()
+    generate_scorched_earth()
+    generate_donkey_fur()
+    generate_caravan_wood()
+    generate_canopy_canvas()
+    generate_harness_leather()
     print("All textures generated successfully!")

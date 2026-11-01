@@ -41,47 +41,95 @@ func _ready() -> void:
 	_build_donkey()
 
 func _init_materials() -> void:
+	var tex_wood := PropModels3D._load_tex("caravan_wood_planks.png")
+	var tex_fur := PropModels3D._load_tex("donkey_fur.png")
+	var tex_canvas := PropModels3D._load_tex("canopy_canvas.png")
+	var tex_leather := PropModels3D._load_tex("harness_leather.png")
+	var tex_burlap := PropModels3D._load_tex("sandbag_burlap.png")
+	var tex_iron := PropModels3D._load_tex("blued_metal.png")
+	var tex_rust := PropModels3D._load_tex("corrugated_rust.png")
+
 	mat_wood_dark = StandardMaterial3D.new()
-	mat_wood_dark.albedo_color = Color(0.42, 0.28, 0.16, 1.0)
+	mat_wood_dark.albedo_color = Color(0.70, 0.50, 0.35, 1.0)
 	mat_wood_dark.roughness = 0.85
+	if tex_wood:
+		mat_wood_dark.albedo_texture = tex_wood
+		mat_wood_dark.uv1_scale = Vector3(0.5, 0.5, 0.5)
+		mat_wood_dark.uv1_triplanar = true
 
 	mat_wood_light = StandardMaterial3D.new()
-	mat_wood_light.albedo_color = Color(0.62, 0.44, 0.28, 1.0)
+	mat_wood_light.albedo_color = Color(1.0, 0.85, 0.70, 1.0)
 	mat_wood_light.roughness = 0.8
+	if tex_wood:
+		mat_wood_light.albedo_texture = tex_wood
+		mat_wood_light.uv1_scale = Vector3(0.6, 0.6, 0.6)
+		mat_wood_light.uv1_triplanar = true
 
 	mat_iron = StandardMaterial3D.new()
-	mat_iron.albedo_color = Color(0.22, 0.22, 0.24, 1.0)
-	mat_iron.metallic = 0.7
-	mat_iron.roughness = 0.4
+	mat_iron.albedo_color = Color(0.6, 0.6, 0.65, 1.0)
+	mat_iron.metallic = 0.85
+	mat_iron.roughness = 0.35
+	if tex_iron:
+		mat_iron.albedo_texture = tex_iron
+		mat_iron.uv1_scale = Vector3(1.2, 1.2, 1.2)
+		mat_iron.uv1_triplanar = true
 
 	mat_cloth = StandardMaterial3D.new()
-	mat_cloth.albedo_color = Color(0.86, 0.80, 0.68, 1.0)
-	mat_cloth.roughness = 0.95
+	mat_cloth.albedo_color = Color(0.95, 0.92, 0.86, 1.0)
+	mat_cloth.roughness = 0.92
+	if tex_canvas:
+		mat_cloth.albedo_texture = tex_canvas
+		mat_cloth.uv1_scale = Vector3(0.8, 0.8, 0.8)
+		mat_cloth.uv1_triplanar = true
 
 	mat_cargo_crate = StandardMaterial3D.new()
-	mat_cargo_crate.albedo_color = Color(0.55, 0.38, 0.22, 1.0)
+	mat_cargo_crate.albedo_color = Color(0.90, 0.75, 0.58, 1.0)
 	mat_cargo_crate.roughness = 0.75
+	if tex_wood:
+		mat_cargo_crate.albedo_texture = tex_wood
+		mat_cargo_crate.uv1_scale = Vector3(0.7, 0.7, 0.7)
+		mat_cargo_crate.uv1_triplanar = true
 
 	mat_cargo_sack = StandardMaterial3D.new()
-	mat_cargo_sack.albedo_color = Color(0.72, 0.64, 0.48, 1.0)
-	mat_cargo_sack.roughness = 0.9
+	mat_cargo_sack.albedo_color = Color(0.95, 0.88, 0.76, 1.0)
+	mat_cargo_sack.roughness = 0.92
+	if tex_burlap:
+		mat_cargo_sack.albedo_texture = tex_burlap
+		mat_cargo_sack.uv1_scale = Vector3(1.4, 1.4, 1.4)
+		mat_cargo_sack.uv1_triplanar = true
 
-	# Осёл
+	# Осёл - детальная шерсть и сбруя
 	mat_donkey_fur = StandardMaterial3D.new()
-	mat_donkey_fur.albedo_color = Color(0.48, 0.45, 0.42, 1.0)
-	mat_donkey_fur.roughness = 0.9
+	mat_donkey_fur.albedo_color = Color(0.92, 0.88, 0.84, 1.0)
+	mat_donkey_fur.roughness = 0.88
+	if tex_fur:
+		mat_donkey_fur.albedo_texture = tex_fur
+		mat_donkey_fur.uv1_scale = Vector3(0.9, 0.9, 0.9)
+		mat_donkey_fur.uv1_triplanar = true
 
 	mat_donkey_muzzle = StandardMaterial3D.new()
-	mat_donkey_muzzle.albedo_color = Color(0.80, 0.76, 0.70, 1.0)
-	mat_donkey_muzzle.roughness = 0.85
+	mat_donkey_muzzle.albedo_color = Color(1.15, 1.10, 1.05, 1.0)
+	mat_donkey_muzzle.roughness = 0.82
+	if tex_fur:
+		mat_donkey_muzzle.albedo_texture = tex_fur
+		mat_donkey_muzzle.uv1_scale = Vector3(1.2, 1.2, 1.2)
+		mat_donkey_muzzle.uv1_triplanar = true
 
 	mat_donkey_dark = StandardMaterial3D.new()
-	mat_donkey_dark.albedo_color = Color(0.18, 0.16, 0.15, 1.0)
-	mat_donkey_dark.roughness = 0.6
+	mat_donkey_dark.albedo_color = Color(0.40, 0.38, 0.36, 1.0)
+	mat_donkey_dark.roughness = 0.7
+	if tex_fur:
+		mat_donkey_dark.albedo_texture = tex_fur
+		mat_donkey_dark.uv1_scale = Vector3(1.0, 1.0, 1.0)
+		mat_donkey_dark.uv1_triplanar = true
 
 	mat_leather = StandardMaterial3D.new()
-	mat_leather.albedo_color = Color(0.32, 0.18, 0.10, 1.0)
-	mat_leather.roughness = 0.6
+	mat_leather.albedo_color = Color(0.90, 0.75, 0.65, 1.0)
+	mat_leather.roughness = 0.55
+	if tex_leather:
+		mat_leather.albedo_texture = tex_leather
+		mat_leather.uv1_scale = Vector3(1.5, 1.5, 1.5)
+		mat_leather.uv1_triplanar = true
 
 	# Стекло фонаря с теплым янтарным свечением
 	mat_lantern_glass = StandardMaterial3D.new()
@@ -97,17 +145,23 @@ func _init_materials() -> void:
 	mat_lantern_flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat_lantern_flame.albedo_color = Color(1.0, 0.95, 0.70)
 
-	# Железные грунтозацепы и ободные болты колес (яркий металл со стальным блеском)
+	# Железные грунтозацепы и ободные болты колес
 	mat_rim_cleat = StandardMaterial3D.new()
-	mat_rim_cleat.albedo_color = Color(0.82, 0.74, 0.58, 1.0)
-	mat_rim_cleat.metallic = 0.85
-	mat_rim_cleat.roughness = 0.35
+	mat_rim_cleat.albedo_color = Color(0.85, 0.85, 0.90, 1.0)
+	mat_rim_cleat.metallic = 0.9
+	mat_rim_cleat.roughness = 0.3
+	if tex_iron:
+		mat_rim_cleat.albedo_texture = tex_iron
+		mat_rim_cleat.uv1_triplanar = true
 
 	# Бандажи спиц и кольца ступицы
 	mat_spoke_band = StandardMaterial3D.new()
-	mat_spoke_band.albedo_color = Color(0.16, 0.16, 0.18, 1.0)
-	mat_spoke_band.metallic = 0.80
-	mat_spoke_band.roughness = 0.40
+	mat_spoke_band.albedo_color = Color(0.75, 0.60, 0.55, 1.0)
+	mat_spoke_band.metallic = 0.7
+	mat_spoke_band.roughness = 0.6
+	if tex_rust:
+		mat_spoke_band.albedo_texture = tex_rust
+		mat_spoke_band.uv1_triplanar = true
 
 func _create_box(parent: Node, size: Vector3, mat: Material, pos: Vector3 = Vector3.ZERO, rot: Vector3 = Vector3.ZERO) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
