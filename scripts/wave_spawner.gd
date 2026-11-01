@@ -23,11 +23,12 @@ enum ThreatPhase { CALM, AMBUSH, ASSAULT }
 var current_phase: ThreatPhase = ThreatPhase.CALM
 
 var wave_active           : bool  = false
+var wave_active_timer     : float = 0.0 # Таймер длительности волны/засады для защиты от зависаний
 var is_in_break           : bool  = false
 var is_camp_paused        : bool  = false
 var break_timer           : float = 0.0
 var scout_timer           : float = 0.0
-var march_encounter_timer : float = 2.5 # Таймер постоянных дорожных столкновений на марше
+var march_encounter_timer : float = 18.0 # Плавный старт (18 сек покоя в начале)
 var straggler_cleanup_timer: float = 0.0 # Таймер очистки отставших далеко позади врагов
 var hud_update_timer      : float = 0.0
 var last_countdown_sec    : int   = -1
@@ -58,10 +59,10 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_find_and_connect_hud()
 
-	# Готовность к бою сразу со старта пути (без долгой искусственной задержки)
+	# Плавный вводный старт: нулевая начальная угроза и время осмотреться
 	is_in_break = false
-	threat_level = 15.0
-	march_encounter_timer = 2.5
+	threat_level = 0.0
+	march_encounter_timer = 18.0
 
 func _setup_container() -> void:
 	var existing: Node = get_node_or_null("EnemiesContainer")
@@ -91,34 +92,6 @@ func _process(delta: float) -> void:
 		threat_level = 0.0
 		return
 
-	# 1. Период передышки после отбитого штурма
-	if is_in_break:
-		break_timer -= delta
-		var sec_left: int = int(ceil(maxf(0.0, break_timer)))
-		if sec_left != last_countdown_sec:
-			last_countdown_sec = sec_left
-			wave_countdown.emit(sec_left)
-			if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
-				sync_wave_countdown.rpc(sec_left)
-
-		if break_timer <= 0.0:
-			is_in_break = false
-			threat_level = 12.0
-			_notify_hud_threat()
-		return
-
-	# 2. Боевой режим (засада или штурм активны)
-	if wave_active:
-		if not enemies_to_spawn.is_empty():
-			spawn_timer -= delta
-			if spawn_timer <= 0.0:
-				_spawn_wave_batch()
-		elif enemies_alive <= 0:
-			# Все нападающие ликвидированы!
-			_complete_assault()
-		return
-
-	# 3. Режим исследования и движения каравана: накопление угрозы и постоянные столкновения
 	var caravan := _get_caravan()
 	var dist_traveled: float = 0.0
 	var is_moving: bool = false
@@ -132,18 +105,55 @@ func _process(delta: float) -> void:
 	var new_tier: int = maxi(1, 1 + int(dist_traveled / 360.0))
 	difficulty_tier = new_tier
 
-	# Накопление шкалы Угрозы Роя
-	var growth_rate: float = 1.0 + float(difficulty_tier) * 0.35
-	# В Красном Каньоне и Выжженной Пустоши угроза нарастает быстрее
+	# --- БЕЗУСЛОВНАЯ ОЧИСТКА ОТСТАВШИХ ЗОМБИ (каждые 1.5с) ---
+	# Работает ВСЕГДА (и во время волн, и на марше), чтобы враги не застревали позади и не зависали волны!
+	straggler_cleanup_timer += delta
+	if straggler_cleanup_timer >= 1.5:
+		straggler_cleanup_timer = 0.0
+		_cleanup_stragglers(caravan)
+
+	# 1. Период передышки после отбитого штурма
+	if is_in_break:
+		break_timer -= delta
+		var sec_left: int = int(ceil(maxf(0.0, break_timer)))
+		if sec_left != last_countdown_sec:
+			last_countdown_sec = sec_left
+			wave_countdown.emit(sec_left)
+			if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+				sync_wave_countdown.rpc(sec_left)
+
+		if break_timer <= 0.0:
+			is_in_break = false
+			threat_level = 10.0
+			_notify_hud_threat()
+		return
+
+	# 2. Боевой режим (засада или штурм активны)
+	if wave_active:
+		wave_active_timer += delta
+		if not enemies_to_spawn.is_empty():
+			spawn_timer -= delta
+			if spawn_timer <= 0.0:
+				_spawn_wave_batch()
+		# Автоматическое завершение волны, если все враги убиты или волна затянулась (>30с)
+		elif enemies_alive <= 0 or wave_active_timer >= 32.0 or (wave_active_timer >= 16.0 and enemies_alive <= 1):
+			_complete_assault()
+		return
+
+	# 3. Режим исследования и движения каравана: накопление угрозы и столкновения
+	var growth_rate: float = 0.70 if difficulty_tier == 1 else (1.0 + float(difficulty_tier) * 0.35)
 	if dist_traveled >= 550.0 and dist_traveled <= 1250.0:
 		growth_rate *= 1.35 # Красный каньон
 	elif dist_traveled > 1250.0 and dist_traveled <= 1850.0:
 		growth_rate *= 1.70 # Выжженная кибер-пустошь
 
-	# Скорость нарастания: активная при ходьбе, бешеная при ускорении осла
-	var threat_mult: float = 2.2 if is_moving else 0.45
-	if is_boosted:
-		threat_mult = 4.2
+	# Скорость роста угрозы: плавная на 1 этапе, чтобы не спамить со старта
+	var threat_mult: float = 0.9 if difficulty_tier == 1 else 2.0
+	if not is_moving:
+		threat_mult *= 0.35
+	elif is_boosted:
+		threat_mult *= 3.5
+
 	threat_level = minf(100.0, threat_level + delta * growth_rate * threat_mult)
 
 	# Периодическое обновление статуса на HUD
@@ -152,31 +162,28 @@ func _process(delta: float) -> void:
 		hud_update_timer = 0.0
 		_notify_hud_threat()
 
-	# Очистка зомби, отставших далеко позади каравана (>75м), чтобы не висели в воздухе и не блокировали лимиты
-	straggler_cleanup_timer += delta
-	if straggler_cleanup_timer >= 2.0:
-		straggler_cleanup_timer = 0.0
-		_cleanup_stragglers(caravan)
-
-	# --- РЕГУЛЯРНЫЕ СТОЛКНОВЕНИЯ НА МАРШЕ (ROAD ENCOUNTERS) ---
-	# Пока караван идет, прямо впереди на дороге и барханах непрерывно спавнятся бродячие киборги!
-	if is_moving and enemies_alive < 12:
+	# --- СТОЛКНОВЕНИЯ НА МАРШЕ ---
+	# На 1 этапе — мягкий вводный геймплей (редко, только по 1 ходячему)
+	var max_march_enemies: int = 1 if difficulty_tier == 1 else 10
+	if is_moving and enemies_alive < max_march_enemies:
 		march_encounter_timer -= delta
 		if march_encounter_timer <= 0.0:
-			var next_interval: float = randf_range(5.0, 9.5)
+			var next_interval: float = randf_range(16.0, 24.0) if difficulty_tier == 1 else randf_range(6.0, 10.0)
 			if is_boosted:
-				next_interval = randf_range(3.0, 5.5)
+				next_interval = maxf(3.0, next_interval * 0.45)
 			march_encounter_timer = next_interval
 			_spawn_march_encounter(caravan, is_boosted)
 
-	# Одиночные разведчики во время затишья при медленном продвижении
-	scout_timer += delta
-	if scout_timer >= 12.0 and threat_level < 60.0 and enemies_alive < 4:
-		scout_timer = 0.0
-		_spawn_scout_ambush()
+	# Одиночные разведчики (только со 2 этапа)
+	if difficulty_tier >= 2:
+		scout_timer += delta
+		if scout_timer >= 14.0 and threat_level < 60.0 and enemies_alive < 3:
+			scout_timer = 0.0
+			_spawn_scout_ambush()
 
-	# Фланговая засада при накоплении 55% угрозы
-	if threat_level >= 55.0 and current_phase == ThreatPhase.CALM and enemies_alive < 4:
+	# Фланговая засада при накоплении угрозы (на 1 этапе — только при 75%, со 2 этапа — при 55%)
+	var ambush_thresh: float = 75.0 if difficulty_tier == 1 else 55.0
+	if threat_level >= ambush_thresh and current_phase == ThreatPhase.CALM and enemies_alive < 3:
 		_trigger_flank_ambush()
 
 	# Полномасштабный штурм каравана при 100% угрозе
@@ -210,15 +217,16 @@ func _pick_enemy_for_tier() -> String:
 	var roll := randf()
 	match difficulty_tier:
 		1:
-			return "Runner" if roll < 0.60 else "Walker"
+			# На 1 этапе только медленные Walker, чтобы освоиться без хардкора
+			return "Walker"
 		2:
-			if roll < 0.35: return "Crawler"
-			elif roll < 0.70: return "Runner"
+			if roll < 0.20: return "Crawler"
+			elif roll < 0.45: return "Runner"
 			else: return "Walker"
 		3:
-			if roll < 0.25: return "Spitter"
-			elif roll < 0.45: return "Brute"
-			elif roll < 0.75: return "Runner"
+			if roll < 0.20: return "Spitter"
+			elif roll < 0.40: return "Brute"
+			elif roll < 0.70: return "Runner"
 			else: return "Crawler"
 		_:
 			if roll < 0.20: return "Screamer"
@@ -233,17 +241,19 @@ func _spawn_march_encounter(caravan: Node3D, boosted: bool) -> void:
 		return
 	var c_pos := caravan.global_position
 	# Спавним ВПЕРЕДИ каравана по направлению движения (по -Z)
-	var spawn_dist_ahead: float = randf_range(42.0, 70.0) if boosted else randf_range(26.0, 46.0)
-	var pack_size: int = randi_range(2, 4)
-	if difficulty_tier >= 3:
-		pack_size = randi_range(3, 5)
+	var spawn_dist_ahead: float = randf_range(38.0, 60.0) if boosted else randf_range(24.0, 38.0)
+	var pack_size: int = 1
+	if difficulty_tier == 2:
+		pack_size = 1 if randf() < 0.70 else 2
+	elif difficulty_tier >= 3:
+		pack_size = randi_range(2, 3)
 
-	var center_x := randf_range(-14.0, 14.0)
+	var center_x := randf_range(-10.0, 10.0)
 	var center_z := c_pos.z - spawn_dist_ahead
 
 	for i in range(pack_size):
-		var offset_x := randf_range(-4.0, 4.0)
-		var offset_z := randf_range(-4.0, 4.0)
+		var offset_x := randf_range(-3.0, 3.0)
+		var offset_z := randf_range(-3.0, 3.0)
 		var ex := center_x + offset_x
 		var ez := center_z + offset_z
 		var ey := DesertGenerator.get_height(ex, ez) + 0.8
@@ -255,18 +265,21 @@ func _spawn_march_encounter(caravan: Node3D, boosted: bool) -> void:
 func _cleanup_stragglers(caravan: Node3D) -> void:
 	if not caravan or not is_instance_valid(caravan) or not enemies_container:
 		return
-	var c_z := caravan.global_position.z
+	var c_pos := caravan.global_position
 	var players := get_tree().get_nodes_in_group("player")
 
 	for child: Node in enemies_container.get_children():
 		if child is Node3D and is_instance_valid(child):
-			var ez := (child as Node3D).global_position.z
-			# Караван идет в сторону -Z. Если враг остался далеко позади (ez > c_z + 75.0)
-			if ez > c_z + 75.0:
+			var e_pos := (child as Node3D).global_position
+			# 1. Если враг остался позади каравана (> 55м по Z)
+			# 2. Или если враг ушел/застрял в стороне (> 75м от каравана)
+			var is_behind: bool = (e_pos.z > c_pos.z + 55.0)
+			var is_too_far: bool = (e_pos.distance_to(c_pos) > 75.0)
+			if is_behind or is_too_far:
 				var near_player := false
 				for p in players:
 					if p is Node3D and is_instance_valid(p):
-						if (child as Node3D).global_position.distance_to((p as Node3D).global_position) < 28.0:
+						if e_pos.distance_to((p as Node3D).global_position) < 24.0:
 							near_player = true
 							break
 				if not near_player:
@@ -278,9 +291,9 @@ func _spawn_scout_ambush() -> void:
 	var z_type := _pick_enemy_for_tier()
 	var caravan := _get_caravan()
 	var base_pos: Vector3 = caravan.global_position if (caravan and is_instance_valid(caravan)) else Vector3.ZERO
-	var side_x: float = (randf_range(16.0, 26.0)) * (1.0 if randf() < 0.5 else -1.0)
+	var side_x: float = (randf_range(12.0, 20.0)) * (1.0 if randf() < 0.5 else -1.0)
 	# Впереди каравана
-	var spawn_z: float = base_pos.z - randf_range(15.0, 35.0)
+	var spawn_z: float = base_pos.z - randf_range(18.0, 32.0)
 	var spawn_y: float = DesertGenerator.get_height(base_pos.x + side_x, spawn_z) + 0.8
 	_spawn_single_enemy(z_type, Vector3(base_pos.x + side_x, spawn_y, spawn_z))
 
@@ -290,17 +303,13 @@ func _spawn_scout_ambush() -> void:
 func _trigger_flank_ambush() -> void:
 	current_phase = ThreatPhase.AMBUSH
 	wave_active = true
+	wave_active_timer = 0.0
 	spawn_timer = 0.0
 
-	var count: int = randi_range(2, 4)
+	var count: int = 1 if difficulty_tier == 1 else (2 if difficulty_tier == 2 else randi_range(2, 3))
 	enemies_to_spawn.clear()
 	for i in range(count):
-		if difficulty_tier >= 2 and randf() < 0.45:
-			enemies_to_spawn.append("Crawler")
-		elif randf() < 0.5:
-			enemies_to_spawn.append("Runner")
-		else:
-			enemies_to_spawn.append("Walker")
+		enemies_to_spawn.append(_pick_enemy_for_tier())
 
 	var rem: int = enemies_alive + enemies_to_spawn.size()
 	var title := "⚠️ ВНИМАНИЕ: ЗАСАДА НА ФЛАНГАХ!"
@@ -320,6 +329,7 @@ func _trigger_full_assault() -> void:
 	current_phase = ThreatPhase.ASSAULT
 	assault_number += 1
 	wave_active = true
+	wave_active_timer = 0.0
 	threat_level = 100.0
 	spawn_timer = 0.0
 
@@ -349,9 +359,9 @@ func _build_assault_roster(tier: int, dist_z: float) -> Array[String]:
 	var list: Array[String] = []
 
 	match tier:
-		1: # 0 - 360m: Развед-отряд
-			for i in range(5): list.append("Walker")
-			for i in range(2): list.append("Runner")
+		1: # 0 - 360m: Развед-отряд (мягкий вводный этап)
+			for i in range(3): list.append("Walker")
+			list.append("Runner")
 		2: # 360 - 720m (перед лагерем #1): Налет стаи
 			for i in range(6): list.append("Walker")
 			for i in range(4): list.append("Runner")
@@ -421,6 +431,7 @@ func spawn_dungeon_guardians(poi_node: Node, poi_type: String, world_pos: Vector
 
 func _complete_assault() -> void:
 	wave_active = false
+	wave_active_timer = 0.0
 	current_phase = ThreatPhase.CALM
 	threat_level = 10.0 # Сброс угрозы на базовый уровень после отбитого штурма
 
@@ -447,16 +458,17 @@ func _spawn_wave_batch() -> void:
 	if group_size <= 0:
 		return
 
-	# Фланговый спавн с барханов слева или справа от тракта
+	# Спавн нападающих с дюн ВПЕРЕДИ по курсу движения каравана (караван идет в сторону -Z)
 	var caravan := _get_caravan()
 	var base_z: float = caravan.global_position.z if (caravan and is_instance_valid(caravan)) else 0.0
 	var side_sign: float = 1.0 if randf() < 0.5 else -1.0
-	var flank_x: float = (randf_range(min_spawn_dist, max_spawn_dist)) * side_sign
+	var flank_x: float = (randf_range(8.0, 16.0)) * side_sign
+	var spawn_ahead_z: float = base_z - randf_range(18.0, 32.0)
 
 	for i in range(group_size):
 		var z_type: String = enemies_to_spawn.pop_front()
 		var ex: float = flank_x + randf_range(-3.0, 3.0)
-		var ez: float = base_z + randf_range(-14.0, 14.0)
+		var ez: float = spawn_ahead_z + randf_range(-3.0, 3.0)
 		var ey: float = DesertGenerator.get_height(ex, ez) + 0.8
 		_spawn_single_enemy(z_type, Vector3(ex, ey, ez))
 
