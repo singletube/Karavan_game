@@ -28,7 +28,7 @@ var is_in_break           : bool  = false
 var is_camp_paused        : bool  = false
 var break_timer           : float = 0.0
 var scout_timer           : float = 0.0
-var march_encounter_timer : float = 18.0 # Плавный старт (18 сек покоя в начале)
+var march_encounter_timer : float = 9.0 # Первое появление врагов вдали через 9 сек
 var straggler_cleanup_timer: float = 0.0 # Таймер очистки отставших далеко позади врагов
 var hud_update_timer      : float = 0.0
 var last_countdown_sec    : int   = -1
@@ -59,10 +59,10 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_find_and_connect_hud()
 
-	# Плавный вводный старт: нулевая начальная угроза и время осмотреться
+	# Плавный вводный старт: нулевая начальная угроза, враги покажутся вдалеке через 9 сек
 	is_in_break = false
 	threat_level = 0.0
-	march_encounter_timer = 18.0
+	march_encounter_timer = 9.0
 
 func _setup_container() -> void:
 	var existing: Node = get_node_or_null("EnemiesContainer")
@@ -163,14 +163,14 @@ func _process(delta: float) -> void:
 		_notify_hud_threat()
 
 	# --- СТОЛКНОВЕНИЯ НА МАРШЕ ---
-	# На 1 этапе — мягкий вводный геймплей (редко, только по 1 ходячему)
-	var max_march_enemies: int = 1 if difficulty_tier == 1 else 10
+	# Постепенное нарастание: на 1 этапе до 4 врагов на горизонте, со 2 этапа до 12
+	var max_march_enemies: int = 4 if difficulty_tier == 1 else 12
 	if is_moving and enemies_alive < max_march_enemies:
 		march_encounter_timer -= delta
 		if march_encounter_timer <= 0.0:
-			var next_interval: float = randf_range(16.0, 24.0) if difficulty_tier == 1 else randf_range(6.0, 10.0)
+			var next_interval: float = randf_range(9.0, 14.0) if difficulty_tier == 1 else randf_range(5.0, 9.0)
 			if is_boosted:
-				next_interval = maxf(3.0, next_interval * 0.45)
+				next_interval = maxf(2.5, next_interval * 0.45)
 			march_encounter_timer = next_interval
 			_spawn_march_encounter(caravan, is_boosted)
 
@@ -217,8 +217,8 @@ func _pick_enemy_for_tier() -> String:
 	var roll := randf()
 	match difficulty_tier:
 		1:
-			# На 1 этапе только медленные Walker, чтобы освоиться без хардкора
-			return "Walker"
+			# На 1 этапе в основном Walker и 25% Runner для бодрой динамики
+			return "Runner" if roll < 0.25 else "Walker"
 		2:
 			if roll < 0.20: return "Crawler"
 			elif roll < 0.45: return "Runner"
@@ -240,20 +240,16 @@ func _spawn_march_encounter(caravan: Node3D, boosted: bool) -> void:
 	if not caravan or not is_instance_valid(caravan):
 		return
 	var c_pos := caravan.global_position
-	# Спавним ВПЕРЕДИ каравана по направлению движения (по -Z)
-	var spawn_dist_ahead: float = randf_range(38.0, 60.0) if boosted else randf_range(24.0, 38.0)
-	var pack_size: int = 1
-	if difficulty_tier == 2:
-		pack_size = 1 if randf() < 0.70 else 2
-	elif difficulty_tier >= 3:
-		pack_size = randi_range(2, 3)
+	# Спавним ЗАРАНЕЕ и ПОДАЛЬШЕ ВПЕРЕДИ (52-85м, при ускорении 80-130м), чтобы шли навстречу, а не перед лицом
+	var spawn_dist_ahead: float = randf_range(80.0, 130.0) if boosted else randf_range(52.0, 85.0)
+	var pack_size: int = 2 if difficulty_tier == 1 else (randi_range(2, 3) if difficulty_tier == 2 else randi_range(3, 4))
 
-	var center_x := randf_range(-10.0, 10.0)
+	var center_x := randf_range(-14.0, 14.0)
 	var center_z := c_pos.z - spawn_dist_ahead
 
 	for i in range(pack_size):
-		var offset_x := randf_range(-3.0, 3.0)
-		var offset_z := randf_range(-3.0, 3.0)
+		var offset_x := randf_range(-4.0, 4.0)
+		var offset_z := randf_range(-4.0, 4.0)
 		var ex := center_x + offset_x
 		var ez := center_z + offset_z
 		var ey := DesertGenerator.get_height(ex, ez) + 0.8
@@ -271,10 +267,10 @@ func _cleanup_stragglers(caravan: Node3D) -> void:
 	for child: Node in enemies_container.get_children():
 		if child is Node3D and is_instance_valid(child):
 			var e_pos := (child as Node3D).global_position
-			# 1. Если враг остался позади каравана (> 55м по Z)
-			# 2. Или если враг ушел/застрял в стороне (> 75м от каравана)
-			var is_behind: bool = (e_pos.z > c_pos.z + 55.0)
-			var is_too_far: bool = (e_pos.distance_to(c_pos) > 75.0)
+			# 1. Если враг остался далеко позади каравана (> 85м по Z)
+			# 2. Или если враг ушел/застрял в стороне (> 135м от каравана)
+			var is_behind: bool = (e_pos.z > c_pos.z + 85.0)
+			var is_too_far: bool = (e_pos.distance_to(c_pos) > 135.0)
 			if is_behind or is_too_far:
 				var near_player := false
 				for p in players:
@@ -286,14 +282,14 @@ func _cleanup_stragglers(caravan: Node3D) -> void:
 					child.queue_free()
 					enemies_alive = maxi(0, enemies_alive - 1)
 
-# Одиночный разведчик на барханах (Scout) - появляется в поле видимости
+# Одиночный разведчик на барханах (Scout) - появляется далеко в поле видимости
 func _spawn_scout_ambush() -> void:
 	var z_type := _pick_enemy_for_tier()
 	var caravan := _get_caravan()
 	var base_pos: Vector3 = caravan.global_position if (caravan and is_instance_valid(caravan)) else Vector3.ZERO
-	var side_x: float = (randf_range(12.0, 20.0)) * (1.0 if randf() < 0.5 else -1.0)
-	# Впереди каравана
-	var spawn_z: float = base_pos.z - randf_range(18.0, 32.0)
+	var side_x: float = (randf_range(16.0, 26.0)) * (1.0 if randf() < 0.5 else -1.0)
+	# Далеко впереди каравана
+	var spawn_z: float = base_pos.z - randf_range(50.0, 80.0)
 	var spawn_y: float = DesertGenerator.get_height(base_pos.x + side_x, spawn_z) + 0.8
 	_spawn_single_enemy(z_type, Vector3(base_pos.x + side_x, spawn_y, spawn_z))
 
@@ -462,8 +458,8 @@ func _spawn_wave_batch() -> void:
 	var caravan := _get_caravan()
 	var base_z: float = caravan.global_position.z if (caravan and is_instance_valid(caravan)) else 0.0
 	var side_sign: float = 1.0 if randf() < 0.5 else -1.0
-	var flank_x: float = (randf_range(8.0, 16.0)) * side_sign
-	var spawn_ahead_z: float = base_z - randf_range(18.0, 32.0)
+	var flank_x: float = (randf_range(12.0, 24.0)) * side_sign
+	var spawn_ahead_z: float = base_z - randf_range(48.0, 75.0)
 
 	for i in range(group_size):
 		var z_type: String = enemies_to_spawn.pop_front()

@@ -8,13 +8,20 @@ signal enemy_died
 
 # --- Параметры движения и боя ---
 const GRAVITY       := 20.0
-const CHASE_RANGE   := 90.0
+const CHASE_RANGE   := 150.0 # Дальний радиус обнаружения каравана для раннего марша
 
 var move_speed      : float = 3.2
 var max_hp          : int   = 75
 var attack_dmg      : int   = 15
 var attack_cooldown : float = 1.1
 var attack_reach    : float = 2.2
+
+# --- Обход препятствий (Obstacle Avoidance & Steering) ---
+var avoidance_dir          : Vector3 = Vector3.ZERO
+var avoidance_timer        : float   = 0.0
+var stuck_detect_timer     : float   = 0.0
+var last_check_pos         : Vector3 = Vector3.ZERO
+var preferred_detour_sign  : float   = 1.0
 
 # --- Ноды ---
 @onready var sprite          : Sprite3D            = $Sprite3D
@@ -177,20 +184,67 @@ func _physics_process(delta: float) -> void:
 	_update_target_and_state()
 	_process_movement_and_animation(delta)
 
-	# Поворот 3D модели лицом к цели/игроку
+	# Поворот 3D модели по направлению движения / цели
 	if cyborg_model_3d and cyborg_model_3d.visible:
-		if player:
-			var look_pos: Vector3 = Vector3(player.global_position.x, global_position.y, player.global_position.z)
-			if global_position.distance_squared_to(look_pos) > 0.05:
-				cyborg_model_3d.look_at(look_pos, Vector3.UP)
-				cyborg_model_3d.rotate_y(PI) # Разворот лицом вперед
-
 		var is_moving: bool = (state == EnemyState.CHASE and velocity.length_squared() > 0.1)
 		var is_atk: bool = (state == EnemyState.ATTACK and (is_winding_up or attack_timer > 0.0))
 		var is_hurting: bool = (hurt_timer > 0.0)
 		cyborg_model_3d.update_animation(delta, is_moving, move_speed, is_atk, is_hurting, false)
 
+		var move_dir := velocity
+		move_dir.y = 0.0
+		if move_dir.length_squared() > 0.15:
+			var look_pos: Vector3 = global_position + move_dir.normalized()
+			cyborg_model_3d.look_at(look_pos, Vector3.UP)
+			cyborg_model_3d.rotate_y(PI) # Разворот лицом вперед
+		elif player:
+			var look_pos: Vector3 = Vector3(player.global_position.x, global_position.y, player.global_position.z)
+			if global_position.distance_squared_to(look_pos) > 0.05:
+				cyborg_model_3d.look_at(look_pos, Vector3.UP)
+				cyborg_model_3d.rotate_y(PI)
+
 	move_and_slide()
+
+	# Реакция на соприкосновения с препятствиями (баррикады, обломки, скалы): скольжение вокруг
+	if state == EnemyState.CHASE and is_on_wall():
+		var col_count := get_slide_collision_count()
+		for i in range(col_count):
+			var col := get_slide_collision(i)
+			var collider := col.get_collider()
+			if collider == player:
+				continue
+			if collider is Node and ((collider as Node).is_in_group("player") or (collider as Node).is_in_group("caravan")):
+				continue
+			var n := col.get_normal()
+			if n.y > 0.55:
+				continue
+			n.y = 0.0
+			if n.length_squared() > 0.01:
+				n = n.normalized()
+				var direct := (player.global_position - global_position) if player else -n
+				direct.y = 0.0
+				var t1 := Vector3(-n.z, 0.0, n.x).normalized()
+				var t2 := -t1
+				var best_t := t1 if t1.dot(direct) >= t2.dot(direct) else t2
+				avoidance_dir = (best_t * 0.85 + n * 0.20).normalized()
+				avoidance_timer = 0.75
+				break
+
+	# Детекция застревания на месте: если зомби в погоне, но за 0.4с сдвинулся меньше 15см
+	if state == EnemyState.CHASE:
+		stuck_detect_timer += delta
+		if stuck_detect_timer >= 0.4:
+			stuck_detect_timer = 0.0
+			var dist_moved := global_position.distance_to(last_check_pos)
+			last_check_pos = global_position
+			if dist_moved < 0.15:
+				preferred_detour_sign = -preferred_detour_sign
+				if player:
+					var direct := (player.global_position - global_position)
+					direct.y = 0.0
+					if direct.length_squared() > 0.01:
+						avoidance_dir = direct.normalized().rotated(Vector3.UP, deg_to_rad(75.0 * preferred_detour_sign))
+				avoidance_timer = 0.95
 
 func _apply_gravity(delta: float) -> void:
 	if not is_on_floor():
@@ -270,17 +324,14 @@ func _process_movement_and_animation(delta: float) -> void:
 
 		EnemyState.CHASE:
 			var dir := Vector3.ZERO
-			nav_agent.target_position = player.global_position
-			var next_pos: Vector3 = nav_agent.get_next_path_position()
-			var nav_dir: Vector3 = (next_pos - global_position)
-			nav_dir.y = 0.0
-
-			if nav_dir.length_squared() > 0.05:
-				dir = nav_dir.normalized()
-			else:
+			if player and is_instance_valid(player):
 				var direct: Vector3 = (player.global_position - global_position)
 				direct.y = 0.0
-				dir = direct.normalized()
+				if direct.length_squared() > 0.05:
+					dir = direct.normalized()
+
+			# Проактивный обход препятствий щупами-лучами
+			dir = _compute_avoidance_steering(dir, delta)
 
 			velocity.x = dir.x * move_speed
 			velocity.z = dir.z * move_speed
@@ -329,6 +380,80 @@ func _process_movement_and_animation(delta: float) -> void:
 				sprite.frame = FRAMES_ATTACK[0]
 			else:
 				sprite.frame = FRAMES_ATTACK[1]
+
+# Проактивный обход препятствий щупами-лучами (Raycast Obstacle Avoidance)
+func _compute_avoidance_steering(base_dir: Vector3, delta: float) -> Vector3:
+	if not player or not is_instance_valid(player) or base_dir.length_squared() < 0.01:
+		return base_dir
+
+	# 1. Если активен временный маневр обхода препятствия:
+	if avoidance_timer > 0.0:
+		avoidance_timer -= delta
+		if avoidance_dir.length_squared() > 0.01:
+			return (avoidance_dir * 0.75 + base_dir * 0.25).normalized()
+
+	# 2. Детекция препятствий лучами-щупами (Feelers)
+	var space := get_world_3d().direct_space_state if is_inside_tree() else null
+	if not space:
+		return base_dir
+
+	var origin := global_position + Vector3(0.0, 0.7, 0.0)
+
+	# Проверка центрального луча (на 2.8м вперед)
+	var center_end := origin + base_dir * 2.8
+	var query_center := PhysicsRayQueryParameters3D.create(origin, center_end)
+	query_center.exclude = [get_rid()]
+	var hit_center := space.intersect_ray(query_center)
+
+	if hit_center and not hit_center.is_empty():
+		var col_obj = hit_center.get("collider")
+		var is_target: bool = (col_obj == player)
+		if not is_target and col_obj is Node:
+			var node := col_obj as Node
+			if node.is_in_group("player") or node.is_in_group("caravan"):
+				is_target = true
+
+		# Препятствие на пути (скала, баррикада, обломок, стена)
+		if not is_target:
+			var left_vec := base_dir.rotated(Vector3.UP, deg_to_rad(40.0))
+			var right_vec := base_dir.rotated(Vector3.UP, deg_to_rad(-40.0))
+
+			var q_left := PhysicsRayQueryParameters3D.create(origin, origin + left_vec * 2.2)
+			q_left.exclude = [get_rid()]
+			var hit_left := space.intersect_ray(q_left)
+
+			var q_right := PhysicsRayQueryParameters3D.create(origin, origin + right_vec * 2.2)
+			q_right.exclude = [get_rid()]
+			var hit_right := space.intersect_ray(q_right)
+
+			var left_free: bool = hit_left.is_empty()
+			var right_free: bool = hit_right.is_empty()
+
+			if left_free and not right_free:
+				avoidance_dir = base_dir.rotated(Vector3.UP, deg_to_rad(55.0))
+				avoidance_timer = 0.65
+				preferred_detour_sign = -1.0
+			elif right_free and not left_free:
+				avoidance_dir = base_dir.rotated(Vector3.UP, deg_to_rad(-55.0))
+				avoidance_timer = 0.65
+				preferred_detour_sign = 1.0
+			else:
+				var norm: Vector3 = hit_center.get("normal", Vector3.ZERO)
+				norm.y = 0.0
+				if norm.length_squared() > 0.01:
+					norm = norm.normalized()
+					var t1 := Vector3(-norm.z, 0.0, norm.x).normalized()
+					var t2 := -t1
+					var best_t := t1 if t1.dot(base_dir) >= t2.dot(base_dir) else t2
+					avoidance_dir = (best_t * 0.85 + norm * 0.25).normalized()
+					avoidance_timer = 0.75
+				else:
+					avoidance_dir = base_dir.rotated(Vector3.UP, deg_to_rad(60.0 * preferred_detour_sign))
+					avoidance_timer = 0.65
+
+			return (avoidance_dir * 0.8 + base_dir * 0.2).normalized()
+
+	return base_dir
 
 func _on_velocity_computed(safe_vel: Vector3) -> void:
 	if not is_dead and hurt_timer <= 0.0:
