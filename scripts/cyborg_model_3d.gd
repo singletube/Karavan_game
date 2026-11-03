@@ -16,6 +16,7 @@ extends Node3D
 # =========================================================================
 
 const ZOMBIE_MODEL_PATH: String = "res://models/zombies/melty_zombie/scene.gltf"
+const ZOMBIE_CYBORG_MODEL_PATH: String = "res://models/zombies/zombie_cyborg.glb"
 
 # --- ПРЕЛОАД 3D АКСЕССУАРОВ (GLB) ---
 const ACC_ARMOR_METAL   = preload("res://models/zombies/accessories/Armor_Metal.glb")
@@ -69,14 +70,15 @@ func setup_type(type_name: String) -> void:
 	_clear_model()
 	_init_materials()
 
-	var scene_res = load(ZOMBIE_MODEL_PATH)
+	var model_path: String = ZOMBIE_CYBORG_MODEL_PATH if current_type == "Walker" else ZOMBIE_MODEL_PATH
+	var scene_res = load(model_path)
 	if not scene_res:
-		push_error("Failed to load zombie model: " + ZOMBIE_MODEL_PATH)
+		push_error("Failed to load zombie model: " + model_path)
 		return
 
 	_model_instance = scene_res.instantiate() as Node3D
 	if not _model_instance:
-		push_error("Failed to instantiate zombie model")
+		push_error("Failed to instantiate zombie model: " + model_path)
 		return
 
 	_model_instance.name = "RealZombieInstance"
@@ -106,12 +108,19 @@ func setup_type(type_name: String) -> void:
 
 	# Добавление обносок одежды и 3D-аксессуаров
 	if skeleton:
-		_build_clothing_rags()
-		_build_type_cyber_upgrades()
+		if current_type == "Walker":
+			# В модели zombie_cyborg уже смоделирована вся одежда, броня и кибернетика
+			_build_walker_cyber_eye()
+		else:
+			_build_clothing_rags()
+			_build_type_cyber_upgrades()
 
 	# Запуск анимации покоя
 	if anim_player:
-		anim_player.play("idle01")
+		if anim_player.has_animation("Idle"):
+			anim_player.play("Idle")
+		elif anim_player.has_animation("idle01"):
+			anim_player.play("idle01")
 
 func _clear_model() -> void:
 	for c in get_children():
@@ -170,12 +179,12 @@ func _init_materials() -> void:
 	_mat_steel_blade.roughness = 0.12
 
 func _configure_animation_loops() -> void:
-	var looping_anims = ["walk01", "walk02", "run", "idle01", "idle02", "on_all_four_A", "on_all_four_B"]
+	var looping_anims = ["walk01", "walk02", "run", "idle01", "idle02", "on_all_four_A", "on_all_four_B", "Walk", "Run", "Idle"]
 	for a_name in looping_anims:
 		if anim_player.has_animation(a_name):
 			anim_player.get_animation(a_name).loop_mode = Animation.LOOP_LINEAR
 
-	var single_anims = ["attack01", "attack02", "damage", "death"]
+	var single_anims = ["attack01", "attack02", "damage", "death", "Attack", "Death", "Hit", "Roar"]
 	for a_name in single_anims:
 		if anim_player.has_animation(a_name):
 			anim_player.get_animation(a_name).loop_mode = Animation.LOOP_NONE
@@ -183,6 +192,9 @@ func _configure_animation_loops() -> void:
 func _apply_type_customization() -> void:
 	const BASE_SCALE: float = 0.68
 	match current_type:
+		"Walker":
+			# Новый детальный Zombie Cyborg ростом 1.86м:
+			scale = Vector3.ONE * 0.95
 		"Runner":
 			scale = Vector3.ONE * (BASE_SCALE * 0.90)
 		"Brute":
@@ -749,9 +761,29 @@ func _add_light(parent: Node3D, color: Color, energy: float, light_range: float)
 	parent.add_child(light)
 	eye_lights.append(light)
 
+func _build_walker_cyber_eye() -> void:
+	var head_att := _get_or_create_bone_att("Head")
+	var eye_light := OmniLight3D.new()
+	eye_light.name = "CyberEyeLight"
+	eye_light.light_color = Color(1.0, 0.12, 0.04)
+	eye_light.light_energy = 2.2
+	eye_light.omni_range = 4.0
+	eye_light.omni_attenuation = 1.2
+	eye_light.shadow_enabled = false
+	# Координата красного кибер-глаза
+	eye_light.position = Vector3(0.045, 0.08, -0.09)
+	head_att.add_child(eye_light)
+	eye_lights.append(eye_light)
+
 # =========================================================================
 # УПРАВЛЕНИЕ АНИМАЦИЯМИ (ВЫЗЫВАЕТСЯ ИЗ ENEMY.GD)
 # =========================================================================
+func _play_anim(p_name: String, blend: float = 0.1, custom_speed: float = 1.0) -> void:
+	if not anim_player or not anim_player.has_animation(p_name):
+		return
+	if anim_player.current_animation != p_name or not anim_player.is_playing():
+		anim_player.play(p_name, blend, custom_speed)
+
 func update_animation(_delta: float, moving: bool, move_speed: float, attacking: bool, hurt: bool, dead: bool) -> void:
 	if not anim_player:
 		return
@@ -763,20 +795,22 @@ func update_animation(_delta: float, moving: bool, move_speed: float, attacking:
 
 	# 1. Смерть: фиксирует труп намертво без дерганий
 	if is_dead:
+		var death_anim = "Death" if anim_player.has_animation("Death") else "death"
 		if not has_died:
 			has_died = true
 			death_timer = 0.0
 			for light in eye_lights:
 				if is_instance_valid(light):
 					light.light_energy = 0.0
-			anim_player.play("death", 0.1)
+			_play_anim(death_anim, 0.1)
 			return
 
 		death_timer += _delta
-		if death_timer >= 2.95 or not anim_player.is_playing() or anim_player.current_animation != "death":
+		var d_len: float = anim_player.get_animation(death_anim).length if anim_player.has_animation(death_anim) else 2.5
+		if death_timer >= (d_len - 0.05) or not anim_player.is_playing() or anim_player.current_animation != death_anim:
 			anim_player.pause()
-			if anim_player.has_animation("death"):
-				anim_player.seek(anim_player.get_animation("death").length, true)
+			if anim_player.has_animation(death_anim):
+				anim_player.seek(anim_player.get_animation(death_anim).length, true)
 		return
 
 	if has_died:
@@ -785,42 +819,42 @@ func update_animation(_delta: float, moving: bool, move_speed: float, attacking:
 
 	# 2. Получение урона
 	if is_hurt:
-		if anim_player.current_animation != "damage":
-			anim_player.play("damage", 0.08, 1.4)
+		var hurt_anim = "Hit" if anim_player.has_animation("Hit") else "damage"
+		_play_anim(hurt_anim, 0.08, 1.4)
 		return
 
 	# 3. Атака
 	if is_attacking:
-		var atk_anim = "attack02" if (current_type == "Runner" or current_type == "Screamer") else "attack01"
+		var atk_anim = "Attack" if anim_player.has_animation("Attack") else ("attack02" if (current_type == "Runner" or current_type == "Screamer") else "attack01")
 		var atk_speed = 1.4 if current_type == "Runner" else 1.1
-		if anim_player.current_animation != atk_anim:
-			anim_player.play(atk_anim, 0.1, atk_speed)
+		_play_anim(atk_anim, 0.1, atk_speed)
 		return
 
 	# 4. Движение
 	if is_moving:
 		match current_type:
 			"Crawler":
-				if anim_player.current_animation != "on_all_four_B":
-					anim_player.play("on_all_four_B", 0.2, maxf(1.0, move_speed * 0.45))
+				if anim_player.has_animation("on_all_four_B"):
+					_play_anim("on_all_four_B", 0.2, maxf(1.0, move_speed * 0.45))
 			"Runner":
-				if anim_player.current_animation != "run":
-					anim_player.play("run", 0.15, maxf(1.1, move_speed * 0.32))
+				var run_anim = "Run" if anim_player.has_animation("Run") else "run"
+				_play_anim(run_anim, 0.15, maxf(1.1, move_speed * 0.32))
 			"Brute":
-				if anim_player.current_animation != "walk02":
-					anim_player.play("walk02", 0.2, 0.85)
+				if anim_player.has_animation("walk02"):
+					_play_anim("walk02", 0.2, 0.85)
 			_:
-				if anim_player.current_animation != "walk01":
-					anim_player.play("walk01", 0.2, maxf(0.85, move_speed * 0.38))
+				var walk_anim = "Walk" if anim_player.has_animation("Walk") else "walk01"
+				_play_anim(walk_anim, 0.2, maxf(0.85, move_speed * 0.38))
 		return
 
 	# 5. Покой (Idle)
-	if anim_player.current_animation != "idle01" and anim_player.current_animation != "idle02":
-		anim_player.play("idle01", 0.25)
+	var idle_anim = "Idle" if anim_player.has_animation("Idle") else "idle01"
+	if anim_player.current_animation != idle_anim and anim_player.current_animation != "idle02":
+		_play_anim(idle_anim, 0.25)
 
 func _on_anim_finished(anim_name: StringName) -> void:
-	if anim_name == "death":
+	if anim_name == "death" or anim_name == "Death":
 		if anim_player:
 			anim_player.pause()
-			if anim_player.has_animation("death"):
-				anim_player.seek(anim_player.get_animation("death").length, true)
+			if anim_player.has_animation(anim_name):
+				anim_player.seek(anim_player.get_animation(anim_name).length, true)

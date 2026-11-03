@@ -98,7 +98,8 @@ func _init_zombie_type() -> void:
 	if cyborg_model_3d:
 		cyborg_model_3d.setup_type(zombie_type)
 		cyborg_model_3d.show()
-	sprite.hide()
+	if sprite:
+		sprite.hide()
 
 	match zombie_type:
 		"Runner":
@@ -513,6 +514,11 @@ func _attack_screamer() -> void:
 				if c.has_method("take_damage"):
 					c.take_damage(attack_dmg)
 
+func _get_sand_fx() -> Node:
+	if not is_inside_tree():
+		return null
+	return get_node_or_null("/root/SandEffects")
+
 func _attack_exploder() -> void:
 	# Самоубийственный взрыв: наносит урон всем игрокам, каравану и другим зомби в радиусе 6.0, затем погибает
 	if die_sound:
@@ -543,7 +549,9 @@ func _attack_exploder() -> void:
 				if e.has_method("take_damage"):
 					e.take_damage(attack_dmg)
 
-	SandEffects.add_explosion_crater(global_position)
+	var s_fx := _get_sand_fx()
+	if s_fx:
+		s_fx.add_explosion_crater(global_position)
 	_die()
 
 func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> void:
@@ -607,7 +615,9 @@ func _play_hit_flinch(hit_direction: Vector3, hit_position: Vector3) -> void:
 	if blood_position == Vector3.ZERO:
 		blood_position = global_position + Vector3(0.0, 0.9, 0.0)
 	_spawn_hit_blood(blood_position, hit_direction)
-	SandEffects.add_blood_splatter(global_position, hit_direction)
+	var s_fx := _get_sand_fx()
+	if s_fx:
+		s_fx.add_blood_splatter(global_position, hit_direction)
 
 	if hit_sound and not hit_sound.playing:
 		hit_sound.play()
@@ -669,7 +679,9 @@ func _die() -> void:
 
 	# Растекающаяся лужа крови под телом поверженного киборга
 	var pool_scale: float = 2.4 if zombie_type == "Brute" else 1.65
-	SandEffects.add_blood_pool(global_position, pool_scale)
+	var s_fx := _get_sand_fx()
+	if s_fx:
+		s_fx.add_blood_pool(global_position, pool_scale)
 
 	if die_sound:
 		die_sound.play()
