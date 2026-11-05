@@ -88,7 +88,8 @@ func _ready() -> void:
 	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	sprite.alpha_cut = Sprite3D.ALPHA_CUT_DISCARD
 
-	nav_agent.velocity_computed.connect(_on_velocity_computed)
+	if nav_agent and not nav_agent.velocity_computed.is_connected(_on_velocity_computed):
+		nav_agent.velocity_computed.connect(_on_velocity_computed)
 	if die_sound:
 		die_sound.stream = snd_die
 	if hit_sound:
