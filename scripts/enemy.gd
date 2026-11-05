@@ -4,7 +4,11 @@ extends CharacterBody3D
 signal enemy_died
 
 # --- Тип зомби ---
-@export_enum("Walker", "Runner", "Brute", "Crawler", "Spitter", "Screamer", "Exploder") var zombie_type : String = "Walker"
+@export_enum("Walker", "Runner", "Brute", "Crawler", "Spitter", "Screamer", "Exploder") var zombie_type : String = "Walker":
+	set(val):
+		zombie_type = val
+		if is_node_ready():
+			_init_zombie_type()
 
 # --- Параметры движения и боя ---
 const GRAVITY       := 20.0

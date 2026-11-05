@@ -239,13 +239,16 @@ func update_animation(_delta: float, moving: bool, move_speed: float, attacking:
 
 	# 3. Атака (Attack / Roar)
 	if is_attacking:
-		if current_type == "Screamer":
-			# Крикун издает оглушительный рев акустическими сиренами
-			_play_anim("Roar", 0.12, 1.2)
+		var atk_anim: String = "Roar" if current_type == "Screamer" else "Attack"
+		var atk_speed: float = 1.4 if current_type == "Runner" else (0.9 if current_type == "Brute" else 1.1)
+		if anim_player.current_animation == atk_anim:
+			if not anim_player.is_playing():
+				# Анимация удара завершилась, ждем в стойке покоя до следующего замаха
+				_play_anim("Idle", 0.25)
+			return
 		else:
-			var atk_speed: float = 1.4 if current_type == "Runner" else (0.9 if current_type == "Brute" else 1.1)
-			_play_anim("Attack", 0.1, atk_speed)
-		return
+			_play_anim(atk_anim, 0.1, atk_speed)
+			return
 
 	# 4. Движение (Run для Runner, Walk для остальных)
 	if is_moving:
