@@ -104,7 +104,7 @@ func _process(delta: float) -> void:
 	if caravan_god_mode:
 		var caravan := _get_first_node("caravan")
 		if caravan and is_instance_valid(caravan):
-			var max_hp: int = int(caravan.get("MAX_HEALTH")) if caravan.get("MAX_HEALTH") != null else 500
+			var max_hp: int = int(caravan.get("MAX_HEALTH")) if caravan.get("MAX_HEALTH") != null else 1000
 			if caravan.get("health") != null and caravan.health < max_hp:
 				caravan.health = max_hp
 				if caravan.has_signal("health_changed"):
@@ -177,12 +177,12 @@ func heal_player() -> void:
 func heal_caravan() -> void:
 	var caravan := _get_first_node("caravan")
 	if caravan and is_instance_valid(caravan):
-		var max_hp: int = int(caravan.get("MAX_HEALTH")) if caravan.get("MAX_HEALTH") != null else 500
+		var max_hp: int = int(caravan.get("MAX_HEALTH")) if caravan.get("MAX_HEALTH") != null else 1000
 		caravan.health = max_hp
 		caravan.is_destroyed = false
 		if caravan.has_signal("health_changed"):
 			caravan.health_changed.emit(caravan.health, max_hp)
-		show_toast("🛡️ КАРАВАН ПОЛНОСТЬЮ ПОЧИНЕН (500 HP)")
+		show_toast("🛡️ КАРАВАН ПОЛНОСТЬЮ ПОЧИНЕН (%d HP)" % max_hp)
 	else:
 		show_toast("Караван не найден")
 

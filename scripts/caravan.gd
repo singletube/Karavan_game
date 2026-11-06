@@ -3,7 +3,7 @@ extends AnimatableBody3D
 class_name Caravan
 
 # --- Константы и настройки ---
-const MAX_HEALTH: int = 500 # В 5 раз больше здоровья игрока (100 HP)
+const MAX_HEALTH: int = 1000 # Увеличенное здоровье каравана (1000 HP) для высокой живучести в пустыне
 const BASE_SPEED: float = 2.25 # 1/4 скорости ходьбы игрока (9.0 / 4)
 
 signal health_changed(current: int, max_hp: int)

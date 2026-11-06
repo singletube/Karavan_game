@@ -32,6 +32,11 @@ var no_ammo_meme_texture : TextureRect        = null
 var _meme_tween          : Tween              = null
 var _last_had_ammo       : bool               = true
 
+# --- Предупреждение о сканировании дроном-черепом ---
+var drone_scan_panel     : PanelContainer     = null
+var drone_scan_label     : Label              = null
+var _drone_scan_tween    : Tween              = null
+
 var target_player : Node = null
 var _displayed_health: int = -1
 
@@ -220,6 +225,54 @@ func _setup_combat_ui() -> void:
 
 	no_ammo_meme_panel.hide()
 	add_child(no_ammo_meme_panel)
+
+	# 7. Предупреждение о сканировании дроном-черепом
+	drone_scan_panel = PanelContainer.new()
+	drone_scan_panel.name = "DroneScanPanel"
+	drone_scan_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	drone_scan_panel.offset_left = -225.0
+	drone_scan_panel.offset_top = 52.0
+	drone_scan_panel.offset_right = 225.0
+	drone_scan_panel.offset_bottom = 86.0
+	drone_scan_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var ds_style := StyleBoxFlat.new()
+	ds_style.bg_color = Color(0.18, 0.02, 0.02, 0.88)
+	ds_style.border_color = Color(1.0, 0.22, 0.18, 0.95)
+	ds_style.set_border_width_all(2)
+	ds_style.set_corner_radius_all(6)
+	ds_style.content_margin_left = 12.0
+	ds_style.content_margin_right = 12.0
+	ds_style.content_margin_top = 4.0
+	ds_style.content_margin_bottom = 4.0
+	drone_scan_panel.add_theme_stylebox_override("panel", ds_style)
+
+	drone_scan_label = Label.new()
+	drone_scan_label.name = "DroneScanLabel"
+	drone_scan_label.text = "⚠️ ДРОН-ЧЕРЕП СКАНИРУЕТ! ВОЛНА УСКОРЕНА x2"
+	drone_scan_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	drone_scan_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	drone_scan_label.add_theme_font_size_override("font_size", 13)
+	drone_scan_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3, 1.0))
+	drone_scan_panel.add_child(drone_scan_label)
+
+	drone_scan_panel.hide()
+	add_child(drone_scan_panel)
+
+func set_skull_drone_scanning(is_scanning: bool) -> void:
+	if not drone_scan_panel:
+		return
+	if is_scanning:
+		drone_scan_panel.show()
+		if not _drone_scan_tween or not _drone_scan_tween.is_valid():
+			_drone_scan_tween = create_tween().set_loops()
+			_drone_scan_tween.tween_property(drone_scan_panel, "modulate:a", 0.45, 0.35)
+			_drone_scan_tween.tween_property(drone_scan_panel, "modulate:a", 1.0, 0.35)
+	else:
+		if _drone_scan_tween and _drone_scan_tween.is_valid():
+			_drone_scan_tween.kill()
+		drone_scan_panel.modulate.a = 1.0
+		drone_scan_panel.hide()
 
 # =========================================================================
 # БОЕВОЙ ФИДБЕК: ХЭДШОТ, ХИТМАРКЕР И ОПОВЕЩЕНИЯ

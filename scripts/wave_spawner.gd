@@ -2,6 +2,7 @@ extends Node3D
 
 # --- Константы ---
 const ENEMY_SCENE: PackedScene = preload("res://scenes/enemy.tscn")
+const SKULL_DRONE_SCENE: PackedScene = preload("res://scenes/skull_drone.tscn")
 
 # --- Настройки штурмов и спавна ---
 @export var min_spawn_dist    : float = 18.0
@@ -35,6 +36,10 @@ var last_countdown_sec    : int   = -1
 var enemies_alive         : int   = 0
 var enemies_to_spawn      : Array[String] = []
 var spawn_timer           : float = 0.0
+
+# --- Дрон-череп (Skull Drone) ---
+var is_skull_drone_scanning: bool  = false
+var skull_drone_spawn_timer: float = 22.0 # Появление первого дрона-разведчика через 22 сек спокойного пути
 
 # --- Контейнер для врагов ---
 var enemies_container     : Node3D = null
@@ -112,9 +117,10 @@ func _process(delta: float) -> void:
 		straggler_cleanup_timer = 0.0
 		_cleanup_stragglers(caravan)
 
-	# 1. Период передышки после отбитого штурма
+	# 1. Период передышки после отбитого штурма (если дрон сканирует — таймер идет вдвое быстрее)
 	if is_in_break:
-		break_timer -= delta
+		var break_speed: float = 2.0 if is_skull_drone_scanning else 1.0
+		break_timer -= delta * break_speed
 		var sec_left: int = int(ceil(maxf(0.0, break_timer)))
 		if sec_left != last_countdown_sec:
 			last_countdown_sec = sec_left
@@ -141,6 +147,8 @@ func _process(delta: float) -> void:
 		return
 
 	# 3. Режим исследования и движения каравана: умеренное комфортное накопление угрозы
+	# (При активном сканировании дроном-черепом скорость приближения волны удваивается x2)
+	var drone_mult: float = 2.0 if is_skull_drone_scanning else 1.0
 	var growth_rate: float = 0.85 if difficulty_tier == 1 else (1.20 + float(difficulty_tier) * 0.45)
 	if dist_traveled >= 450.0 and dist_traveled <= 1100.0:
 		growth_rate *= 1.30 # Красный каньон
@@ -148,7 +156,7 @@ func _process(delta: float) -> void:
 		growth_rate *= 1.60 # Выжженная кибер-пустошь
 
 	# Скорость роста угрозы
-	var threat_mult: float = 1.1 if difficulty_tier == 1 else 2.0
+	var threat_mult: float = (1.1 if difficulty_tier == 1 else 2.0) * drone_mult
 	if not is_moving:
 		threat_mult *= 0.35
 	elif is_boosted:
@@ -166,13 +174,16 @@ func _process(delta: float) -> void:
 	# До 5 врагов на 1 этапе, 9 на 2 этапе, до 14 со 3 этапа
 	var max_march_enemies: int = 5 if difficulty_tier == 1 else (9 if difficulty_tier == 2 else 14)
 	if is_moving and enemies_alive < max_march_enemies:
-		march_encounter_timer -= delta
+		march_encounter_timer -= delta * drone_mult
 		if march_encounter_timer <= 0.0:
 			var next_interval: float = randf_range(6.5, 10.5) if difficulty_tier == 1 else randf_range(4.5, 7.5)
 			if is_boosted:
 				next_interval = maxf(2.5, next_interval * 0.55)
 			march_encounter_timer = next_interval
 			_spawn_march_encounter(caravan, is_boosted)
+
+	# --- ПЕРИОДИЧЕСКИЙ СПАВН ДРОНА-ЧЕРЕПА (ПОКА НЕТ ВОЛНЫ) ---
+	_process_skull_drone_spawning(delta, caravan)
 
 	# Одиночные разведчики (только со 2 этапа)
 	if difficulty_tier >= 2:
@@ -300,6 +311,7 @@ func _spawn_scout_ambush() -> void:
 # ФЛАНГОВАЯ ЗАСАДА (FLANK AMBUSH)
 # -------------------------------------------------------------------------
 func _trigger_flank_ambush() -> void:
+	_dismiss_skull_drones()
 	current_phase = ThreatPhase.AMBUSH
 	wave_active = true
 	wave_active_timer = 0.0
@@ -325,6 +337,7 @@ func _trigger_flank_ambush() -> void:
 # ПОЛНОМАСШТАБНЫЙ ШТУРМ КАРАВАНА (FULL ASSAULT HORDE)
 # -------------------------------------------------------------------------
 func _trigger_full_assault() -> void:
+	_dismiss_skull_drones()
 	current_phase = ThreatPhase.ASSAULT
 	assault_number += 1
 	wave_active = true
@@ -690,6 +703,7 @@ func sync_full_spawner_state(w_num: int, is_active: bool, in_break: bool, break_
 
 @rpc("authority", "reliable")
 func sync_wave_started(w_num: int, w_name: String, rem: int) -> void:
+	_dismiss_skull_drones()
 	assault_number = w_num
 	wave_active = true
 	is_in_break = false
@@ -723,3 +737,58 @@ func sync_wave_countdown(seconds: int) -> void:
 @rpc("authority", "reliable")
 func sync_reset_to_wave_zero() -> void:
 	reset_to_wave_zero()
+
+# =========================================================================
+# МЕХАНИКА ДРОНА-ЧЕРЕПА (SKULL DRONE SCOUT)
+# =========================================================================
+func _process_skull_drone_spawning(delta: float, caravan: Node3D) -> void:
+	if wave_active or is_in_break or is_camp_paused:
+		return
+
+	var drones := get_tree().get_nodes_in_group("skull_drone")
+	if drones.is_empty():
+		skull_drone_spawn_timer -= delta
+		if skull_drone_spawn_timer <= 0.0:
+			skull_drone_spawn_timer = randf_range(38.0, 58.0)
+			_spawn_skull_drone(caravan)
+	else:
+		skull_drone_spawn_timer = randf_range(38.0, 58.0)
+
+func _spawn_skull_drone(caravan: Node3D) -> void:
+	if not SKULL_DRONE_SCENE:
+		return
+	var drone = SKULL_DRONE_SCENE.instantiate() as Node3D
+	if not drone:
+		return
+
+	var center := caravan.global_position if (caravan and is_instance_valid(caravan)) else global_position
+	var angle := randf() * TAU
+	var spawn_dist := randf_range(28.0, 40.0)
+	var spawn_pos := center + Vector3(cos(angle) * spawn_dist, randf_range(9.0, 14.0), sin(angle) * spawn_dist)
+	drone.global_position = spawn_pos
+
+	if enemies_container:
+		enemies_container.add_child(drone)
+	else:
+		add_child(drone)
+
+func set_skull_drone_scanning(val: bool) -> void:
+	if is_skull_drone_scanning == val:
+		return
+	is_skull_drone_scanning = val
+	_notify_hud_scanning_status(val)
+
+func _notify_hud_scanning_status(val: bool) -> void:
+	if not is_inside_tree() or not get_tree() or not get_tree().current_scene:
+		return
+	var hud = get_tree().current_scene.find_child("HUD", true, false)
+	if hud and hud.has_method("set_skull_drone_scanning"):
+		hud.set_skull_drone_scanning(val)
+
+func _dismiss_skull_drones() -> void:
+	is_skull_drone_scanning = false
+	_notify_hud_scanning_status(false)
+	var drones := get_tree().get_nodes_in_group("skull_drone")
+	for d in drones:
+		if is_instance_valid(d) and d.has_method("start_flee"):
+			d.start_flee()
