@@ -20,6 +20,12 @@ var toast_tween         : Tween              = null
 var headshot_audio      : AudioStreamPlayer  = null
 var snd_headshot_stream : AudioStream        = null
 
+# --- Out of Ammo Meme ---
+var no_ammo_meme_panel   : PanelContainer     = null
+var no_ammo_meme_texture : TextureRect        = null
+var _meme_tween          : Tween              = null
+var _last_had_ammo       : bool               = true
+
 var target_player : Node = null
 var _displayed_health: int = -1
 
@@ -151,6 +157,39 @@ func _setup_combat_ui() -> void:
 	toast_panel.modulate.a = 0.0
 	add_child(toast_panel)
 
+	# 6. Мем "Так много пидрил и так мало патронов" при 0 патронах
+	no_ammo_meme_panel = PanelContainer.new()
+	no_ammo_meme_panel.name = "NoAmmoMemePanel"
+	no_ammo_meme_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	no_ammo_meme_panel.offset_left = -340.0
+	no_ammo_meme_panel.offset_top = -290.0
+	no_ammo_meme_panel.offset_right = -20.0
+	no_ammo_meme_panel.offset_bottom = -105.0
+	no_ammo_meme_panel.pivot_offset = Vector2(160.0, 92.0)
+	no_ammo_meme_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var meme_style := StyleBoxFlat.new()
+	meme_style.bg_color = Color(0.04, 0.03, 0.03, 0.92)
+	meme_style.border_color = Color(0.95, 0.22, 0.18, 0.90)
+	meme_style.set_border_width_all(2)
+	meme_style.set_corner_radius_all(8)
+	meme_style.shadow_color = Color(0.0, 0.0, 0.0, 0.65)
+	meme_style.shadow_size = 12
+	no_ammo_meme_panel.add_theme_stylebox_override("panel", meme_style)
+
+	no_ammo_meme_texture = TextureRect.new()
+	no_ammo_meme_texture.name = "MemeImage"
+	var meme_tex = load("res://assets/textures/out_of_ammo_meme.jpg")
+	if meme_tex:
+		no_ammo_meme_texture.texture = meme_tex
+	no_ammo_meme_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	no_ammo_meme_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	no_ammo_meme_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	no_ammo_meme_panel.add_child(no_ammo_meme_texture)
+
+	no_ammo_meme_panel.hide()
+	add_child(no_ammo_meme_panel)
+
 # =========================================================================
 # БОЕВОЙ ФИДБЕК: ХЭДШОТ, ХИТМАРКЕР И ОПОВЕЩЕНИЯ
 # =========================================================================
@@ -268,6 +307,14 @@ func _on_health_changed(value: int) -> void:
 
 func _on_ammo_changed(current: int, total: int) -> void:
 	ammo_label.text = "В МАГАЗИНЕ: %d    В ЗАПАСЕ: %d" % [current, total]
+	if (current + total) <= 0:
+		if _last_had_ammo:
+			_last_had_ammo = false
+			show_out_of_ammo_meme()
+	else:
+		if not _last_had_ammo:
+			_last_had_ammo = true
+			hide_out_of_ammo_meme()
 
 func _on_weapon_changed(w_name: String, _tex: Texture2D, cur_ammo: int, tot_ammo: int) -> void:
 	var display_names := {
@@ -279,6 +326,38 @@ func _on_weapon_changed(w_name: String, _tex: Texture2D, cur_ammo: int, tot_ammo
 	}
 	weapon_name_label.text = display_names.get(w_name, w_name)
 	ammo_label.text = "В МАГАЗИНЕ: %d    В ЗАПАСЕ: %d" % [cur_ammo, tot_ammo]
+	if (cur_ammo + tot_ammo) <= 0:
+		if _last_had_ammo:
+			_last_had_ammo = false
+			show_out_of_ammo_meme()
+	else:
+		if not _last_had_ammo:
+			_last_had_ammo = true
+			hide_out_of_ammo_meme()
+
+func show_out_of_ammo_meme() -> void:
+	if not no_ammo_meme_panel:
+		return
+	if _meme_tween and _meme_tween.is_valid():
+		_meme_tween.kill()
+
+	no_ammo_meme_panel.scale = Vector2(0.65, 0.65)
+	no_ammo_meme_panel.modulate.a = 1.0
+	no_ammo_meme_panel.show()
+
+	_meme_tween = create_tween()
+	_meme_tween.tween_property(no_ammo_meme_panel, "scale", Vector2(1.0, 1.0), 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_meme_tween.tween_interval(3.2)
+	_meme_tween.tween_property(no_ammo_meme_panel, "modulate:a", 0.0, 0.5)
+	_meme_tween.tween_callback(no_ammo_meme_panel.hide)
+
+func hide_out_of_ammo_meme() -> void:
+	if no_ammo_meme_panel and no_ammo_meme_panel.visible:
+		if _meme_tween and _meme_tween.is_valid():
+			_meme_tween.kill()
+		_meme_tween = create_tween()
+		_meme_tween.tween_property(no_ammo_meme_panel, "modulate:a", 0.0, 0.25)
+		_meme_tween.tween_callback(no_ammo_meme_panel.hide)
 
 func _on_player_died() -> void:
 	death_screen.show()

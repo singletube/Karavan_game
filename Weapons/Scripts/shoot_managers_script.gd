@@ -3,14 +3,36 @@ extends Node3D
 var current_weapon : WeaponSlot
 var point_of_collision : Vector3 = Vector3.ZERO
 var rng : RandomNumberGenerator
+var _dry_fire_timer: float = 0.0
 
 @onready var weapon_manager : Node3D = %WeaponManager
+
+func _trigger_dry_fire_out_of_ammo() -> void:
+	var now: float = Time.get_ticks_msec() / 1000.0
+	if now - _dry_fire_timer < 0.35:
+		return
+	_dry_fire_timer = now
+	if weapon_manager.hud and weapon_manager.hud.has_method("show_out_of_ammo_meme"):
+		weapon_manager.hud.show_out_of_ammo_meme()
+	weapon_manager.weapon_sound_management(preload("res://assets/audio/reload_click.wav"), 1.4)
 
 func get_current_weapon(current_weapon_ref : WeaponSlot) -> void:
 	#get current weapon resources
 	current_weapon = current_weapon_ref
 	
 func shoot() -> void:
+	if !current_weapon.resources.is_shooting and !current_weapon.resources.is_reloading:
+		var res: WeaponResource = current_weapon.resources
+		var is_chainsaw: bool = (res.weapon_name == "Chainsaw")
+		var gmm = get_node_or_null("/root/GodModeManager")
+		var is_inf: bool = (gmm != null and gmm.infinite_ammo)
+		if not is_inf and not is_chainsaw:
+			var mag: int = res.total_ammo_in_mag
+			var res_ammo: int = weapon_manager.ammo_manager.ammo_dict.get(res.ammo_type, 0)
+			if mag < res.nb_proj_shots_at_same_time and (res.all_ammo_in_mag or res_ammo <= 0):
+				_trigger_dry_fire_out_of_ammo()
+				return
+
 	if !current_weapon.resources.is_shooting and (
 	#magazine isn't empty, and has >= ammo than the number of projectiles required for a shot
 	(current_weapon.resources.total_ammo_in_mag > 0 and current_weapon.resources.total_ammo_in_mag >= current_weapon.resources.nb_proj_shots_at_same_time)
@@ -77,6 +99,13 @@ func shoot() -> void:
 			if m and m.has_method("set_sawing"):
 				m.set_sawing(false)
 		current_weapon.resources.is_shooting = false
+
+		if not is_inf_ammo and current_weapon.resources.weapon_name != "Chainsaw":
+			var end_mag: int = current_weapon.resources.total_ammo_in_mag
+			var end_res: int = weapon_manager.ammo_manager.ammo_dict.get(current_weapon.resources.ammo_type, 0)
+			if end_mag <= 0 and end_res <= 0:
+				if weapon_manager.hud and weapon_manager.hud.has_method("show_out_of_ammo_meme"):
+					weapon_manager.hud.show_out_of_ammo_meme()
 		
 func get_camera_fov() -> Vector3:  
 	var camera : Camera3D = %Camera

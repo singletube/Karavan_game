@@ -58,6 +58,12 @@ var hitmarker_ctrl: Control = null
 var hitmarker_color: Color = Color.WHITE
 var headshot_audio: AudioStreamPlayer = null
 
+# --- Out of Ammo Meme ---
+var no_ammo_meme_panel: PanelContainer = null
+var no_ammo_meme_texture: TextureRect = null
+var _last_weapon_had_ammo: bool = true
+var _meme_tween: Tween = null
+
 var compass_panel: PanelContainer
 var compass_tape: Control
 var compass_caravan_label: Label
@@ -193,6 +199,17 @@ func display_weapon_properties() -> void:
 
 		nb_ammo_in_mag_label_text.text = str(magazine)
 		nb_ammo_total_label_text.text = " | %d" % reserve
+
+		var total_available := magazine + reserve
+		if resource.weapon_name != "Chainsaw":
+			if total_available == 0:
+				if _last_weapon_had_ammo:
+					_last_weapon_had_ammo = false
+					show_out_of_ammo_meme()
+			else:
+				if not _last_weapon_had_ammo:
+					_last_weapon_had_ammo = true
+					hide_out_of_ammo_meme()
 
 func _localized_weapon_name(weapon_name: String) -> String:
 	var names := {
@@ -539,6 +556,39 @@ func _build_combat_feedback_ui() -> void:
 	hitmarker_ctrl.hide()
 	add_child(hitmarker_ctrl)
 
+	# --- МЕМ "ТАК МНОГО ПИДРИЛ И ТАК МАЛО ПАТРОНОВ" ПРИ 0 ПАТРОНАХ ---
+	no_ammo_meme_panel = PanelContainer.new()
+	no_ammo_meme_panel.name = "NoAmmoMemePanel"
+	no_ammo_meme_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	no_ammo_meme_panel.offset_left = -340.0
+	no_ammo_meme_panel.offset_top = -290.0
+	no_ammo_meme_panel.offset_right = -20.0
+	no_ammo_meme_panel.offset_bottom = -105.0
+	no_ammo_meme_panel.pivot_offset = Vector2(160.0, 92.0)
+	no_ammo_meme_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var meme_style := StyleBoxFlat.new()
+	meme_style.bg_color = Color(0.04, 0.03, 0.03, 0.92)
+	meme_style.border_color = Color(0.95, 0.22, 0.18, 0.90)
+	meme_style.set_border_width_all(2)
+	meme_style.set_corner_radius_all(8)
+	meme_style.shadow_color = Color(0.0, 0.0, 0.0, 0.65)
+	meme_style.shadow_size = 12
+	no_ammo_meme_panel.add_theme_stylebox_override("panel", meme_style)
+
+	no_ammo_meme_texture = TextureRect.new()
+	no_ammo_meme_texture.name = "MemeImage"
+	var meme_tex = load("res://assets/textures/out_of_ammo_meme.jpg")
+	if meme_tex:
+		no_ammo_meme_texture.texture = meme_tex
+	no_ammo_meme_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	no_ammo_meme_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	no_ammo_meme_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	no_ammo_meme_panel.add_child(no_ammo_meme_texture)
+
+	no_ammo_meme_panel.hide()
+	add_child(no_ammo_meme_panel)
+
 func _draw_hitmarker() -> void:
 	if not hitmarker_ctrl:
 		return
@@ -585,6 +635,30 @@ func show_hit_feedback() -> void:
 		tw_hm.tween_interval(0.05)
 		tw_hm.tween_property(hitmarker_ctrl, "modulate:a", 0.0, 0.09)
 		tw_hm.chain().tween_callback(hitmarker_ctrl.hide)
+
+func show_out_of_ammo_meme() -> void:
+	if not no_ammo_meme_panel:
+		return
+	if _meme_tween and _meme_tween.is_valid():
+		_meme_tween.kill()
+
+	no_ammo_meme_panel.scale = Vector2(0.65, 0.65)
+	no_ammo_meme_panel.modulate.a = 1.0
+	no_ammo_meme_panel.show()
+
+	_meme_tween = create_tween()
+	_meme_tween.tween_property(no_ammo_meme_panel, "scale", Vector2(1.0, 1.0), 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_meme_tween.tween_interval(3.2)
+	_meme_tween.tween_property(no_ammo_meme_panel, "modulate:a", 0.0, 0.5)
+	_meme_tween.tween_callback(no_ammo_meme_panel.hide)
+
+func hide_out_of_ammo_meme() -> void:
+	if no_ammo_meme_panel and no_ammo_meme_panel.visible:
+		if _meme_tween and _meme_tween.is_valid():
+			_meme_tween.kill()
+		_meme_tween = create_tween()
+		_meme_tween.tween_property(no_ammo_meme_panel, "modulate:a", 0.0, 0.25)
+		_meme_tween.tween_callback(no_ammo_meme_panel.hide)
 
 func _on_wave_started(_wave_number: int, _wave_name: String) -> void:
 	pass

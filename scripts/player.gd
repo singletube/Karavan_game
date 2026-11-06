@@ -329,10 +329,23 @@ func _handle_shoot(delta: float) -> void:
 		fire_timer = w["fire_rate"]
 	elif (Input.is_action_just_pressed("reload") or (Input.is_action_pressed("shoot") and w["cur_mag"] == 0)) and w["total_ammo"] > 0 and w["cur_mag"] < w["max_mag"]:
 		_reload()
+	elif Input.is_action_pressed("shoot") and fire_timer <= 0.0 and w["cur_mag"] <= 0 and w["total_ammo"] <= 0:
+		fire_timer = 0.35
+		var hud := get_tree().get_first_node_in_group("hud")
+		if hud and hud.has_method("show_out_of_ammo_meme"):
+			hud.show_out_of_ammo_meme()
+		if shoot_sound:
+			shoot_sound.stream = snd_reload
+			shoot_sound.play()
 
 func _fire() -> void:
 	var w: Dictionary = weapons[current_weapon_idx]
 	w["cur_mag"] -= 1
+
+	if w["cur_mag"] <= 0 and w["total_ammo"] <= 0:
+		var hud := get_tree().get_first_node_in_group("hud")
+		if hud and hud.has_method("show_out_of_ammo_meme"):
+			hud.show_out_of_ammo_meme()
 
 	emit_signal("ammo_changed", w["cur_mag"], w["total_ammo"])
 	emit_signal("weapon_fired", w["recoil"])
