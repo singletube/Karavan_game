@@ -43,10 +43,7 @@ func _close_menu() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func _unhandled_input(event: InputEvent) -> void:
-	# Клавиша F1 открывает/закрывает сетевое меню
-	if event is InputEventKey and event.pressed and event.keycode == KEY_F1:
-		if panel.visible:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if panel.visible and (event.keycode == KEY_ESCAPE or event.keycode == KEY_F1):
 			_close_menu()
-		else:
-			panel.show()
-			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+			get_viewport().set_input_as_handled()

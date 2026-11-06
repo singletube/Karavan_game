@@ -11,6 +11,8 @@ extends Control
 
 # --- Боевой фидбек: хэдшот, хитмаркер, уведомления и подсказки ---
 var hitmarker_ctrl      : Control            = null
+var headshot_container  : VBoxContainer      = null
+var headshot_icon       : TextureRect        = null
 var headshot_label      : Label              = null
 var headshot_tween      : Tween              = null
 var interact_prompt     : Label              = null
@@ -19,6 +21,10 @@ var toast_label         : Label              = null
 var toast_tween         : Tween              = null
 var headshot_audio      : AudioStreamPlayer  = null
 var snd_headshot_stream : AudioStream        = null
+
+# --- Pause Menu ---
+var pause_overlay       : Control            = null
+var pause_status_label  : Label              = null
 
 # --- Out of Ammo Meme ---
 var no_ammo_meme_panel   : PanelContainer     = null
@@ -30,6 +36,7 @@ var target_player : Node = null
 var _displayed_health: int = -1
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_to_group("hud")
 	hit_flash.modulate.a = 0.0
 	death_screen.hide()
@@ -48,6 +55,7 @@ func _ready() -> void:
 
 	# Инициализация боевого UI (хитмаркеры, хэдшоты, уведомления)
 	_setup_combat_ui()
+	_build_pause_menu()
 
 	await get_tree().process_frame
 	_find_and_connect_player()
@@ -74,30 +82,53 @@ func _setup_combat_ui() -> void:
 		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hitmarker_ctrl.add_child(tick)
 
-	# 2. Оповещение хэдшота (анимированный баннер "⚡ В ГОЛОВУ! x2.5")
+	# 2. Оповещение хэдшота с картинкой-черепом над прицелом
+	headshot_container = VBoxContainer.new()
+	headshot_container.name = "HeadshotContainer"
+	headshot_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	headshot_container.set_anchors_preset(Control.PRESET_CENTER)
+	headshot_container.offset_left = -110.0
+	headshot_container.offset_right = 110.0
+	headshot_container.offset_top = -145.0
+	headshot_container.offset_bottom = -25.0
+	headshot_container.pivot_offset = Vector2(110.0, 60.0)
+	headshot_container.add_theme_constant_override("separation", 2)
+	headshot_container.alignment = BoxContainer.ALIGNMENT_CENTER
+
+	headshot_icon = TextureRect.new()
+	headshot_icon.name = "HeadshotIcon"
+	headshot_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if ResourceLoader.exists("res://assets/textures/headshot_icon.png"):
+		headshot_icon.texture = load("res://assets/textures/headshot_icon.png")
+	headshot_icon.custom_minimum_size = Vector2(74.0, 74.0)
+	headshot_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	headshot_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	headshot_container.add_child(headshot_icon)
+
 	headshot_label = Label.new()
 	headshot_label.name = "HeadshotLabel"
 	headshot_label.text = "⚡ В ГОЛОВУ! x2.5"
 	headshot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	headshot_label.add_theme_font_size_override("font_size", 22)
+	headshot_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	headshot_label.add_theme_font_size_override("font_size", 19)
 	headshot_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.18, 1.0))
 	headshot_label.add_theme_color_override("font_shadow_color", Color(0.9, 0.1, 0.05, 0.85))
 	headshot_label.add_theme_constant_override("shadow_offset_x", 2)
 	headshot_label.add_theme_constant_override("shadow_offset_y", 2)
 	headshot_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	headshot_label.set_anchors_preset(Control.PRESET_CENTER)
-	headshot_label.offset_left = -160.0
-	headshot_label.offset_right = 160.0
-	headshot_label.offset_top = -68.0
-	headshot_label.offset_bottom = -38.0
-	headshot_label.modulate.a = 0.0
-	add_child(headshot_label)
+	headshot_container.add_child(headshot_label)
 
-	# 3. Аудиосопровождение хэдшота
+	headshot_container.modulate.a = 0.0
+	add_child(headshot_container)
+
+	# 3. Аудиосопровождение хэдшота (новый звук от пользователя, потише)
 	headshot_audio = AudioStreamPlayer.new()
 	headshot_audio.name = "HeadshotAudio"
-	headshot_audio.volume_db = 1.5
-	if ResourceLoader.exists("res://assets/audio/headshot.wav"):
+	headshot_audio.volume_db = -8.0
+	if ResourceLoader.exists("res://assets/audio/headshot.mp3"):
+		snd_headshot_stream = load("res://assets/audio/headshot.mp3")
+		headshot_audio.stream = snd_headshot_stream
+	elif ResourceLoader.exists("res://assets/audio/headshot.wav"):
 		snd_headshot_stream = load("res://assets/audio/headshot.wav")
 		headshot_audio.stream = snd_headshot_stream
 	add_child(headshot_audio)
@@ -207,19 +238,15 @@ func show_headshot_feedback() -> void:
 		h_tween.tween_property(hitmarker_ctrl, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		h_tween.tween_property(hitmarker_ctrl, "modulate:a", 0.0, 0.35).set_delay(0.08)
 
-	# 3. Анимированный текст "⚡ В ГОЛОВУ! x2.5"
-	if headshot_label:
+	# 3. Анимированный баннер с черепом "⚡ В ГОЛОВУ! x2.5"
+	if headshot_container:
 		if headshot_tween and headshot_tween.is_valid():
 			headshot_tween.kill()
-		headshot_label.modulate.a = 1.0
-		headshot_label.scale = Vector2(1.3, 1.3)
-		headshot_label.pivot_offset = headshot_label.size * 0.5
-		headshot_label.offset_top = -68.0
-
+		headshot_container.modulate.a = 1.0
+		headshot_container.scale = Vector2(1.4, 1.4)
 		headshot_tween = create_tween().set_parallel(true)
-		headshot_tween.tween_property(headshot_label, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		headshot_tween.tween_property(headshot_label, "offset_top", -84.0, 0.65).set_trans(Tween.TRANS_SINE)
-		headshot_tween.tween_property(headshot_label, "modulate:a", 0.0, 0.35).set_delay(0.35)
+		headshot_tween.tween_property(headshot_container, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		headshot_tween.tween_property(headshot_container, "modulate:a", 0.0, 0.25).set_delay(0.50)
 
 func show_hit_feedback() -> void:
 	# Обычное попадание по телу: короткая белая засечка хитмаркера
@@ -368,12 +395,171 @@ func _flash_damage() -> void:
 	tween.tween_property(hit_flash, "modulate:a", 0.0, 0.4)
 
 func _process(_delta: float) -> void:
+	if get_tree().paused:
+		return
 	if is_instance_valid(target_player):
 		var current_health: Variant = target_player.get("health")
 		if current_health != null and int(current_health) != _displayed_health:
 			_on_health_changed(int(current_health))
-	if Input.is_action_just_pressed("ui_cancel"):
-		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
+
+# =========================================================================
+# МЕНЮ ПАУЗЫ (ESC / F1 С ПОЛНОЙ ОСТАНОВКОЙ ВРЕМЕНИ В ОДИНОЧНОЙ ИГРЕ)
+# =========================================================================
+func _build_pause_menu() -> void:
+	pause_overlay = ColorRect.new()
+	pause_overlay.name = "PauseOverlay"
+	pause_overlay.process_mode = Node.PROCESS_MODE_ALWAYS
+	pause_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pause_overlay.color = Color(0.04, 0.035, 0.03, 0.85)
+	pause_overlay.hide()
+
+	var center_box := CenterContainer.new()
+	center_box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pause_overlay.add_child(center_box)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(380.0, 360.0)
+
+	var p_style := StyleBoxFlat.new()
+	p_style.bg_color = Color(0.08, 0.065, 0.05, 0.95)
+	p_style.border_color = Color(0.90, 0.75, 0.35, 0.70)
+	p_style.set_border_width_all(2)
+	p_style.set_corner_radius_all(12)
+	p_style.content_margin_left = 28.0
+	p_style.content_margin_right = 28.0
+	p_style.content_margin_top = 24.0
+	p_style.content_margin_bottom = 24.0
+	p_style.shadow_color = Color(0.0, 0.0, 0.0, 0.75)
+	p_style.shadow_size = 16
+	panel.add_theme_stylebox_override("panel", p_style)
+	center_box.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 12)
+	panel.add_child(vbox)
+
+	# Заголовок
+	var title := Label.new()
+	title.text = "⏸  ПАУЗА"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 26)
+	title.add_theme_color_override("font_color", Color(1.0, 0.88, 0.45, 1.0))
+	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
+	title.add_theme_constant_override("shadow_offset_x", 2)
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	vbox.add_child(title)
+
+	pause_status_label = Label.new()
+	pause_status_label.text = "ОДИНОЧНАЯ ИГРА · ВРЕМЯ ОСТАНОВЛЕНО"
+	pause_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pause_status_label.add_theme_font_size_override("font_size", 11)
+	pause_status_label.add_theme_color_override("font_color", Color(0.45, 0.95, 0.55, 0.95))
+	vbox.add_child(pause_status_label)
+
+	var sep := HSeparator.new()
+	vbox.add_child(sep)
+
+	# Кнопка: Продолжить
+	var resume_btn := _create_menu_button("▶  ПРОДОЛЖИТЬ  [ESC / F1]")
+	resume_btn.pressed.connect(resume_game)
+	vbox.add_child(resume_btn)
+
+	# Кнопка: Полный экран
+	var fs_btn := _create_menu_button("⛶  ПОЛНЫЙ ЭКРАН / ОКНО")
+	fs_btn.pressed.connect(toggle_fullscreen)
+	vbox.add_child(fs_btn)
+
+	# Кнопка: Сетевое меню / Сервер
+	var net_btn := _create_menu_button("🌐  СЕТЕВОЕ МЕНЮ / СЕРВЕР")
+	net_btn.pressed.connect(open_network_lobby)
+	vbox.add_child(net_btn)
+
+	# Кнопка: Выход
+	var quit_btn := _create_menu_button("✕  ВЫХОД ИЗ ИГРЫ", Color(1.0, 0.4, 0.35))
+	quit_btn.pressed.connect(func(): get_tree().quit())
+	vbox.add_child(quit_btn)
+
+	add_child(pause_overlay)
+
+func _create_menu_button(btn_text: String, text_col: Color = Color(1.0, 0.95, 0.85)) -> Button:
+	var btn := Button.new()
+	btn.text = btn_text
+	btn.custom_minimum_size = Vector2(0.0, 42.0)
+	btn.add_theme_font_size_override("font_size", 13)
+	btn.add_theme_color_override("font_color", text_col)
+	btn.add_theme_color_override("font_hover_color", Color(1.0, 0.92, 0.4))
+	btn.focus_mode = Control.FOCUS_NONE
+
+	var normal_s := StyleBoxFlat.new()
+	normal_s.bg_color = Color(0.14, 0.12, 0.10, 0.9)
+	normal_s.border_color = Color(0.55, 0.45, 0.25, 0.5)
+	normal_s.set_border_width_all(1)
+	normal_s.set_corner_radius_all(6)
+	btn.add_theme_stylebox_override("normal", normal_s)
+
+	var hover_s := StyleBoxFlat.new()
+	hover_s.bg_color = Color(0.24, 0.19, 0.14, 0.95)
+	hover_s.border_color = Color(0.95, 0.80, 0.35, 0.9)
+	hover_s.set_border_width_all(1)
+	hover_s.set_corner_radius_all(6)
+	btn.add_theme_stylebox_override("hover", hover_s)
+
+	var press_s := StyleBoxFlat.new()
+	press_s.bg_color = Color(0.32, 0.25, 0.18, 1.0)
+	press_s.border_color = Color(1.0, 0.88, 0.4, 1.0)
+	press_s.set_border_width_all(1)
+	press_s.set_corner_radius_all(6)
+	btn.add_theme_stylebox_override("pressed", press_s)
+
+	return btn
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE or event.keycode == KEY_F1:
+			toggle_pause()
+			get_viewport().set_input_as_handled()
+
+func toggle_pause() -> void:
+	if pause_overlay and pause_overlay.visible:
+		resume_game()
+	else:
+		open_pause_menu()
+
+func open_pause_menu() -> void:
+	if not pause_overlay:
+		return
+
+	var is_singleplayer: bool = (not multiplayer.has_multiplayer_peer()) or (multiplayer.get_peers().is_empty())
+	if is_singleplayer:
+		get_tree().paused = true
+		if pause_status_label:
+			pause_status_label.text = "ОДИНОЧНАЯ ИГРА · ВРЕМЯ ОСТАНОВЛЕНО"
+			pause_status_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5, 0.95))
+	else:
+		if pause_status_label:
+			pause_status_label.text = "СЕТЕВАЯ ИГРА · МИР НЕ ОСТАНАВЛИВАЕТСЯ"
+			pause_status_label.add_theme_color_override("font_color", Color(1.0, 0.65, 0.3, 0.95))
+
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	pause_overlay.show()
+
+func resume_game() -> void:
+	if pause_overlay:
+		pause_overlay.hide()
+	get_tree().paused = false
+	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+func toggle_fullscreen() -> void:
+	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN or DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+func open_network_lobby() -> void:
+	resume_game()
+	var net_menu = get_tree().current_scene.find_child("NetworkMenu", true, false)
+	if net_menu:
+		var p = net_menu.get_node_or_null("Panel")
+		if p:
+			p.show()
 			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-		else:
-			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)

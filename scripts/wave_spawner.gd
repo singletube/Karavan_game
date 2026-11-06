@@ -28,7 +28,7 @@ var is_in_break           : bool  = false
 var is_camp_paused        : bool  = false
 var break_timer           : float = 0.0
 var scout_timer           : float = 0.0
-var march_encounter_timer : float = 4.0 # Первое появление врагов вдали через 4 сек
+var march_encounter_timer : float = 6.5 # Первое появление врагов вдали через 6.5 сек
 var straggler_cleanup_timer: float = 0.0 # Таймер очистки отставших далеко позади врагов
 var hud_update_timer      : float = 0.0
 var last_countdown_sec    : int   = -1
@@ -59,10 +59,10 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_find_and_connect_hud()
 
-	# Динамичный старт: враги покажутся вдалеке через 4 сек
+	# Плавный сбалансированный старт: враги покажутся вдалеке через 6.5 сек
 	is_in_break = false
 	threat_level = 0.0
-	march_encounter_timer = 4.0
+	march_encounter_timer = 6.5
 
 func _setup_container() -> void:
 	var existing: Node = get_node_or_null("EnemiesContainer")
@@ -101,8 +101,8 @@ func _process(delta: float) -> void:
 		is_moving = not caravan.get("is_destroyed") and not caravan.get("is_blocked")
 		is_boosted = caravan.get("is_boosted") == true
 
-	# Уровень сложности (Tier) растет каждые 180 метров вглубь пустыни (ускоренная прогрессия)
-	var new_tier: int = maxi(1, 1 + int(dist_traveled / 180.0))
+	# Уровень сложности (Tier) растет каждые 240 метров вглубь пустыни (сбалансированная прогрессия)
+	var new_tier: int = maxi(1, 1 + int(dist_traveled / 240.0))
 	difficulty_tier = new_tier
 
 	# --- БЕЗУСЛОВНАЯ ОЧИСТКА ОТСТАВШИХ ЗОМБИ (каждые 1.5с) ---
@@ -140,19 +140,19 @@ func _process(delta: float) -> void:
 			_complete_assault()
 		return
 
-	# 3. Режим исследования и движения каравана: ускоренное накопление угрозы и столкновения
-	var growth_rate: float = 1.30 if difficulty_tier == 1 else (1.80 + float(difficulty_tier) * 0.70)
-	if dist_traveled >= 400.0 and dist_traveled <= 1000.0:
-		growth_rate *= 1.45 # Красный каньон
-	elif dist_traveled > 1000.0:
-		growth_rate *= 1.85 # Выжженная кибер-пустошь
+	# 3. Режим исследования и движения каравана: умеренное комфортное накопление угрозы
+	var growth_rate: float = 0.85 if difficulty_tier == 1 else (1.20 + float(difficulty_tier) * 0.45)
+	if dist_traveled >= 450.0 and dist_traveled <= 1100.0:
+		growth_rate *= 1.30 # Красный каньон
+	elif dist_traveled > 1100.0:
+		growth_rate *= 1.60 # Выжженная кибер-пустошь
 
-	# Скорость роста угрозы: динамичный темп
-	var threat_mult: float = 1.6 if difficulty_tier == 1 else 2.8
+	# Скорость роста угрозы
+	var threat_mult: float = 1.1 if difficulty_tier == 1 else 2.0
 	if not is_moving:
-		threat_mult *= 0.40
+		threat_mult *= 0.35
 	elif is_boosted:
-		threat_mult *= 3.8
+		threat_mult *= 2.6
 
 	threat_level = minf(100.0, threat_level + delta * growth_rate * threat_mult)
 
@@ -163,14 +163,14 @@ func _process(delta: float) -> void:
 		_notify_hud_threat()
 
 	# --- СТОЛКНОВЕНИЯ НА МАРШЕ ---
-	# До 8 врагов на 1 этапе, со 2 этапа до 18
-	var max_march_enemies: int = 8 if difficulty_tier == 1 else 18
+	# До 5 врагов на 1 этапе, 9 на 2 этапе, до 14 со 3 этапа
+	var max_march_enemies: int = 5 if difficulty_tier == 1 else (9 if difficulty_tier == 2 else 14)
 	if is_moving and enemies_alive < max_march_enemies:
 		march_encounter_timer -= delta
 		if march_encounter_timer <= 0.0:
-			var next_interval: float = randf_range(4.5, 7.5) if difficulty_tier == 1 else randf_range(3.0, 5.0)
+			var next_interval: float = randf_range(6.5, 10.5) if difficulty_tier == 1 else randf_range(4.5, 7.5)
 			if is_boosted:
-				next_interval = maxf(2.0, next_interval * 0.45)
+				next_interval = maxf(2.5, next_interval * 0.55)
 			march_encounter_timer = next_interval
 			_spawn_march_encounter(caravan, is_boosted)
 
@@ -217,24 +217,25 @@ func _pick_enemy_for_tier() -> String:
 	var roll := randf()
 	match difficulty_tier:
 		1:
-			# На 1 этапе 40% Runner для быстрого сближения и 60% Walker
-			return "Runner" if roll < 0.40 else "Walker"
+			# На 1 этапе преимущественно Walker (80%) и 20% Runner
+			return "Runner" if roll < 0.20 else "Walker"
 		2:
-			# Со 2 этапа сразу подключаются ползуны (Crawler) и громилы (Brute)
-			if roll < 0.25: return "Crawler"
-			elif roll < 0.60: return "Runner"
-			elif roll < 0.75: return "Brute"
+			# Со 2 этапа подключаются Runner, ползуны (Crawler) и редкие Brute
+			if roll < 0.15: return "Crawler"
+			elif roll < 0.45: return "Runner"
+			elif roll < 0.55: return "Brute"
 			else: return "Walker"
 		3:
-			if roll < 0.25: return "Spitter"
-			elif roll < 0.50: return "Brute"
-			elif roll < 0.75: return "Runner"
+			if roll < 0.20: return "Spitter"
+			elif roll < 0.40: return "Brute"
+			elif roll < 0.65: return "Runner"
+			elif roll < 0.85: return "Crawler"
 			else: return "Screamer"
 		_:
 			if roll < 0.20: return "Screamer"
 			elif roll < 0.40: return "Exploder"
-			elif roll < 0.65: return "Brute"
-			elif roll < 0.85: return "Spitter"
+			elif roll < 0.60: return "Brute"
+			elif roll < 0.80: return "Spitter"
 			else: return "Runner"
 
 # Регулярный спавн столкновений прямо ВПЕРЕДИ по курсу движения каравана
@@ -242,9 +243,9 @@ func _spawn_march_encounter(caravan: Node3D, boosted: bool) -> void:
 	if not caravan or not is_instance_valid(caravan):
 		return
 	var c_pos := caravan.global_position
-	# Спавним ЗАРАНЕЕ и ПОДАЛЬШЕ ВПЕРЕДИ (55-90м, при ускорении 85-135м)
-	var spawn_dist_ahead: float = randf_range(85.0, 135.0) if boosted else randf_range(55.0, 90.0)
-	var pack_size: int = randi_range(2, 3) if difficulty_tier == 1 else (randi_range(3, 5) if difficulty_tier == 2 else randi_range(5, 8))
+	# Спавним ЗАРАНЕЕ и ПОДАЛЬШЕ ВПЕРЕДИ (60-95м, при ускорении 90-140м)
+	var spawn_dist_ahead: float = randf_range(90.0, 140.0) if boosted else randf_range(60.0, 95.0)
+	var pack_size: int = randi_range(1, 2) if difficulty_tier == 1 else (randi_range(2, 3) if difficulty_tier == 2 else randi_range(3, 5))
 
 	var center_x := randf_range(-14.0, 14.0)
 	var center_z := c_pos.z - spawn_dist_ahead
