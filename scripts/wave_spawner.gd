@@ -39,7 +39,7 @@ var spawn_timer           : float = 0.0
 
 # --- Дрон-череп (Skull Drone) ---
 var is_skull_drone_scanning: bool  = false
-var skull_drone_spawn_timer: float = 22.0 # Появление первого дрона-разведчика через 22 сек спокойного пути
+var skull_drone_spawn_timer: float = 5.0 # Дрон-череп прилетает через 5 секунд в начале затишья
 
 # --- Контейнер для врагов ---
 var enemies_container     : Node3D = null
@@ -64,10 +64,11 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_find_and_connect_hud()
 
-	# Плавный сбалансированный старт: враги покажутся вдалеке через 6.5 сек
+	# Плавный сбалансированный старт: дрон прилетит через 5 сек затишья, враги покажутся вдалеке через 6.5 сек
 	is_in_break = false
 	threat_level = 0.0
 	march_encounter_timer = 6.5
+	skull_drone_spawn_timer = 5.0
 
 func _setup_container() -> void:
 	var existing: Node = get_node_or_null("EnemiesContainer")
@@ -127,6 +128,9 @@ func _process(delta: float) -> void:
 			wave_countdown.emit(sec_left)
 			if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
 				sync_wave_countdown.rpc(sec_left)
+
+		# В затишье передышки дрон-череп прилетает через 5 секунд и сканирует
+		_process_skull_drone_spawning(delta, caravan)
 
 		if break_timer <= 0.0:
 			is_in_break = false
@@ -218,6 +222,7 @@ func _start_break(duration: float) -> void:
 	break_timer = duration
 	last_countdown_sec = -1
 	current_phase = ThreatPhase.CALM
+	skull_drone_spawn_timer = 5.0 # Дрон-череп прилетает через 5 секунд в начале затишья
 	var sec: int = int(ceil(duration))
 	wave_countdown.emit(sec)
 	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
@@ -723,6 +728,7 @@ func sync_wave_started(w_num: int, w_name: String, rem: int) -> void:
 func sync_wave_completed(w_num: int) -> void:
 	wave_active = false
 	current_phase = ThreatPhase.CALM
+	skull_drone_spawn_timer = 5.0 # Дрон прилетит через 5 секунд в начале затишья
 	wave_completed.emit(w_num)
 	if has_node("/root/MusicManager"):
 		get_node("/root/MusicManager").set_combat_mode(false)
@@ -746,17 +752,17 @@ func sync_reset_to_wave_zero() -> void:
 # МЕХАНИКА ДРОНА-ЧЕРЕПА (SKULL DRONE SCOUT)
 # =========================================================================
 func _process_skull_drone_spawning(delta: float, caravan: Node3D) -> void:
-	if wave_active or is_in_break or is_camp_paused:
+	if wave_active or is_camp_paused:
 		return
 
 	var drones := get_tree().get_nodes_in_group("skull_drone")
 	if drones.is_empty():
 		skull_drone_spawn_timer -= delta
 		if skull_drone_spawn_timer <= 0.0:
-			skull_drone_spawn_timer = randf_range(38.0, 58.0)
+			skull_drone_spawn_timer = randf_range(20.0, 30.0) # Следующий дрон, если текущее затишье продолжается
 			_spawn_skull_drone(caravan)
 	else:
-		skull_drone_spawn_timer = randf_range(38.0, 58.0)
+		skull_drone_spawn_timer = randf_range(20.0, 30.0)
 
 func _spawn_skull_drone(caravan: Node3D) -> void:
 	if not SKULL_DRONE_SCENE:
