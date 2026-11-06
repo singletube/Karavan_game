@@ -11,6 +11,13 @@ var is_fleeing              : bool  = false
 var is_scanning             : bool  = false
 var flee_timer              : float = 0.0
 
+# Безопасные свойства для сетевой синхронизации и проверок состояния
+var attack_timer            : float = 0.0
+var hurt_timer              : float = 0.0
+var is_winding_up           : bool  = false
+var zombie_type             : String = "drone"
+var state                   : int   = 0
+
 # --- Полет и кружение по орбите ---
 var orbit_angle             : float = 0.0
 var orbit_radius            : float = 13.5

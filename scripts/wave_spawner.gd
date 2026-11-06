@@ -508,8 +508,12 @@ func _broadcast_enemies_batch() -> void:
 	var batch: Array = []
 	for child in enemies_container.get_children():
 		if is_instance_valid(child) and child is CharacterBody3D and not child.get("is_dead"):
-			var is_atk: bool = (child.get("state") == 2 and (child.get("is_winding_up") == true or child.get("attack_timer") > 0.0))
-			var is_hurt: bool = (child.get("hurt_timer") > 0.0)
+			if child.is_in_group("skull_drone"):
+				continue
+			var atk_t: float = float(child.get("attack_timer")) if child.get("attack_timer") != null else 0.0
+			var hurt_t: float = float(child.get("hurt_timer")) if child.get("hurt_timer") != null else 0.0
+			var is_atk: bool = (child.get("state") == 2 and (child.get("is_winding_up") == true or atk_t > 0.0))
+			var is_hurt: bool = (hurt_t > 0.0)
 			batch.append([
 				child.name,
 				child.global_position,
@@ -767,10 +771,7 @@ func _spawn_skull_drone(caravan: Node3D) -> void:
 	var spawn_pos := center + Vector3(cos(angle) * spawn_dist, randf_range(9.0, 14.0), sin(angle) * spawn_dist)
 	drone.global_position = spawn_pos
 
-	if enemies_container:
-		enemies_container.add_child(drone)
-	else:
-		add_child(drone)
+	add_child(drone)
 
 func set_skull_drone_scanning(val: bool) -> void:
 	if is_skull_drone_scanning == val:
