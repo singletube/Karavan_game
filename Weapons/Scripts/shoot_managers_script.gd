@@ -127,9 +127,14 @@ func hitscan_shot(point_of_collision_hitscan : Vector3) -> void:
 		var damage := maxf(1.0, current_weapon.resources.damage_per_proj * damage_scale * dropoff)
 		if target.is_in_group("HitableObjects"):
 			damage /= 6.0
+		var was_headshot: bool = (collider is Node and (collider as Node).is_in_group("EnemiesHead"))
+		var hit_enemy: bool = false
 		if target.has_method("take_damage"):
 			if target.is_in_group("Enemies") or target.is_in_group("enemy"):
-				target.call("take_damage", maxi(1, roundi(damage)), direction, hit.position)
+				hit_enemy = true
+				var dmg_res = target.call("take_damage", maxi(1, roundi(damage)), direction, hit.position)
+				if dmg_res is bool and dmg_res:
+					was_headshot = true
 				if current_weapon.resources.weapon_name == "Chainsaw":
 					_spawn_chainsaw_blood(hit.position)
 					if weapon_manager.hud and weapon_manager.hud.has_method("add_screen_blood_splatter"):
@@ -137,11 +142,22 @@ func hitscan_shot(point_of_collision_hitscan : Vector3) -> void:
 			else:
 				target.call("take_damage", maxi(1, roundi(damage)))
 		elif target.has_method("hitscan_hit"):
-			target.call("hitscan_hit", damage, direction, hit.position)
+			hit_enemy = true
+			var hit_res = target.call("hitscan_hit", damage, direction, hit.position)
+			if hit_res is bool and hit_res:
+				was_headshot = true
 			if current_weapon.resources.weapon_name == "Chainsaw":
 				_spawn_chainsaw_blood(hit.position)
 				if weapon_manager.hud and weapon_manager.hud.has_method("add_screen_blood_splatter"):
 					weapon_manager.hud.add_screen_blood_splatter(randi_range(2, 4))
+
+		if hit_enemy:
+			if was_headshot:
+				if weapon_manager.hud and weapon_manager.hud.has_method("show_headshot_feedback"):
+					weapon_manager.hud.show_headshot_feedback()
+			else:
+				if weapon_manager.hud and weapon_manager.hud.has_method("show_hit_feedback"):
+					weapon_manager.hud.show_hit_feedback()
 	elif collider is Node and (collider as Node).is_in_group("HitableObjects") and collider.has_method("hitscan_hit"):
 		var distance_ratio := clampf(origin.distance_to(hit.position) / maxf(current_weapon.resources.max_range, 1.0), 0.0, 1.0)
 		var damage_curve: Curve = current_weapon.resources.damage_dropoff

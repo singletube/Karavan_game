@@ -192,10 +192,11 @@ func _physics_process(delta: float) -> void:
 
 	# Поворот 3D модели по направлению движения / цели
 	if cyborg_model_3d and cyborg_model_3d.visible:
-		var is_moving: bool = (state == EnemyState.CHASE and velocity.length_squared() > 0.1)
+		var horizontal_speed: float = Vector2(velocity.x, velocity.z).length()
+		var is_moving: bool = (state == EnemyState.CHASE and horizontal_speed > 0.1)
 		var is_atk: bool = (state == EnemyState.ATTACK and (is_winding_up or attack_timer > 0.0))
 		var is_hurting: bool = (hurt_timer > 0.0)
-		cyborg_model_3d.update_animation(delta, is_moving, move_speed, is_atk, is_hurting, false)
+		cyborg_model_3d.update_animation(delta, is_moving, horizontal_speed, is_atk, is_hurting, false)
 
 		var move_dir := velocity
 		move_dir.y = 0.0
@@ -559,29 +560,57 @@ func _attack_exploder() -> void:
 		s_fx.add_explosion_crater(global_position)
 	_die()
 
-func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> void:
+func is_headshot_hit(hit_pos: Vector3) -> bool:
+	if hit_pos == Vector3.ZERO:
+		return false
+
+	# 1. Проверяем расстояние до кости Head скелета киборга
+	if is_inside_tree() and cyborg_model_3d and cyborg_model_3d.visible:
+		var skel: Skeleton3D = cyborg_model_3d.find_child("GeneralSkeleton", true, false) as Skeleton3D
+		if not skel:
+			skel = cyborg_model_3d.find_child("Skeleton3D", true, false) as Skeleton3D
+		if skel and skel.is_inside_tree():
+			var head_idx := skel.find_bone("Head")
+			if head_idx != -1:
+				var head_world_pos: Vector3 = skel.global_transform * skel.get_bone_global_pose(head_idx).origin
+				if hit_pos.distance_to(head_world_pos) <= 0.45 * maxf(0.5, scale.y):
+					return true
+
+	# 2. Геометрическая высота: верхняя зона модели (голова от ~1.26м)
+	var local_y: float = (hit_pos.y - global_position.y) / maxf(0.1, scale.y)
+	if local_y >= 1.26:
+		return true
+
+	return false
+
+func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> bool:
 	if is_dead:
-		return
+		return false
+
+	var is_headshot := is_headshot_hit(hit_position)
+	var final_amount: int = int(round(amount * 2.5)) if is_headshot else amount
 
 	# Если урон нанес клиент в мультиплеере, перенаправляем запрос на авторитетный сервер
-	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
-		rpc_id(1, "request_take_damage", amount, hit_direction, hit_position)
-		_play_hit_flinch(hit_direction, hit_position)
-		return
+	if is_inside_tree() and multiplayer and multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+		rpc_id(1, "request_take_damage", final_amount, hit_direction, hit_position, is_headshot)
+		_play_hit_flinch(hit_direction, hit_position, is_headshot)
+		return is_headshot
 
-	health -= amount
-	_play_hit_flinch(hit_direction, hit_position)
+	health -= final_amount
+	_play_hit_flinch(hit_direction, hit_position, is_headshot)
 
 	if health <= 0:
 		_die()
-		if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		if is_inside_tree() and multiplayer and multiplayer.has_multiplayer_peer() and multiplayer.is_server():
 			rpc("sync_die", hit_direction)
 	else:
-		if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
-			rpc("sync_hurt", hit_direction, hit_position)
+		if is_inside_tree() and multiplayer and multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+			rpc("sync_hurt", hit_direction, hit_position, is_headshot)
+
+	return is_headshot
 
 @rpc("any_peer", "reliable")
-func request_take_damage(amount: int, hit_direction: Vector3, hit_position: Vector3) -> void:
+func request_take_damage(amount: int, hit_direction: Vector3, hit_position: Vector3, is_headshot: bool = false) -> void:
 	if multiplayer.is_server():
 		take_damage(amount, hit_direction, hit_position)
 
@@ -593,33 +622,41 @@ func sync_die(hit_direction: Vector3) -> void:
 		_die()
 
 @rpc("authority", "unreliable")
-func sync_hurt(hit_direction: Vector3, hit_position: Vector3) -> void:
+func sync_hurt(hit_direction: Vector3, hit_position: Vector3, is_headshot: bool = false) -> void:
 	if not is_dead:
-		_play_hit_flinch(hit_direction, hit_position)
+		_play_hit_flinch(hit_direction, hit_position, is_headshot)
 
-func _play_hit_flinch(hit_direction: Vector3, hit_position: Vector3) -> void:
-	hurt_timer = 0.22
+func _play_hit_flinch(hit_direction: Vector3, hit_position: Vector3, is_headshot: bool = false) -> void:
+	hurt_timer = 0.32 if is_headshot else 0.22
 	if sprite:
 		sprite.frame = FRAME_HURT
 		var hit_tween: Tween = create_tween().set_parallel(true)
-		sprite.modulate = Color(2.5, 0.4, 0.3, 1.0)
-		hit_tween.tween_property(sprite, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.18)
-		sprite.scale = Vector3(1.22, 0.82, 1.22)
-		hit_tween.tween_property(sprite, "scale", Vector3(1.0, 1.0, 1.0), 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		var flash_color := Color(3.5, 1.8, 0.4, 1.0) if is_headshot else Color(2.5, 0.4, 0.3, 1.0)
+		sprite.modulate = flash_color
+		hit_tween.tween_property(sprite, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.22)
+		var punch_scale := Vector3(1.35, 0.75, 1.35) if is_headshot else Vector3(1.22, 0.82, 1.22)
+		sprite.scale = punch_scale
+		hit_tween.tween_property(sprite, "scale", Vector3(1.0, 1.0, 1.0), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 	# Кинетический отброс (Knockback) назад
+	var knock_force: float = 8.5 if is_headshot else 5.5
 	if hit_direction.length_squared() > 0.01:
-		velocity += hit_direction.normalized() * 5.5
+		velocity += hit_direction.normalized() * knock_force
 	elif player:
 		var away: Vector3 = (global_position - player.global_position).normalized()
 		away.y = 0.0
-		velocity += away * 4.8
+		velocity += away * (knock_force * 0.9)
 
-	# Кровь в точке попадания
+	# Кровь и искры в точке попадания
 	var blood_position := hit_position
 	if blood_position == Vector3.ZERO:
-		blood_position = global_position + Vector3(0.0, 0.9, 0.0)
-	_spawn_hit_blood(blood_position, hit_direction)
+		blood_position = global_position + Vector3(0.0, 1.4 if is_headshot else 0.9, 0.0)
+
+	if is_headshot:
+		_spawn_headshot_blood(blood_position, hit_direction)
+	else:
+		_spawn_hit_blood(blood_position, hit_direction)
+
 	var s_fx := _get_sand_fx()
 	if s_fx:
 		s_fx.add_blood_splatter(global_position, hit_direction)
@@ -627,13 +664,58 @@ func _play_hit_flinch(hit_direction: Vector3, hit_position: Vector3) -> void:
 	if hit_sound and not hit_sound.playing:
 		hit_sound.play()
 
-func hitscan_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> void:
-	take_damage(int(damage), hit_direction, hit_position)
+func hitscan_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> bool:
+	return take_damage(int(damage), hit_direction, hit_position)
 
-func projectile_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> void:
-	take_damage(int(damage), hit_direction, hit_position)
+func projectile_hit(damage: float, hit_direction: Vector3 = Vector3.ZERO, hit_position: Vector3 = Vector3.ZERO) -> bool:
+	return take_damage(int(damage), hit_direction, hit_position)
+
+func _spawn_headshot_blood(pos: Vector3, hit_direction: Vector3) -> void:
+	if not is_inside_tree() or not get_tree() or not get_parent():
+		return
+	_spawn_hit_blood(pos, hit_direction)
+	var p := CPUParticles3D.new()
+	p.name = "HeadshotSparks"
+	p.emitting = false
+	p.one_shot = true
+	p.explosiveness = 1.0
+	p.amount = 28
+	p.lifetime = 0.5
+	p.visibility_aabb = AABB(Vector3(-2.0, -2.0, -2.0), Vector3(4.0, 4.0, 4.0))
+	var spray_direction := Vector3.UP
+	if hit_direction.length_squared() > 0.01:
+		spray_direction += -hit_direction.normalized() * 0.6
+	p.direction = spray_direction.normalized()
+	p.spread = 55.0
+	p.initial_velocity_min = 4.0
+	p.initial_velocity_max = 8.0
+	p.gravity = Vector3(0.0, -12.0, 0.0)
+	p.color = Color(1.0, 0.85, 0.25, 1.0)
+	p.scale_amount_min = 1.8
+	p.scale_amount_max = 3.0
+
+	var spark_material := StandardMaterial3D.new()
+	spark_material.albedo_color = Color(1.0, 0.9, 0.3, 1.0)
+	spark_material.emission_enabled = true
+	spark_material.emission = Color(1.0, 0.8, 0.2, 1.0)
+	spark_material.emission_energy_multiplier = 4.0
+
+	var spark_mesh := SphereMesh.new()
+	spark_mesh.radius = 0.025
+	spark_mesh.height = 0.05
+	spark_mesh.material = spark_material
+	p.mesh = spark_mesh
+
+	get_parent().add_child(p)
+	p.global_position = pos
+	p.restart()
+	p.emitting = true
+	var timer := get_tree().create_timer(p.lifetime + 0.1)
+	timer.timeout.connect(func(): if is_instance_valid(p): p.queue_free())
 
 func _spawn_hit_blood(pos: Vector3, hit_direction: Vector3) -> void:
+	if not is_inside_tree() or not get_tree() or not get_parent():
+		return
 	var p := CPUParticles3D.new()
 	p.name = "HitBlood"
 	p.emitting = false

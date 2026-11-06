@@ -36,9 +36,9 @@ var health_panel: PanelContainer
 var health_label: Label
 var health_bar: ProgressBar
 var death_overlay: ColorRect
-var wave_panel: PanelContainer
-var wave_label: Label
-var wave_sub_label: Label
+var wave_panel: PanelContainer = null
+var wave_label: Label = null
+var wave_sub_label: Label = null
 var caravan_panel: PanelContainer
 var caravan_label: Label
 var caravan_bar: ProgressBar
@@ -52,6 +52,12 @@ var toast_label: Label
 var camp_dialogue_ui: Control = null
 var _is_caravan_blocked: bool = false
 
+# --- Combat Feedback (Хэдшот и хитмаркер) ---
+var headshot_label: Label = null
+var hitmarker_ctrl: Control = null
+var hitmarker_color: Color = Color.WHITE
+var headshot_audio: AudioStreamPlayer = null
+
 var compass_panel: PanelContainer
 var compass_tape: Control
 var compass_caravan_label: Label
@@ -61,6 +67,7 @@ var _caravan_last_health: int = -1
 var _caravan_hurt_timer: float = 0.0
 
 func _ready() -> void:
+	add_to_group("hud")
 	weapon_manager.weapon_stack_updated.connect(Callable(self, "update_weapon_stack_display"))
 	$PlayerCharacterProperties.hide()
 	$FPSProperties.hide()
@@ -323,47 +330,8 @@ func _build_game_hud() -> void:
 	caravan_col.add_child(caravan_bar)
 	add_child(caravan_panel)
 
-	# --- 3. СТИЛЬНАЯ КАРТОЧКА СТАТУСА ВОЛНЫ (ВСПЛЫВАЕТ ПОД КАРАВАНОМ) ---
-	var wave_box_style := StyleBoxFlat.new()
-	wave_box_style.bg_color = Color(0.02, 0.02, 0.02, 0.50)
-	wave_box_style.border_color = Color(0.85, 0.65, 0.25, 0.25)
-	wave_box_style.set_border_width_all(1)
-	wave_box_style.set_corner_radius_all(6)
-	wave_box_style.content_margin_left = 12.0
-	wave_box_style.content_margin_right = 12.0
-	wave_box_style.content_margin_top = 3.0
-	wave_box_style.content_margin_bottom = 3.0
-
-	wave_panel = PanelContainer.new()
-	wave_panel.name = "WavePanel"
-	wave_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	wave_panel.offset_left = -140.0
-	wave_panel.offset_top = 82.0
-	wave_panel.offset_right = 140.0
-	wave_panel.offset_bottom = 118.0
-	wave_panel.add_theme_stylebox_override("panel", wave_box_style)
-
-	var wave_vbox := VBoxContainer.new()
-	wave_vbox.add_theme_constant_override("separation", 1)
-	wave_panel.add_child(wave_vbox)
-
-	wave_label = Label.new()
-	wave_label.name = "WaveTitle"
-	wave_label.text = "ПОДГОТОВКА"
-	wave_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wave_label.add_theme_font_size_override("font_size", 12)
-	wave_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35, 1.0))
-	wave_vbox.add_child(wave_label)
-
-	wave_sub_label = Label.new()
-	wave_sub_label.name = "WaveSubtitle"
-	wave_sub_label.text = "СЛЕДУЮЩАЯ ВОЛНА ЧЕРЕЗ 15 СЕК"
-	wave_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wave_sub_label.add_theme_font_size_override("font_size", 10)
-	wave_sub_label.add_theme_color_override("font_color", Color(0.75, 0.72, 0.65, 0.9))
-	wave_vbox.add_child(wave_sub_label)
-
-	add_child(wave_panel)
+	# --- 3. СИСТЕМА БОЕВОЙ ОБРАТНОЙ СВЯЗИ (ХЭДШОТЫ И ХИТМАРКЕР) ---
+	_build_combat_feedback_ui()
 
 	# --- 4. МИНИМАЛИСТИЧНЫЙ ВИДЖЕТ ВРЕМЕНИ И ФОНАРИКА (ВЕРХНИЙ ПРАВЫЙ УГОЛ) ---
 	var top_right_panel := PanelContainer.new()
@@ -528,21 +496,107 @@ func _connect_wave_spawner() -> void:
 	if spawner.has_signal("wave_countdown"):
 		spawner.connect("wave_countdown", _on_wave_countdown)
 
-func _on_wave_started(wave_number: int, wave_name: String) -> void:
-	wave_label.text = "ВОЛНА %d: %s\nВраги атакуют караван!" % [wave_number, wave_name.to_upper()]
+func _build_combat_feedback_ui() -> void:
+	# Звук хэдшота
+	headshot_audio = AudioStreamPlayer.new()
+	headshot_audio.name = "HeadshotAudio"
+	var hs_stream = load("res://assets/audio/headshot.wav")
+	if hs_stream:
+		headshot_audio.stream = hs_stream
+	headshot_audio.volume_db = 1.0
+	add_child(headshot_audio)
 
-func _on_wave_completed(wave_number: int) -> void:
-	wave_label.text = "ВОЛНА %d ОТБИТА\nПередышка..." % wave_number
+	# Оповещение хэдшота над прицелом
+	headshot_label = Label.new()
+	headshot_label.name = "HeadshotLabel"
+	headshot_label.set_anchors_preset(Control.PRESET_CENTER)
+	headshot_label.offset_left = -160.0
+	headshot_label.offset_top = -65.0
+	headshot_label.offset_right = 160.0
+	headshot_label.offset_bottom = -25.0
+	headshot_label.pivot_offset = Vector2(160.0, 20.0)
+	headshot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	headshot_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	headshot_label.text = "⚡ В ГОЛОВУ! x2.5"
+	headshot_label.add_theme_font_size_override("font_size", 22)
+	headshot_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.22, 1.0))
+	headshot_label.add_theme_color_override("font_shadow_color", Color(0.85, 0.08, 0.08, 0.95))
+	headshot_label.add_theme_constant_override("shadow_offset_x", 2)
+	headshot_label.add_theme_constant_override("shadow_offset_y", 2)
+	headshot_label.hide()
+	add_child(headshot_label)
 
-func _on_enemies_remaining(count: int) -> void:
-	if count > 0 and wave_label.text.begins_with("ВОЛНА"):
-		wave_label.text = "%s\nОСТАЛОСЬ ВРАГОВ: %d" % [wave_label.text.get_slice("\n", 0), count]
-	elif count == 0 and wave_label.text.begins_with("ВОЛНА"):
-		wave_label.text = "ВСЕ ВРАГИ УНИЧТОЖЕНЫ"
+	# Хитмаркер (перекрестие попадания)
+	hitmarker_ctrl = Control.new()
+	hitmarker_ctrl.name = "Hitmarker"
+	hitmarker_ctrl.set_anchors_preset(Control.PRESET_CENTER)
+	hitmarker_ctrl.offset_left = -16.0
+	hitmarker_ctrl.offset_top = -16.0
+	hitmarker_ctrl.offset_right = 16.0
+	hitmarker_ctrl.offset_bottom = 16.0
+	hitmarker_ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hitmarker_ctrl.draw.connect(_draw_hitmarker)
+	hitmarker_ctrl.hide()
+	add_child(hitmarker_ctrl)
 
-func _on_wave_countdown(seconds: int) -> void:
-	if not wave_label.text.begins_with("ВОЛНА") or wave_label.text.contains("ОТБИТА"):
-		wave_label.text = "ПОДГОТОВКА\nСЛЕДУЮЩАЯ ВОЛНА ЧЕРЕЗ %d СЕК" % seconds
+func _draw_hitmarker() -> void:
+	if not hitmarker_ctrl:
+		return
+	var c := Vector2(16.0, 16.0)
+	var col := hitmarker_color
+	var d := 4.0
+	var len := 7.0
+	hitmarker_ctrl.draw_line(c + Vector2(-d, -d), c + Vector2(-d - len, -d - len), col, 2.0)
+	hitmarker_ctrl.draw_line(c + Vector2(d, -d), c + Vector2(d + len, -d - len), col, 2.0)
+	hitmarker_ctrl.draw_line(c + Vector2(-d, d), c + Vector2(-d - len, d + len), col, 2.0)
+	hitmarker_ctrl.draw_line(c + Vector2(d, d), c + Vector2(d + len, d + len), col, 2.0)
+
+func show_headshot_feedback() -> void:
+	if headshot_audio:
+		headshot_audio.play()
+	if hitmarker_ctrl:
+		hitmarker_color = Color(1.0, 0.25, 0.25, 1.0)
+		hitmarker_ctrl.queue_redraw()
+		hitmarker_ctrl.modulate.a = 1.0
+		hitmarker_ctrl.show()
+		var tw_hm := create_tween()
+		tw_hm.tween_interval(0.08)
+		tw_hm.tween_property(hitmarker_ctrl, "modulate:a", 0.0, 0.12)
+		tw_hm.chain().tween_callback(hitmarker_ctrl.hide)
+
+	if headshot_label:
+		headshot_label.scale = Vector2(1.5, 1.5)
+		headshot_label.modulate.a = 1.0
+		headshot_label.show()
+		var tw := create_tween().set_parallel(true)
+		tw.tween_property(headshot_label, "scale", Vector2(1.0, 1.0), 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		var seq := create_tween()
+		seq.tween_interval(0.35)
+		seq.tween_property(headshot_label, "modulate:a", 0.0, 0.25)
+		seq.chain().tween_callback(headshot_label.hide)
+
+func show_hit_feedback() -> void:
+	if hitmarker_ctrl:
+		hitmarker_color = Color(1.0, 1.0, 1.0, 0.9)
+		hitmarker_ctrl.queue_redraw()
+		hitmarker_ctrl.modulate.a = 1.0
+		hitmarker_ctrl.show()
+		var tw_hm := create_tween()
+		tw_hm.tween_interval(0.05)
+		tw_hm.tween_property(hitmarker_ctrl, "modulate:a", 0.0, 0.09)
+		tw_hm.chain().tween_callback(hitmarker_ctrl.hide)
+
+func _on_wave_started(_wave_number: int, _wave_name: String) -> void:
+	pass
+
+func _on_wave_completed(_wave_number: int) -> void:
+	pass
+
+func _on_enemies_remaining(_count: int) -> void:
+	pass
+
+func _on_wave_countdown(_seconds: int) -> void:
+	pass
 		
 func display_current_FPS() -> void:
 	frames_per_second_label_text.set_text(str(Engine.get_frames_per_second()))

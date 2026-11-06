@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zombie Rig Viewer</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d22; }
+  canvas { display: block; }
+  #hud { position: fixed; left: 10px; top: 10px; color: #eee; font: 13px/1.4 monospace; background: rgba(0,0,0,.55); padding: 8px 10px; border-radius: 6px; white-space: pre; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./three.module.js" } }
+</script>
+</head>
+<body>
+<div id="hud">loading...</div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from './loaders/GLTFLoader.js';
+
+const params = new URLSearchParams(location.search);
+const clipName = params.get('clip') || 'Walk';
+const startTime = parseFloat(params.get('t') || '0');
+const view = params.get('view') || 'side';
+const showSkeleton = params.get('skeleton') === '1';
+const modelPath = params.get('model') || '../../models/zombies/zombie_cyborg_template.glb';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(900, 900);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+window.__THREE = THREE;
+window.minY = () => {
+  model.updateMatrixWorld(true);
+  let min = Infinity;
+  const v = new THREE.Vector3();
+  model.traverse((o) => {
+    if (o.isSkinnedMesh && o.geometry && o.geometry.attributes.position) {
+      const pos = o.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i);
+        o.applyBoneTransform(i, v);
+        v.applyMatrix4(o.matrixWorld);
+        if (v.y < min) min = v.y;
+      }
+    }
+  });
+  return min;
+};
+
+window.saveShot = (name) => {
+  renderer.render(scene, camera);
+  const data = renderer.domElement.toDataURL('image/png');
+  return fetch('http://127.0.0.1:8766/save?name=' + encodeURIComponent(name), { method: 'POST', body: data }).then((r) => r.text());
+};
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1b1d22);
+const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 100);
+
+const hemi = new THREE.HemisphereLight(0xffffff, 0x445566, 1.6);
+scene.add(hemi);
+const key = new THREE.DirectionalLight(0xffffff, 2.4);
+key.position.set(3, 5, 4);
+key.castShadow = true;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xaaccff, 1.1);
+fill.position.set(-4, 2, -3);
+scene.add(fill);
+
+const grid = new THREE.GridHelper(6, 12, 0x555555, 0x333333);
+grid.position.y = 0;
+scene.add(grid);
+const axes = new THREE.AxesHelper(0.5);
+scene.add(axes);
+
+let mixer = null;
+let model = null;
+let action = null;
+let skeletonHelper = null;
+const hud = document.getElementById('hud');
+
+function setView(name) {
+  if (name === 'front') camera.position.set(0, 1.0, -3.4);
+  else if (name === 'back') camera.position.set(0, 1.0, 3.4);
+  else if (name === 'threequarter') camera.position.set(2.6, 1.5, -2.6);
+  else if (name === 'left') camera.position.set(3.4, 1.0, 0);
+  else camera.position.set(3.4, 1.0, 0);
+  camera.lookAt(0, 0.95, 0);
+}
+setView(view);
+window.__camera = camera;
+window.setView = setView;
+window.setCamera = (px, py, pz, tx, ty, tz) => {
+  camera.position.set(px, py, pz);
+  camera.lookAt(tx, ty, tz);
+};
+
+const loader = new GLTFLoader();
+loader.load(modelPath, (gltf) => {
+  model = gltf.scene;
+  scene.add(model);
+  model.traverse((o) => {
+    if (o.isBone) o.userData.restQuat = o.quaternion.clone();
+  });
+  model.traverse((o) => {
+    if (o.isMesh || o.isSkinnedMesh) {
+      o.castShadow = true;
+      o.frustumCulled = false;
+      if (o.material) {
+        o.material.side = THREE.FrontSide;
+        o.material.needsUpdate = true;
+      }
+    }
+  });
+  if (showSkeleton) {
+    skeletonHelper = new THREE.SkeletonHelper(model);
+    skeletonHelper.material.depthTest = false;
+    skeletonHelper.material.linewidth = 2;
+    scene.add(skeletonHelper);
+    window.__skeletonHelper = skeletonHelper;
+  }
+  mixer = new THREE.AnimationMixer(model);
+  window.__mixer = mixer;
+  window.__model = model;
+  window.__clips = gltf.animations;
+  window.playClip = (name, time) => {
+    const clip = gltf.animations.find((c) => c.name === name);
+    if (!clip) return false;
+    mixer.stopAllAction();
+    action = mixer.clipAction(clip);
+    action.reset();
+    action.play();
+    mixer.setTime(time);
+    hud.textContent = `${name} t=${time.toFixed(3)} / ${clip.duration.toFixed(3)}\nview=${view} skeleton=${showSkeleton}`;
+    return true;
+  };
+  window.playClip(clipName, startTime);
+  hud.textContent = `clips: ${gltf.animations.map(c => c.name).join(', ')}`;
+  window.__ready = true;
+}, undefined, (err) => {
+  hud.textContent = 'ERROR: ' + err;
+  console.error(err);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

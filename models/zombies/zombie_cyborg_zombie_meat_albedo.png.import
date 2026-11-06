@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://brb2ij0b8ebey"
-path="res://.godot/imported/zombie_cyborg_zombie_meat_albedo.png-709397474784dd6d303c3bc866568ca7.ctex"
+path.s3tc="res://.godot/imported/zombie_cyborg_zombie_meat_albedo.png-709397474784dd6d303c3bc866568ca7.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "896d8c546a1160fa23a9e47dd30e6331"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/zombies/zombie_cyborg_zombie_meat_albedo.png"
-dest_files=["res://.godot/imported/zombie_cyborg_zombie_meat_albedo.png-709397474784dd6d303c3bc866568ca7.ctex"]
+dest_files=["res://.godot/imported/zombie_cyborg_zombie_meat_albedo.png-709397474784dd6d303c3bc866568ca7.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

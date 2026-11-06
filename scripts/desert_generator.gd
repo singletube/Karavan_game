@@ -1008,19 +1008,27 @@ func _get_net_mgr() -> Node:
 
 func _setup_poi_loot_crate(poi_node: Node, coord: Vector2i, p_type: String = "") -> void:
 	var crate := poi_node.find_child("LootCrate", true, false)
-	var is_looted: bool = false
-	if crate:
-		var crate_id: String = "%d_%d" % [coord.x, coord.y]
-		crate.name = "LootCrate_%s" % crate_id
-		crate.set_meta("crate_id", crate_id)
-		var net_mgr := _get_net_mgr()
-		if net_mgr != null and "looted_crates" in net_mgr and net_mgr.looted_crates.has(crate_id):
-			is_looted = true
-			if crate.has_method("mark_already_looted"):
-				crate.mark_already_looted()
+	var is_dungeon: bool = p_type in ["ancient_ruins", "bunker_ruins", "clay_ruins", "plane_wreck_ruins", "crawl_shelter", "gas_station"]
 
-	# Стражи подземелий и развалин (спавнятся на сервере/одиночно, если тайник еще не разграблен)
-	if not is_looted and p_type != "" and p_type != "oasis":
+	if crate:
+		if is_dungeon:
+			# В подземельях и развалинах удаляем монолитный сундук в пользу отдельных предметов
+			crate.queue_free()
+		else:
+			var crate_id: String = "%d_%d" % [coord.x, coord.y]
+			crate.name = "LootCrate_%s" % crate_id
+			crate.set_meta("crate_id", crate_id)
+			var net_mgr := _get_net_mgr()
+			if net_mgr != null and "looted_crates" in net_mgr and net_mgr.looted_crates.has(crate_id):
+				if crate.has_method("mark_already_looted"):
+					crate.mark_already_looted()
+
+	# Спавн отдельных предметов (патроны, аптечки, отдых/корм для осла по 1-4 шт)
+	if is_dungeon and poi_node is Node3D:
+		DungeonLoot3D.spawn_dungeon_loot_set(poi_node as Node3D, p_type)
+
+	# Стражи подземелий и развалин (спавнятся на сервере/одиночно)
+	if p_type != "" and p_type != "oasis":
 		var tree := get_tree()
 		if tree:
 			var ws = tree.get_first_node_in_group("wave_spawner")

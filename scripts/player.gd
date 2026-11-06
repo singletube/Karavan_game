@@ -377,7 +377,13 @@ func _fire() -> void:
 				break
 			else:
 				if target_node and target_node.has_method("take_damage"):
-					target_node.take_damage(damage_val, spread_dir)
+					var is_hs = target_node.take_damage(damage_val, spread_dir, hit_pos)
+					var hud := get_tree().get_first_node_in_group("hud")
+					if hud:
+						if is_hs and hud.has_method("show_headshot_feedback"):
+							hud.show_headshot_feedback()
+						elif hud.has_method("show_hit_feedback"):
+							hud.show_hit_feedback()
 
 func _explode_at(pos: Vector3, radius: float, max_dmg: int) -> void:
 	# Звук взрыва в 3D пространстве
@@ -452,6 +458,23 @@ func _reload() -> void:
 			emit_signal("ammo_changed", w["cur_mag"], w["total_ammo"])
 			is_reloading = false
 	)
+
+func heal(amount: int) -> void:
+	if is_dead:
+		return
+	health = mini(100, health + amount)
+	emit_signal("health_changed", health)
+
+func add_ammo(amount: int = 60) -> void:
+	for w in weapons:
+		w["total_ammo"] = mini(w["total_ammo"] + amount, 300)
+	var cur = weapons[current_weapon_idx]
+	emit_signal("ammo_changed", cur["cur_mag"], cur["total_ammo"])
+
+func notify_hud(msg: String, col: Color = Color.WHITE) -> void:
+	var hud := get_tree().get_first_node_in_group("hud")
+	if hud and hud.has_method("show_toast"):
+		hud.show_toast(msg, col)
 
 func take_damage(amount: int) -> void:
 	if is_dead:

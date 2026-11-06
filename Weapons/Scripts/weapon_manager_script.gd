@@ -55,6 +55,12 @@ func initialize() -> void:
 		await enter_weapon(weapon_stack[0])
 	else:
 		push_error("Play har has no weapons in his inventory")
+
+func add_ammo(percent: float = 0.5) -> void:
+	if ammo_manager and ammo_manager.has_method("refill_ammo"):
+		ammo_manager.call("refill_ammo", percent)
+	if hud and hud.has_method("display_weapon_properties"):
+		hud.display_weapon_properties()
 		
 func exit_weapon(next_weapon : int) -> void:
 	#this function manage the first part of the weapon switching mechanic

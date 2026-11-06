@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://mdfo4pekg2t5"
-path="res://.godot/imported/zombie_cyborg_template_cyber_armor_roughness.png-06d0c19ce317a88f1717debda93a4991.ctex"
+path.s3tc="res://.godot/imported/zombie_cyborg_template_cyber_armor_roughness.png-06d0c19ce317a88f1717debda93a4991.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "d82f04bcd9719865751189e3552429f9"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/zombies/zombie_cyborg_template_cyber_armor_roughness.png"
-dest_files=["res://.godot/imported/zombie_cyborg_template_cyber_armor_roughness.png-06d0c19ce317a88f1717debda93a4991.ctex"]
+dest_files=["res://.godot/imported/zombie_cyborg_template_cyber_armor_roughness.png-06d0c19ce317a88f1717debda93a4991.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

@@ -9,15 +9,22 @@ extends Control
 @onready var hit_flash         : ColorRect   = $HitFlash
 @onready var death_screen      : Control     = $DeathScreen
 
-# --- Элементы отображения волн ---
-var wave_panel           : PanelContainer = null
-var wave_title_label     : Label          = null
-var wave_subtitle_label  : Label          = null
+# --- Боевой фидбек: хэдшот, хитмаркер, уведомления и подсказки ---
+var hitmarker_ctrl      : Control            = null
+var headshot_label      : Label              = null
+var headshot_tween      : Tween              = null
+var interact_prompt     : Label              = null
+var toast_panel         : PanelContainer     = null
+var toast_label         : Label              = null
+var toast_tween         : Tween              = null
+var headshot_audio      : AudioStreamPlayer  = null
+var snd_headshot_stream : AudioStream        = null
 
 var target_player : Node = null
 var _displayed_health: int = -1
 
 func _ready() -> void:
+	add_to_group("hud")
 	hit_flash.modulate.a = 0.0
 	death_screen.hide()
 	health_bar.min_value = 0.0
@@ -31,120 +38,192 @@ func _ready() -> void:
 	health_bar.add_theme_stylebox_override("fill", health_fill)
 	ammo_label.add_theme_font_size_override("font_size", 17)
 	slot_hint_label.add_theme_font_size_override("font_size", 12)
-	slot_hint_label.text = "1–5: оружие · Колесо: смена · ЛКМ: огонь · R: перезарядка · C/X: присесть"
-	_setup_wave_ui()
+	slot_hint_label.text = "1–5: оружие · Колесо: смена · ЛКМ: огонь · R: перезарядка · C/X: присесть · E: действие"
+
+	# Инициализация боевого UI (хитмаркеры, хэдшоты, уведомления)
+	_setup_combat_ui()
 
 	await get_tree().process_frame
 	_find_and_connect_player()
 	_find_and_connect_spawner()
 
-func _setup_wave_ui() -> void:
-	var existing: Node = get_node_or_null("WavePanel")
-	if existing and existing is PanelContainer:
-		wave_panel = existing as PanelContainer
-		wave_title_label = wave_panel.get_node_or_null("VBox/WaveTitleLabel") as Label
-		wave_subtitle_label = wave_panel.get_node_or_null("VBox/WaveSubtitleLabel") as Label
-		return
+func _setup_combat_ui() -> void:
+	# 1. Хитмаркер (4 диагональные засечки вокруг перекрестия)
+	hitmarker_ctrl = Control.new()
+	hitmarker_ctrl.name = "Hitmarker"
+	hitmarker_ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hitmarker_ctrl.set_anchors_preset(Control.PRESET_CENTER)
+	hitmarker_ctrl.modulate.a = 0.0
+	add_child(hitmarker_ctrl)
 
-	# Создание стильной верхней панели информации о волнах
-	wave_panel = PanelContainer.new()
-	wave_panel.name = "WavePanel"
-	wave_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	wave_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	wave_panel.offset_left = -220.0
-	wave_panel.offset_right = 220.0
-	wave_panel.offset_top = 112.0
-	wave_panel.offset_bottom = 168.0
-	wave_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	var offsets := [
+		Vector2(-12, -12), Vector2(12, -12),
+		Vector2(-12, 12),  Vector2(12, 12)
+	]
+	for off in offsets:
+		var tick := ColorRect.new()
+		tick.custom_minimum_size = Vector2(4, 4)
+		tick.color = Color(1.0, 0.2, 0.2, 0.95)
+		tick.position = off - Vector2(2, 2)
+		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hitmarker_ctrl.add_child(tick)
 
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = Color(0.10, 0.08, 0.06, 0.70)
-	style.border_color = Color(0.65, 0.50, 0.25, 0.8)
-	style.border_width_left = 1
-	style.border_width_right = 1
-	style.border_width_top = 1
-	style.border_width_bottom = 1
-	style.corner_radius_bottom_left = 6
-	style.corner_radius_bottom_right = 6
-	style.corner_radius_top_left = 6
-	style.corner_radius_top_right = 6
-	style.content_margin_left = 20.0
-	style.content_margin_right = 20.0
-	style.content_margin_top = 6.0
-	style.content_margin_bottom = 6.0
-	wave_panel.add_theme_stylebox_override("panel", style)
+	# 2. Оповещение хэдшота (анимированный баннер "⚡ В ГОЛОВУ! x2.5")
+	headshot_label = Label.new()
+	headshot_label.name = "HeadshotLabel"
+	headshot_label.text = "⚡ В ГОЛОВУ! x2.5"
+	headshot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	headshot_label.add_theme_font_size_override("font_size", 22)
+	headshot_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.18, 1.0))
+	headshot_label.add_theme_color_override("font_shadow_color", Color(0.9, 0.1, 0.05, 0.85))
+	headshot_label.add_theme_constant_override("shadow_offset_x", 2)
+	headshot_label.add_theme_constant_override("shadow_offset_y", 2)
+	headshot_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	headshot_label.set_anchors_preset(Control.PRESET_CENTER)
+	headshot_label.offset_left = -160.0
+	headshot_label.offset_right = 160.0
+	headshot_label.offset_top = -68.0
+	headshot_label.offset_bottom = -38.0
+	headshot_label.modulate.a = 0.0
+	add_child(headshot_label)
 
-	var vbox: VBoxContainer = VBoxContainer.new()
-	vbox.name = "VBox"
-	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	wave_panel.add_child(vbox)
+	# 3. Аудиосопровождение хэдшота
+	headshot_audio = AudioStreamPlayer.new()
+	headshot_audio.name = "HeadshotAudio"
+	headshot_audio.volume_db = 1.5
+	if ResourceLoader.exists("res://assets/audio/headshot.wav"):
+		snd_headshot_stream = load("res://assets/audio/headshot.wav")
+		headshot_audio.stream = snd_headshot_stream
+	add_child(headshot_audio)
 
-	wave_title_label = Label.new()
-	wave_title_label.name = "WaveTitleLabel"
-	wave_title_label.text = "ПОДГОТОВКА"
-	wave_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wave_title_label.add_theme_font_size_override("font_size", 20)
-	wave_title_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35, 1.0))
-	vbox.add_child(wave_title_label)
+	# 4. Подсказка взаимодействия ([E] Взять патроны / Открыть)
+	interact_prompt = Label.new()
+	interact_prompt.name = "InteractPrompt"
+	interact_prompt.text = ""
+	interact_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	interact_prompt.add_theme_font_size_override("font_size", 16)
+	interact_prompt.add_theme_color_override("font_color", Color(1.0, 0.95, 0.65, 1.0))
+	interact_prompt.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
+	interact_prompt.add_theme_constant_override("shadow_offset_x", 1)
+	interact_prompt.add_theme_constant_override("shadow_offset_y", 1)
+	interact_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	interact_prompt.set_anchors_preset(Control.PRESET_CENTER)
+	interact_prompt.offset_left = -200.0
+	interact_prompt.offset_right = 200.0
+	interact_prompt.offset_top = 36.0
+	interact_prompt.offset_bottom = 66.0
+	interact_prompt.visible = false
+	add_child(interact_prompt)
 
-	wave_subtitle_label = Label.new()
-	wave_subtitle_label.name = "WaveSubtitleLabel"
-	wave_subtitle_label.text = "Ожидание волны..."
-	wave_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wave_subtitle_label.add_theme_font_size_override("font_size", 15)
-	wave_subtitle_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9, 1.0))
-	vbox.add_child(wave_subtitle_label)
+	# 5. Стильный всплывающий Toast (для подобранного лута)
+	toast_panel = PanelContainer.new()
+	toast_panel.name = "ToastPanel"
+	toast_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	toast_panel.offset_left = -240.0
+	toast_panel.offset_right = 240.0
+	toast_panel.offset_top = -140.0
+	toast_panel.offset_bottom = -96.0
+	var toast_style := StyleBoxFlat.new()
+	toast_style.bg_color = Color(0.08, 0.07, 0.06, 0.82)
+	toast_style.border_color = Color(0.85, 0.65, 0.25, 0.9)
+	toast_style.border_width_left = 1
+	toast_style.border_width_right = 1
+	toast_style.border_width_top = 1
+	toast_style.border_width_bottom = 1
+	toast_style.corner_radius_bottom_left = 5
+	toast_style.corner_radius_bottom_right = 5
+	toast_style.corner_radius_top_left = 5
+	toast_style.corner_radius_top_right = 5
+	toast_style.content_margin_left = 16.0
+	toast_style.content_margin_right = 16.0
+	toast_style.content_margin_top = 6.0
+	toast_style.content_margin_bottom = 6.0
+	toast_panel.add_theme_stylebox_override("panel", toast_style)
 
-	add_child(wave_panel)
+	toast_label = Label.new()
+	toast_label.name = "ToastLabel"
+	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	toast_label.add_theme_font_size_override("font_size", 16)
+	toast_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.45, 1.0))
+	toast_panel.add_child(toast_label)
+	toast_panel.modulate.a = 0.0
+	add_child(toast_panel)
 
+# =========================================================================
+# БОЕВОЙ ФИДБЕК: ХЭДШОТ, ХИТМАРКЕР И ОПОВЕЩЕНИЯ
+# =========================================================================
+func show_headshot_feedback() -> void:
+	# 1. Звук пробития шлема / критического попадания
+	if headshot_audio:
+		headshot_audio.pitch_scale = randf_range(0.96, 1.05)
+		headshot_audio.play()
+
+	# 2. Золотисто-красный хитмаркер с пульсацией
+	if hitmarker_ctrl:
+		hitmarker_ctrl.modulate = Color(1.5, 1.2, 0.2, 1.0)
+		hitmarker_ctrl.scale = Vector2(1.4, 1.4)
+		var h_tween := create_tween().set_parallel(true)
+		h_tween.tween_property(hitmarker_ctrl, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		h_tween.tween_property(hitmarker_ctrl, "modulate:a", 0.0, 0.35).set_delay(0.08)
+
+	# 3. Анимированный текст "⚡ В ГОЛОВУ! x2.5"
+	if headshot_label:
+		if headshot_tween and headshot_tween.is_valid():
+			headshot_tween.kill()
+		headshot_label.modulate.a = 1.0
+		headshot_label.scale = Vector2(1.3, 1.3)
+		headshot_label.pivot_offset = headshot_label.size * 0.5
+		headshot_label.offset_top = -68.0
+
+		headshot_tween = create_tween().set_parallel(true)
+		headshot_tween.tween_property(headshot_label, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		headshot_tween.tween_property(headshot_label, "offset_top", -84.0, 0.65).set_trans(Tween.TRANS_SINE)
+		headshot_tween.tween_property(headshot_label, "modulate:a", 0.0, 0.35).set_delay(0.35)
+
+func show_hit_feedback() -> void:
+	# Обычное попадание по телу: короткая белая засечка хитмаркера
+	if hitmarker_ctrl:
+		hitmarker_ctrl.modulate = Color(1.0, 1.0, 1.0, 0.85)
+		hitmarker_ctrl.scale = Vector2.ONE
+		var h_tween := create_tween()
+		h_tween.tween_property(hitmarker_ctrl, "modulate:a", 0.0, 0.18)
+
+func show_interaction_prompt(prompt_text: String) -> void:
+	if interact_prompt:
+		interact_prompt.text = prompt_text
+		interact_prompt.visible = not prompt_text.is_empty()
+
+func hide_interaction_prompt() -> void:
+	if interact_prompt:
+		interact_prompt.visible = false
+
+func show_toast(msg: String, col: Color = Color(1.0, 0.92, 0.45, 1.0)) -> void:
+	if toast_label and toast_panel:
+		if toast_tween and toast_tween.is_valid():
+			toast_tween.kill()
+		toast_label.text = msg
+		toast_label.add_theme_color_override("font_color", col)
+		toast_panel.modulate.a = 1.0
+		toast_panel.offset_bottom = -96.0
+
+		toast_tween = create_tween()
+		toast_tween.tween_interval(2.2)
+		toast_tween.tween_property(toast_panel, "modulate:a", 0.0, 0.4)
+
+# =========================================================================
+# ПОДКЛЮЧЕНИЕ СПАВНЕРА (БЕЗ ОТОБРАЖЕНИЯ НАВЯЗЧИВОЙ ТАБЛИЧКИ СЛОЖНОСТИ)
+# =========================================================================
 func _find_and_connect_spawner() -> void:
 	var spawner: Node = get_tree().current_scene.find_child("WaveSpawner", true, false)
 	if spawner:
 		connect_spawner(spawner)
 
 func connect_spawner(spawner: Node) -> void:
-	if not spawner.is_connected("wave_started", _on_wave_started):
-		spawner.wave_started.connect(_on_wave_started)
-	if not spawner.is_connected("wave_completed", _on_wave_completed):
-		spawner.wave_completed.connect(_on_wave_completed)
-	if not spawner.is_connected("enemies_remaining", _on_enemies_remaining):
-		spawner.enemies_remaining.connect(_on_enemies_remaining)
-	if not spawner.is_connected("wave_countdown", _on_wave_countdown):
-		spawner.wave_countdown.connect(_on_wave_countdown)
-
-func _on_wave_started(wave_num: int, wave_name: String) -> void:
-	if wave_title_label:
-		wave_title_label.text = "ВОЛНА %d: %s" % [wave_num, wave_name.to_upper()]
-		wave_title_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35, 1.0))
-	if wave_subtitle_label:
-		wave_subtitle_label.text = "Враги атакуют караван!"
-		wave_subtitle_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.35, 1.0))
-
-func _on_wave_completed(wave_num: int) -> void:
-	if wave_title_label:
-		wave_title_label.text = "ВОЛНА %d ОТБИТА!" % wave_num
-		wave_title_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4, 1.0))
-	if wave_subtitle_label:
-		wave_subtitle_label.text = "Передышка..."
-		wave_subtitle_label.add_theme_color_override("font_color", Color(0.8, 1.0, 0.8, 1.0))
-
-func _on_enemies_remaining(count: int) -> void:
-	if wave_subtitle_label:
-		if count > 0:
-			wave_subtitle_label.text = "Осталось врагов: %d" % count
-			wave_subtitle_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.5, 1.0))
-		else:
-			wave_subtitle_label.text = "Все враги уничтожены!"
-			wave_subtitle_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4, 1.0))
-
-func _on_wave_countdown(seconds: int) -> void:
-	if wave_title_label and not wave_title_label.text.begins_with("ВОЛНА"):
-		wave_title_label.text = "ПОДГОТОВКА"
-		wave_title_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35, 1.0))
-	if wave_subtitle_label:
-		wave_subtitle_label.text = "Следующая волна через: %d сек" % seconds
-		wave_subtitle_label.add_theme_color_override("font_color", Color(0.9, 0.85, 0.5, 1.0))
+	# Сигналы подключаются для поддержания логики сетевой синхронизации,
+	# но громоздкие таблички сложности и таймеров больше не выводятся на экран
+	pass
 
 func _find_and_connect_player() -> void:
 	var players: Array = get_tree().get_nodes_in_group("player")
@@ -165,8 +244,6 @@ func connect_player(p: Node) -> void:
 		p.player_died.connect(_on_player_died)
 	if p.has_signal("weapon_changed") and not p.is_connected("weapon_changed", _on_weapon_changed):
 		p.weapon_changed.connect(_on_weapon_changed)
-	# Signals can be emitted before the HUD finds a newly spawned player. Pull
-	# the current state now so the initial weapon and ammo are never stale.
 	if p.has_method("get_combat_status"):
 		var status: Dictionary = p.call("get_combat_status")
 		if status.has("health"):
@@ -212,8 +289,6 @@ func _flash_damage() -> void:
 	tween.tween_property(hit_flash, "modulate:a", 0.0, 0.4)
 
 func _process(_delta: float) -> void:
-	# Keep health visible even if the player was spawned before signal hookup or
-	# a multiplayer health signal arrived before the HUD connected.
 	if is_instance_valid(target_player):
 		var current_health: Variant = target_player.get("health")
 		if current_health != null and int(current_health) != _displayed_health:

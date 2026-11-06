@@ -28,6 +28,12 @@ var overload_pulse_timer: float = 0.0
 # Базовый цвет свечения для данного киборга
 var glow_color: Color = Color(1.0, 0.08, 0.02)
 
+# Естественная скорость движения, заложенная в анимациях (м/с при масштабе 1.0).
+# Walk/Run в шаблоне развёрнуты во времени и отсинхронизированы по длине шага,
+# поэтому скорость воспроизведения подбирается под реальную скорость врага.
+const WALK_NATURAL_SPEED := 3.0
+const RUN_NATURAL_SPEED := 7.8
+
 func _ready() -> void:
 	pass
 
@@ -111,30 +117,14 @@ func _configure_animation_loops() -> void:
 			anim_player.get_animation(a_name).loop_mode = Animation.LOOP_NONE
 
 func _apply_type_customization() -> void:
+	# Общий размер врага задаётся масштабом корневого Enemy (enemy.gd), чтобы
+	# визуальная модель и капсула столкновения совпадали. Здесь остаётся только
+	# приседающая поза для низкого разведчика Crawler.
 	match current_type:
-		"Walker":
-			# Стандартный штурмовой зомби (рост ~1.85м)
-			scale = Vector3.ONE * 0.95
-		"Runner":
-			# Поджарый, скоростной сталкер
-			scale = Vector3.ONE * 0.88
-		"Brute":
-			# Огромный тяжелый Джаггернаут-танк (рост ~2.6м)
-			scale = Vector3.ONE * 1.38
-		"Spitter":
-			# Токсичный био-мутант
-			scale = Vector3.ONE * 0.98
-		"Screamer":
-			# Акустическая сирена
-			scale = Vector3.ONE * 1.00
-		"Exploder":
-			# Массивный взрывоопасный киборг с перегруженным ядром
-			scale = Vector3.ONE * 1.05
 		"Crawler":
-			# Низкий механический разведчик
 			scale = Vector3(0.95, 0.75, 0.95)
 		_:
-			scale = Vector3.ONE * 0.95
+			scale = Vector3.ONE
 
 func _get_or_create_bone_att(bone_name: String) -> BoneAttachment3D:
 	if not skeleton:
@@ -187,7 +177,15 @@ func _play_anim(p_name: String, blend: float = 0.1, custom_speed: float = 1.0) -
 	if not anim_player or not anim_player.has_animation(p_name):
 		return
 	if anim_player.current_animation != p_name or not anim_player.is_playing():
-		anim_player.play(p_name, blend, custom_speed)
+		anim_player.play(p_name, blend, 1.0)
+	# speed_scale обновляем каждый кадр, чтобы шаг не «скользил» при смене
+	# фактической скорости (обход препятствий, замедление, рывок).
+	anim_player.speed_scale = custom_speed
+
+## Масштаб длины шага с учётом мирового масштаба модели (включая масштаб Enemy).
+func _get_stride_scale() -> float:
+	var s := global_transform.basis.get_scale()
+	return maxf(0.1, (absf(s.x) + absf(s.z)) * 0.5)
 
 func update_animation(_delta: float, moving: bool, move_speed: float, attacking: bool, hurt: bool, dead: bool) -> void:
 	if not anim_player:
@@ -250,14 +248,20 @@ func update_animation(_delta: float, moving: bool, move_speed: float, attacking:
 			_play_anim(atk_anim, 0.1, atk_speed)
 			return
 
-	# 4. Движение (Run для Runner, Walk для остальных)
+	# 4. Движение: клип и скорость подбираются под фактическую скорость и
+	# естественную длину шага анимации. Так ноги не «плывут» по земле.
 	if is_moving:
+		var clip_name: String = "Walk"
+		var natural_speed: float = WALK_NATURAL_SPEED
 		if current_type == "Runner":
-			_play_anim("Run", 0.15, maxf(1.1, move_speed * 0.32))
-		elif current_type == "Brute":
-			_play_anim("Walk", 0.2, 0.82)
-		else:
-			_play_anim("Walk", 0.2, maxf(0.85, move_speed * 0.38))
+			clip_name = "Run"
+			natural_speed = RUN_NATURAL_SPEED
+
+		var effective_natural_speed: float = natural_speed * _get_stride_scale()
+		var playback_speed: float = clampf(
+			move_speed / maxf(effective_natural_speed, 0.1), 0.35, 2.0
+		)
+		_play_anim(clip_name, 0.18, playback_speed)
 		return
 
 	# 5. Покой (Idle)

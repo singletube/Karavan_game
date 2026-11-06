@@ -457,6 +457,17 @@ func get_combat_status() -> Dictionary:
 		"reserve": floori(float(manager.ammo_manager.ammo_dict.get(resource.ammo_type, 0)) / ammo_per_shot),
 	}
 
+func heal(amount: int) -> void:
+	if is_dead:
+		return
+	health = mini(100, health + amount)
+	health_changed.emit(health)
+
+func add_ammo(amount: int = 60) -> void:
+	var wm: WeaponManager = get_node_or_null("%WeaponManager") as WeaponManager
+	if wm and wm.has_method("add_ammo"):
+		wm.add_ammo(0.5)
+
 func take_damage(amount: int, _hit_direction: Vector3 = Vector3.ZERO, _hit_position: Vector3 = Vector3.ZERO) -> void:
 	if is_dead:
 		return

@@ -43,13 +43,29 @@ func apply_damage(body : Node3D) -> void:
 	var target := _find_damage_target(body)
 	if target == null:
 		return
+	var was_headshot: bool = false
+	var hit_enemy: bool = false
 	if target.has_method("take_damage"):
 		if target.is_in_group("Enemies") or target.is_in_group("enemy"):
-			target.call("take_damage", maxi(1, roundi(damage)), direction, body.global_position + Vector3.UP * 0.7)
+			hit_enemy = true
+			var res = target.call("take_damage", maxi(1, roundi(damage)), direction, body.global_position + Vector3.UP * 0.7)
+			if res is bool and res:
+				was_headshot = true
 		else:
 			target.call("take_damage", maxi(1, roundi(damage)))
 	elif target.has_method("projectile_hit"):
-		target.call("projectile_hit", damage, direction)
+		hit_enemy = true
+		var res = target.call("projectile_hit", damage, direction, body.global_position + Vector3.UP * 0.7)
+		if res is bool and res:
+			was_headshot = true
+
+	if hit_enemy:
+		var hud := get_tree().get_first_node_in_group("hud")
+		if hud:
+			if was_headshot and hud.has_method("show_headshot_feedback"):
+				hud.show_headshot_feedback()
+			elif hud.has_method("show_hit_feedback"):
+				hud.show_hit_feedback()
 
 func _find_damage_target(collider: Object) -> Node:
 	var node := collider as Node

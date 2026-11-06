@@ -20,4 +20,14 @@ var max_nb_per_ammo_dict : Dictionary[AMMO_TYPES, int] = { #key = ammo type, val
 	AMMO_TYPES.SHELLAMMO  : 512,
 	AMMO_TYPES.EXPLOSIVEAMMO : 8,
 }
+
+func refill_ammo(percent: float = 0.5) -> void:
+	for t in ammo_dict.keys():
+		var max_val: int = max_nb_per_ammo_dict.get(t, 100)
+		var gain: int = maxi(1, int(round(max_val * percent)))
+		ammo_dict[t] = mini(max_val, ammo_dict[t] + gain)
+
+func add_ammo(amount: int = 60) -> void:
+	refill_ammo(0.5)
+
 	

@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b5yikn2y36sec"
-path="res://.godot/imported/zombie_cyborg_zombie_shirt_albedo.png-e6b1e823eb13b5e3060c96798e506773.ctex"
+path.s3tc="res://.godot/imported/zombie_cyborg_zombie_shirt_albedo.png-e6b1e823eb13b5e3060c96798e506773.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b16ad4c13d7257bc86090f90a4f8c0e0"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/zombies/zombie_cyborg_zombie_shirt_albedo.png"
-dest_files=["res://.godot/imported/zombie_cyborg_zombie_shirt_albedo.png-e6b1e823eb13b5e3060c96798e506773.ctex"]
+dest_files=["res://.godot/imported/zombie_cyborg_zombie_shirt_albedo.png-e6b1e823eb13b5e3060c96798e506773.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0
