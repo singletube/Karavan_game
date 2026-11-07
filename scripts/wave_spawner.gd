@@ -525,7 +525,8 @@ func _broadcast_enemies_batch() -> void:
 				child.rotation.y,
 				child.velocity.length(),
 				is_atk,
-				is_hurt
+				is_hurt,
+				child.get("is_winding_up") == true
 			])
 	if not batch.is_empty():
 		sync_enemies_batch.rpc(batch)
@@ -538,7 +539,7 @@ func sync_enemies_batch(batch: Array) -> void:
 		var e_name: String = item[0]
 		var e_node: Node = enemies_container.get_node_or_null(e_name)
 		if e_node and is_instance_valid(e_node) and e_node.has_method("net_sync"):
-			e_node.net_sync(item[1], item[2], item[3], item[4], item[5])
+			e_node.net_sync(item[1], item[2], item[3], item[4], item[5], item[6] if item.size() > 6 else false)
 
 func _spawn_single_enemy(z_type: String, pos: Vector3, custom_name: String = "") -> void:
 	var enemy: CharacterBody3D = ENEMY_SCENE.instantiate() as CharacterBody3D

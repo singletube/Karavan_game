@@ -67,16 +67,18 @@ var target_rot_y    : float = 0.0
 var remote_spd      : float = 0.0
 var remote_is_atk   : bool = false
 var remote_is_hurt  : bool = false
+var remote_windup   : bool = false
 
 enum EnemyState { IDLE, CHASE, ATTACK, DEAD }
 var state : EnemyState = EnemyState.IDLE
 
-func net_sync(pos: Vector3, rot_y: float, spd: float, is_atk: bool, is_hurt: bool) -> void:
+func net_sync(pos: Vector3, rot_y: float, spd: float, is_atk: bool, is_hurt: bool, windup: bool = false) -> void:
 	target_pos = pos
 	target_rot_y = rot_y
 	remote_spd = spd
 	remote_is_atk = is_atk
 	remote_is_hurt = is_hurt
+	remote_windup = windup
 
 func _ready() -> void:
 	if cyborg_model_3d:
@@ -178,7 +180,7 @@ func _physics_process(delta: float) -> void:
 			rotation.y = lerp_angle(rotation.y, target_rot_y, minf(delta * 16.0, 1.0))
 
 		if cyborg_model_3d and cyborg_model_3d.visible:
-			cyborg_model_3d.update_animation(delta, remote_spd > 0.1, remote_spd, remote_is_atk, remote_is_hurt, false)
+			cyborg_model_3d.update_animation(delta, remote_spd > 0.1, remote_spd, remote_is_atk, remote_is_hurt, false, remote_windup)
 
 		return
 
@@ -196,7 +198,7 @@ func _physics_process(delta: float) -> void:
 		var is_moving: bool = (state == EnemyState.CHASE and horizontal_speed > 0.1)
 		var is_atk: bool = (state == EnemyState.ATTACK and (is_winding_up or attack_timer > 0.0))
 		var is_hurting: bool = (hurt_timer > 0.0)
-		cyborg_model_3d.update_animation(delta, is_moving, horizontal_speed, is_atk, is_hurting, false)
+		cyborg_model_3d.update_animation(delta, is_moving, horizontal_speed, is_atk, is_hurting, false, is_winding_up)
 
 		var move_dir := velocity
 		move_dir.y = 0.0
@@ -564,7 +566,10 @@ func is_headshot_hit(hit_pos: Vector3) -> bool:
 	if hit_pos == Vector3.ZERO:
 		return false
 
-	# 1. Проверяем расстояние до кости Head скелета киборга
+	var sc_y: float = maxf(0.1, scale.y)
+	var sc_xz: float = maxf(0.1, (scale.x + scale.z) * 0.5)
+
+	# 1. Проверяем точное расстояние до кости Head скелета (радиус черепа ~18 см, исключая грудь на 34 см ниже)
 	if is_inside_tree() and cyborg_model_3d and cyborg_model_3d.visible:
 		var skel: Skeleton3D = cyborg_model_3d.find_child("GeneralSkeleton", true, false) as Skeleton3D
 		if not skel:
@@ -573,13 +578,17 @@ func is_headshot_hit(hit_pos: Vector3) -> bool:
 			var head_idx := skel.find_bone("Head")
 			if head_idx != -1:
 				var head_world_pos: Vector3 = skel.global_transform * skel.get_bone_global_pose(head_idx).origin
-				if hit_pos.distance_to(head_world_pos) <= 0.45 * maxf(0.5, scale.y):
+				var dist_to_head := hit_pos.distance_to(head_world_pos)
+				# Череп киборга компактный: радиус 0.19м и точка выше подбородка/шеи (выше 1.60м)
+				if dist_to_head <= 0.19 * sc_y and hit_pos.y >= (head_world_pos.y - 0.12 * sc_y):
 					return true
 
-	# 2. Геометрическая высота: верхняя зона модели (голова от ~1.26м)
-	var local_y: float = (hit_pos.y - global_position.y) / maxf(0.1, scale.y)
-	if local_y >= 1.26:
-		return true
+	# 2. Геометрическая высота: строго зона черепа выше шеи (от 1.58м) в пределах ширины головы (0.22м)
+	var local_y: float = (hit_pos.y - global_position.y) / sc_y
+	if local_y >= 1.58:
+		var horiz_dist := Vector2(hit_pos.x - global_position.x, hit_pos.z - global_position.z).length() / sc_xz
+		if horiz_dist <= 0.22:
+			return true
 
 	return false
 

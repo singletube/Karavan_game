@@ -24,6 +24,10 @@ var is_dead: bool = false
 var has_died: bool = false
 var death_timer: float = 0.0
 var overload_pulse_timer: float = 0.0
+# Замах — это отдельный сигнал от enemy.gd: клип Attack должен проигрываться
+# один раз за цикл атаки, а не перезапускаться на всём кулдауне.
+var _attack_windup: bool = false
+var _attack_pending: bool = false
 
 # Базовый цвет свечения для данного киборга
 var glow_color: Color = Color(1.0, 0.08, 0.02)
@@ -102,6 +106,8 @@ func _clear_model() -> void:
 	is_attacking = false
 	is_moving = false
 	overload_pulse_timer = 0.0
+	_attack_windup = false
+	_attack_pending = false
 
 func _configure_animation_loops() -> void:
 	if not anim_player:
@@ -187,9 +193,16 @@ func _get_stride_scale() -> float:
 	var s := global_transform.basis.get_scale()
 	return maxf(0.1, (absf(s.x) + absf(s.z)) * 0.5)
 
-func update_animation(_delta: float, moving: bool, move_speed: float, attacking: bool, hurt: bool, dead: bool) -> void:
+func update_animation(_delta: float, moving: bool, move_speed: float, attacking: bool, hurt: bool, dead: bool, attack_windup: bool = false) -> void:
 	if not anim_player:
 		return
+
+	# Новый замах (фронт нарастания) запускает клип Attack один раз. Флаг
+	# сохраняется, пока замах не будет реально проигран, чтобы короткий флинч
+	# (Hit) не «съедал» анимацию удара.
+	if attack_windup and not _attack_windup:
+		_attack_pending = true
+	_attack_windup = attack_windup
 
 	is_moving = moving
 	is_attacking = attacking
@@ -239,14 +252,22 @@ func update_animation(_delta: float, moving: bool, move_speed: float, attacking:
 	if is_attacking:
 		var atk_anim: String = "Roar" if current_type == "Screamer" else "Attack"
 		var atk_speed: float = 1.4 if current_type == "Runner" else (0.9 if current_type == "Brute" else 1.1)
+		if _attack_pending:
+			# Замах начался — проигрываем клип удара с начала.
+			_attack_pending = false
+			_play_anim(atk_anim, 0.1, atk_speed)
+			if anim_player.current_animation == atk_anim:
+				anim_player.seek(0.0, true)
+			return
 		if anim_player.current_animation == atk_anim:
 			if not anim_player.is_playing():
-				# Анимация удара завершилась, ждем в стойке покоя до следующего замаха
+				# Удар завершился — стоим в покое до следующего замаха.
 				_play_anim("Idle", 0.25)
 			return
-		else:
-			_play_anim(atk_anim, 0.1, atk_speed)
-			return
+		# Клип удара уже отыгран в этом цикле, ждём следующего замаха.
+		if anim_player.current_animation != "Idle":
+			_play_anim("Idle", 0.25)
+		return
 
 	# 4. Движение: клип и скорость подбираются под фактическую скорость и
 	# естественную длину шага анимации. Так ноги не «плывут» по земле.

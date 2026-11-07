@@ -298,34 +298,5 @@ func _die(hit_direction: Vector3 = Vector3.ZERO) -> void:
 		p.emitting = true
 		get_tree().create_timer(1.2).timeout.connect(p.queue_free)
 
-	# 3. Выпадающий лут на землю под дроном (1-2 ящика патронов)
-	_drop_loot_on_ground()
-
+	# Дрон взрывается и уничтожается (без выпадения лута)
 	queue_free()
-
-func _drop_loot_on_ground() -> void:
-	if not is_inside_tree() or not get_tree() or not get_tree().current_scene:
-		return
-	var drop_pos := global_position
-	drop_pos.y = maxf(0.35, drop_pos.y)
-
-	# Проверяем высоту земли под дроном
-	var space_state := get_world_3d().direct_space_state
-	var ray_query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 1.0, global_position + Vector3.DOWN * 30.0, 1) # Слой земли (1)
-	var ray_res := space_state.intersect_ray(ray_query)
-	if not ray_res.is_empty() and ray_res.has("position"):
-		drop_pos = ray_res.position + Vector3.UP * 0.15
-	else:
-		drop_pos.y = 0.35
-
-	# Спавним ценный боезапас в награду за меткость
-	var ammo_loot = DungeonLoot3D.create_ammo_pickup(drop_pos)
-	if ammo_loot:
-		get_tree().current_scene.add_child(ammo_loot)
-
-	# С шансом 35% дополнительно падает аптечка
-	if randf() < 0.35:
-		var med_pos := drop_pos + Vector3(randf_range(-1.2, 1.2), 0.0, randf_range(-1.2, 1.2))
-		var med_loot = DungeonLoot3D.create_medkit_pickup(med_pos)
-		if med_loot:
-			get_tree().current_scene.add_child(med_loot)

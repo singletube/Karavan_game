@@ -3,3 +3,10 @@
 /android/
 __MACOSX/
 *.tmp
+
+# Python & tools
+__pycache__/
+*.pyc
+tools/_viewer/
+models/zombies/_orig_check*
+models/zombies/zombie_cyborg_template_v6*
