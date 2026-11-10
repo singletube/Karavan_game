@@ -294,6 +294,16 @@ func set_flashlight(is_on: bool) -> void:
 func set_first_person_mode(enabled: bool) -> void:
 	is_first_person = enabled
 	if char_instance:
-		char_instance.visible = !enabled
+		char_instance.visible = true
+		_update_shadow_modes(char_instance, enabled)
 	if chest_light:
 		chest_light.visible = false if enabled else chest_light.visible
+
+func _update_shadow_modes(node: Node, shadow_only: bool) -> void:
+	if node is GeometryInstance3D:
+		(node as GeometryInstance3D).cast_shadow = (
+			GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY if shadow_only
+			else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		)
+	for child in node.get_children():
+		_update_shadow_modes(child, shadow_only)

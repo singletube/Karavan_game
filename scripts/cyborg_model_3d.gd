@@ -28,6 +28,10 @@ var overload_pulse_timer: float = 0.0
 # один раз за цикл атаки, а не перезапускаться на всём кулдауне.
 var _attack_windup: bool = false
 var _attack_pending: bool = false
+# Одноразовый клип (Hit/Attack/Roar) блокирует смену анимаций до полного окончания
+# (сигнал animation_finished), чтобы зомби не «каротили и не дёргались».
+var _active_locked_anim: String = ""
+var _hit_pending: bool = false
 
 # Базовый цвет свечения для данного киборга
 var glow_color: Color = Color(1.0, 0.08, 0.02)
@@ -35,8 +39,13 @@ var glow_color: Color = Color(1.0, 0.08, 0.02)
 # Естественная скорость движения, заложенная в анимациях (м/с при масштабе 1.0).
 # Walk/Run в шаблоне развёрнуты во времени и отсинхронизированы по длине шага,
 # поэтому скорость воспроизведения подбирается под реальную скорость врага.
-const WALK_NATURAL_SPEED := 3.0
-const RUN_NATURAL_SPEED := 7.8
+# Значения пересчитаны под текущий шаг: амплитуда замаха бедра ограничена, из-за
+# чего шаг стал короче (Walk ~0.70, Run ~0.75 от исходного).
+const WALK_NATURAL_SPEED := 2.1
+const RUN_NATURAL_SPEED := 5.9
+# Реакция на попадание (Hit) проигрывается целиком, но быстро: 0.9 с клипа
+# укладываются примерно в окно стана 0.22–0.32 с.
+const HIT_ANIM_SPEED := 2.0
 
 func _ready() -> void:
 	pass
@@ -108,6 +117,8 @@ func _clear_model() -> void:
 	overload_pulse_timer = 0.0
 	_attack_windup = false
 	_attack_pending = false
+	_active_locked_anim = ""
+	_hit_pending = false
 
 func _configure_animation_loops() -> void:
 	if not anim_player:
@@ -188,6 +199,10 @@ func _play_anim(p_name: String, blend: float = 0.1, custom_speed: float = 1.0) -
 	# фактической скорости (обход препятствий, замедление, рывок).
 	anim_player.speed_scale = custom_speed
 
+## Вызывается из enemy.gd при каждом новом попадании.
+func play_hit_reaction() -> void:
+	_hit_pending = true
+
 ## Масштаб длины шага с учётом мирового масштаба модели (включая масштаб Enemy).
 func _get_stride_scale() -> float:
 	var s := global_transform.basis.get_scale()
@@ -198,8 +213,7 @@ func update_animation(_delta: float, moving: bool, move_speed: float, attacking:
 		return
 
 	# Новый замах (фронт нарастания) запускает клип Attack один раз. Флаг
-	# сохраняется, пока замах не будет реально проигран, чтобы короткий флинч
-	# (Hit) не «съедал» анимацию удара.
+	# сохраняется, пока замах не будет реально проигран.
 	if attack_windup and not _attack_windup:
 		_attack_pending = true
 	_attack_windup = attack_windup
@@ -211,6 +225,7 @@ func update_animation(_delta: float, moving: bool, move_speed: float, attacking:
 
 	# 1. Смерть: фиксирует труп без дерганий и гасит сенсоры
 	if is_dead:
+		_active_locked_anim = ""
 		var death_anim = "Death"
 		if not has_died:
 			has_died = true
@@ -243,34 +258,46 @@ func update_animation(_delta: float, moving: bool, move_speed: float, attacking:
 			if is_instance_valid(l):
 				l.light_energy = maxf(0.5, pulse)
 
-	# 2. Получение урона (Hit)
-	if is_hurt:
-		_play_anim("Hit", 0.08, 1.4)
+	# 1.5. Одноразовый клип (Hit/Attack/Roar) ОБЯЗАН доиграть до конца!
+	# Никакие внешние смены состояний (бег/стойка) не могут прерывать его посередине.
+	if _active_locked_anim != "":
+		if anim_player.is_playing() and anim_player.current_animation == _active_locked_anim:
+			if _active_locked_anim == "Hit":
+				_hit_pending = false
+			return
+		else:
+			# Анимация завершилась естественным образом
+			_active_locked_anim = ""
+
+	# 2. Получение урона (Hit): запускается только если не заблокирован текущим клипом
+	if is_hurt and _hit_pending and _active_locked_anim == "":
+		_hit_pending = false
+		_active_locked_anim = "Hit"
+		_play_anim("Hit", 0.08, HIT_ANIM_SPEED)
+		if anim_player.current_animation == "Hit":
+			anim_player.seek(0.0, true)
 		return
+	_hit_pending = false
 
 	# 3. Атака (Attack / Roar)
-	if is_attacking:
+	if is_attacking or _attack_pending:
 		var atk_anim: String = "Roar" if current_type == "Screamer" else "Attack"
-		var atk_speed: float = 1.4 if current_type == "Runner" else (0.9 if current_type == "Brute" else 1.1)
-		if _attack_pending:
-			# Замах начался — проигрываем клип удара с начала.
-			_attack_pending = false
-			_play_anim(atk_anim, 0.1, atk_speed)
-			if anim_player.current_animation == atk_anim:
-				anim_player.seek(0.0, true)
-			return
+		var atk_speed: float = 1.1
+		if current_type == "Runner":
+			atk_speed = 1.8
+		elif current_type == "Brute":
+			atk_speed = 1.35
+		elif current_type != "Screamer":
+			atk_speed = 1.6
+
+		_attack_pending = false
+		_active_locked_anim = atk_anim
+		_play_anim(atk_anim, 0.1, atk_speed)
 		if anim_player.current_animation == atk_anim:
-			if not anim_player.is_playing():
-				# Удар завершился — стоим в покое до следующего замаха.
-				_play_anim("Idle", 0.25)
-			return
-		# Клип удара уже отыгран в этом цикле, ждём следующего замаха.
-		if anim_player.current_animation != "Idle":
-			_play_anim("Idle", 0.25)
+			anim_player.seek(0.0, true)
 		return
 
-	# 4. Движение: клип и скорость подбираются под фактическую скорость и
-	# естественную длину шага анимации. Так ноги не «плывут» по земле.
+	# 4. Движение: плавно и без дерганий
 	if is_moving:
 		var clip_name: String = "Walk"
 		var natural_speed: float = WALK_NATURAL_SPEED
@@ -282,11 +309,11 @@ func update_animation(_delta: float, moving: bool, move_speed: float, attacking:
 		var playback_speed: float = clampf(
 			move_speed / maxf(effective_natural_speed, 0.1), 0.35, 2.0
 		)
-		_play_anim(clip_name, 0.18, playback_speed)
+		_play_anim(clip_name, 0.20, playback_speed)
 		return
 
 	# 5. Покой (Idle)
-	if anim_player.current_animation != "Idle":
+	if anim_player.current_animation != "Idle" or not anim_player.is_playing():
 		_play_anim("Idle", 0.25)
 
 func _on_anim_finished(anim_name: StringName) -> void:
@@ -295,3 +322,28 @@ func _on_anim_finished(anim_name: StringName) -> void:
 			anim_player.pause()
 			if anim_player.has_animation(anim_name):
 				anim_player.seek(anim_player.get_animation(anim_name).length, true)
+		return
+
+	if anim_name == _active_locked_anim:
+		_active_locked_anim = ""
+		if _attack_pending:
+			_attack_pending = false
+			var atk_anim: String = "Roar" if current_type == "Screamer" else "Attack"
+			var atk_speed: float = 1.1
+			if current_type == "Runner":
+				atk_speed = 1.8
+			elif current_type == "Brute":
+				atk_speed = 1.35
+			elif current_type != "Screamer":
+				atk_speed = 1.6
+			_active_locked_anim = atk_anim
+			_play_anim(atk_anim, 0.1, atk_speed)
+			if anim_player.current_animation == atk_anim:
+				anim_player.seek(0.0, true)
+			return
+
+		if is_moving:
+			var clip: String = "Run" if current_type == "Runner" else "Walk"
+			_play_anim(clip, 0.2, 1.0)
+		else:
+			_play_anim("Idle", 0.25, 1.0)

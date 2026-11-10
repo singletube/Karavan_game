@@ -158,3 +158,23 @@ add_child(cyborg)
    - Добавьте модификатор **Armature** и укажите `Object: ZombieRig`.
    - Создайте на меше группу вершин (**Vertex Group**) с именем кости, к которой крепится деталь (например, `Head`, `Jaw`, `Chest`, `Forearm.L`, `Hand.R`, `Shin.L`), выделите все вершины в Edit Mode и нажмите **Assign** с весом `1.0`.
    - Экспортируйте `File -> Export -> glTF 2.0 (.glb)` — новый слот сразу станет доступен в `ZombieCyborgCustomizer`.
+
+---
+
+## 5. Анимации шаблона и лицензии
+
+Клипы `Idle`, `Walk`, `Run`, `Attack`, `Hit`, `Death`, `Roar` внутри `zombie_cyborg_template.glb` получены ретаргетингом анимаций сторонней модели на скелет `ZombieRig` скриптом [`tools/retarget_zombie_anim.py`](file:///c:/Users/user/Documents/идет-караван-из-ирана/tools/retarget_zombie_anim.py). Скрипт не копирует локальные повороты, а совмещает направления костей в мировом пространстве, поэтому позы не зависят от rest pose, роллов костей и длины конечностей источника.
+
+Исходные анимации — модель **«Zombie De Goma»**, лицензия **CC-BY-4.0** (обязательно указание автора):
+
+> This work is based on "Zombie De Goma" (https://sketchfab.com/3d-models/zombie-de-goma-d0da88595c6b47129170937d1e442733) by julianmurcia245 (https://sketchfab.com/julianmurcia245) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+
+Эту строку нужно оставлять в титрах и описании сборки, пока в проекте используются эти клипы.
+
+Пересборка клипов (нужны распакованные `scene.gltf` + `scene.bin` исходника):
+
+```powershell
+python tools/retarget_zombie_anim.py "C:\путь\к\zombie_de_goma\scene.gltf" models/zombies/zombie_cyborg_template.glb models/zombies/zombie_cyborg_retarget.glb
+Copy-Item -Force models/zombies/zombie_cyborg_retarget.glb models/zombies/zombie_cyborg_template.glb
+```
+

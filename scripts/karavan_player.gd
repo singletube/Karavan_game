@@ -28,6 +28,7 @@ var flashlight_enabled: bool = false
 
 var third_person_model: PlayerModel3D = null
 var target_is_crouching: bool = false
+var is_third_person: bool = false
 
 var _kick_cooldown: float = 0.0
 const KICK_COOLDOWN_TIME: float = 0.55
@@ -261,6 +262,20 @@ func open_camp_dialogue(npc_type: int, npc_name: String) -> void:
 	if hud_node and hud_node.has_method("open_camp_dialogue_ui"):
 		hud_node.open_camp_dialogue_ui(npc_type, npc_name, self)
 
+func toggle_third_person() -> void:
+	is_third_person = not is_third_person
+	if cam:
+		cam.position = Vector3(0.0, 0.45, 2.5) if is_third_person else Vector3.ZERO
+	if third_person_model:
+		third_person_model.set_first_person_mode(not is_third_person)
+		var manager := get_node_or_null("WeaponManager") as WeaponManager
+		if manager and manager.current_weapon and manager.current_weapon.resources:
+			third_person_model.set_weapon(manager.current_weapon.resources.weapon_name)
+	var sub_vp := get_node_or_null("SubViewportContainer") as Control
+	if sub_vp:
+		sub_vp.visible = not is_third_person
+	notify_hud("Вид от 3-го лица (F5)" if is_third_person else "Вид от 1-го лица (F5)", Color(0.35, 0.9, 1.0))
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_local() or is_dead:
 		return
@@ -288,6 +303,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	}
 	if event.keycode == KEY_F:
 		toggle_flashlight()
+		get_viewport().set_input_as_handled()
+		return
+
+	if event.keycode == KEY_F5:
+		toggle_third_person()
 		get_viewport().set_input_as_handled()
 		return
 
@@ -341,12 +361,16 @@ func play_legacy_muzzle_flash(muzzle_transform: Transform3D) -> void:
 			_legacy_muzzle_flash.hide()
 	)
 
+	var active_w_name: String = "Pistol"
+	var manager := get_node_or_null("WeaponManager") as WeaponManager
+	if manager and manager.current_weapon and manager.current_weapon.resources:
+		active_w_name = manager.current_weapon.resources.weapon_name
+
 	if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
-		var w_name: String = "Pistol"
-		var manager := get_node_or_null("WeaponManager") as WeaponManager
-		if manager and manager.current_weapon and manager.current_weapon.resources:
-			w_name = manager.current_weapon.resources.weapon_name
-		rpc("sync_remote_shoot", w_name)
+		rpc("sync_remote_shoot", active_w_name)
+
+	if is_third_person and third_person_model:
+		third_person_model.play_shoot_effect(active_w_name)
 
 @rpc("any_peer", "call_remote")
 func sync_remote_shoot(w_name: String) -> void:
@@ -434,6 +458,8 @@ func _publish_weapon_status(force: bool) -> void:
 		weapon_changed.emit(resource.weapon_name, null, magazine, reserve)
 		if multiplayer.multiplayer_peer != null and multiplayer.get_peers().size() > 0:
 			rpc("sync_weapon_change", resource.weapon_name)
+		if is_third_person and third_person_model:
+			third_person_model.set_weapon(resource.weapon_name)
 	if force or magazine != _last_magazine or reserve != _last_reserve:
 		_last_magazine = magazine
 		_last_reserve = reserve

@@ -195,8 +195,8 @@ func _physics_process(delta: float) -> void:
 	# Поворот 3D модели по направлению движения / цели
 	if cyborg_model_3d and cyborg_model_3d.visible:
 		var horizontal_speed: float = Vector2(velocity.x, velocity.z).length()
-		var is_moving: bool = (state == EnemyState.CHASE and horizontal_speed > 0.1)
-		var is_atk: bool = (state == EnemyState.ATTACK and (is_winding_up or attack_timer > 0.0))
+		var is_moving: bool = (horizontal_speed > 0.15)
+		var is_atk: bool = (state == EnemyState.ATTACK and is_winding_up)
 		var is_hurting: bool = (hurt_timer > 0.0)
 		cyborg_model_3d.update_animation(delta, is_moving, horizontal_speed, is_atk, is_hurting, false, is_winding_up)
 
@@ -287,15 +287,21 @@ func _update_target_and_state() -> void:
 		return
 
 	var is_caravan: bool = player.is_in_group("caravan")
-	var reach_threshold: float = attack_reach + (2.2 if is_caravan else 0.0)
-	if min_dist <= reach_threshold:
-		state = EnemyState.ATTACK
-	elif min_dist <= CHASE_RANGE:
-		state = EnemyState.CHASE
-		is_winding_up = false
+	var reach_threshold: float = attack_reach + (3.0 if is_caravan else 0.4)
+	if state == EnemyState.ATTACK:
+		# Гистерезис: не выходим из атаки при малейшем удалении (особенно если уже идет замах)
+		var exit_threshold: float = reach_threshold + (2.2 if is_caravan else 0.9)
+		if min_dist > exit_threshold and not is_winding_up:
+			state = EnemyState.CHASE
 	else:
-		state = EnemyState.IDLE
-		is_winding_up = false
+		if min_dist <= reach_threshold:
+			state = EnemyState.ATTACK
+		elif min_dist <= CHASE_RANGE:
+			state = EnemyState.CHASE
+			is_winding_up = false
+		else:
+			state = EnemyState.IDLE
+			is_winding_up = false
 
 func _get_attack_cooldown(is_caravan: bool) -> float:
 	if is_caravan:
@@ -321,8 +327,8 @@ func _process_movement_and_animation(delta: float) -> void:
 	if hurt_timer > 0.0:
 		hurt_timer -= delta
 		sprite.frame = FRAME_HURT
-		velocity.x = move_toward(velocity.x, 0.0, move_speed * 3.0 * delta)
-		velocity.z = move_toward(velocity.z, 0.0, move_speed * 3.0 * delta)
+		velocity.x = move_toward(velocity.x, 0.0, maxf(move_speed * 8.0, 16.0) * delta)
+		velocity.z = move_toward(velocity.z, 0.0, maxf(move_speed * 8.0, 16.0) * delta)
 		return
 
 	match state:
@@ -369,10 +375,22 @@ func _process_movement_and_animation(delta: float) -> void:
 				sprite.frame = FRAMES_WALK[walk_frame_i]
 
 		EnemyState.ATTACK:
-			velocity.x = move_toward(velocity.x, 0.0, move_speed * 6.0 * delta)
-			velocity.z = move_toward(velocity.z, 0.0, move_speed * 6.0 * delta)
-
 			var is_caravan: bool = (player != null and is_instance_valid(player) and player.is_in_group("caravan"))
+			if is_caravan and player:
+				# При атаке каравана зомби держится рядом с повозкой и не отстает
+				var to_caravan: Vector3 = (player.global_position - global_position)
+				to_caravan.y = 0.0
+				var c_spd: float = float(player.get("move_speed")) if player.get("move_speed") != null else 2.25
+				if player.get("is_boosted") == true:
+					c_spd *= 2.0
+				var pursue_spd: float = maxf(move_speed * 0.95, c_spd + 0.6)
+				if to_caravan.length_squared() > 0.05:
+					var pursuit_dir: Vector3 = to_caravan.normalized()
+					velocity.x = pursuit_dir.x * pursue_spd
+					velocity.z = pursuit_dir.z * pursue_spd
+			else:
+				velocity.x = move_toward(velocity.x, 0.0, move_speed * 6.0 * delta)
+				velocity.z = move_toward(velocity.z, 0.0, move_speed * 6.0 * delta)
 
 			if attack_timer <= 0.0:
 				if not is_winding_up:
@@ -485,7 +503,7 @@ func _attack_melee() -> void:
 		hit_sound.stream = snd_bite
 		hit_sound.play()
 	if player and is_instance_valid(player) and player.has_method("take_damage"):
-		var reach_bonus: float = 2.4 if player.is_in_group("caravan") else 0.6
+		var reach_bonus: float = 3.6 if player.is_in_group("caravan") else 0.8
 		var dist: float = global_position.distance_to(player.global_position)
 		if dist <= attack_reach + reach_bonus:
 			player.take_damage(attack_dmg)
@@ -496,7 +514,7 @@ func _attack_spitter() -> void:
 		hit_sound.stream = snd_acid
 		hit_sound.play()
 	if player and is_instance_valid(player) and player.has_method("take_damage"):
-		var reach_bonus: float = 3.5 if player.is_in_group("caravan") else 2.0
+		var reach_bonus: float = 4.2 if player.is_in_group("caravan") else 2.2
 		var dist: float = global_position.distance_to(player.global_position)
 		if dist <= attack_reach + reach_bonus:
 			player.take_damage(attack_dmg)
@@ -510,7 +528,7 @@ func _attack_screamer() -> void:
 	for p: Node in players:
 		if p is Node3D and is_instance_valid(p) and not (p.get("is_dead") == true):
 			var dist: float = global_position.distance_to((p as Node3D).global_position)
-			if dist <= attack_reach:
+			if dist <= attack_reach + 0.5:
 				if p.has_method("take_damage"):
 					p.take_damage(attack_dmg)
 
@@ -518,6 +536,9 @@ func _attack_screamer() -> void:
 	for c: Node in caravans:
 		if c is Node3D and is_instance_valid(c) and not (c.get("is_destroyed") == true):
 			var dist: float = global_position.distance_to((c as Node3D).global_position)
+			if dist <= attack_reach + 3.2:
+				if c.has_method("take_damage"):
+					c.take_damage(attack_dmg)
 			if dist <= attack_reach + 2.0:
 				if c.has_method("take_damage"):
 					c.take_damage(attack_dmg)
@@ -627,7 +648,7 @@ func request_take_damage(amount: int, hit_direction: Vector3, hit_position: Vect
 func sync_die(hit_direction: Vector3) -> void:
 	if not is_dead:
 		if hit_direction.length_squared() > 0.01:
-			velocity += hit_direction.normalized() * 5.5
+			velocity += hit_direction.normalized() * 0.7
 		_die()
 
 @rpc("authority", "unreliable")
@@ -636,21 +657,33 @@ func sync_hurt(hit_direction: Vector3, hit_position: Vector3, is_headshot: bool 
 		_play_hit_flinch(hit_direction, hit_position, is_headshot)
 
 func _play_hit_flinch(hit_direction: Vector3, hit_position: Vector3, is_headshot: bool = false) -> void:
-	hurt_timer = 0.32 if is_headshot else 0.22
+	hurt_timer = 0.25 if is_headshot else 0.16
+	if cyborg_model_3d and cyborg_model_3d.visible and cyborg_model_3d.has_method("play_hit_reaction"):
+		cyborg_model_3d.play_hit_reaction()
 	if sprite:
 		sprite.frame = FRAME_HURT
 		var hit_tween: Tween = create_tween().set_parallel(true)
 		var flash_color := Color(3.5, 1.8, 0.4, 1.0) if is_headshot else Color(2.5, 0.4, 0.3, 1.0)
 		sprite.modulate = flash_color
-		hit_tween.tween_property(sprite, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.22)
-		var punch_scale := Vector3(1.35, 0.75, 1.35) if is_headshot else Vector3(1.22, 0.82, 1.22)
+		hit_tween.tween_property(sprite, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.16)
+		var punch_scale := Vector3(1.15, 0.90, 1.15) if is_headshot else Vector3(1.08, 0.94, 1.08)
 		sprite.scale = punch_scale
-		hit_tween.tween_property(sprite, "scale", Vector3(1.0, 1.0, 1.0), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		hit_tween.tween_property(sprite, "scale", Vector3(1.0, 1.0, 1.0), 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
-	# Кинетический отброс (Knockback) назад
-	var knock_force: float = 8.5 if is_headshot else 5.5
+	# Кинетический отброс (Knockback) назад: еле-еле заметное вздрагивание (микро-стан 5–10 см)
+	var knock_force: float = 0.35 if is_headshot else 0.20
+	match zombie_type:
+		"Brute":
+			knock_force *= 0.3
+		"Crawler":
+			knock_force *= 1.2
+		"Runner":
+			knock_force *= 0.7
 	if hit_direction.length_squared() > 0.01:
-		velocity += hit_direction.normalized() * knock_force
+		var kb_dir: Vector3 = hit_direction.normalized()
+		kb_dir.y = 0.0
+		if kb_dir.length_squared() > 0.001:
+			velocity += kb_dir.normalized() * knock_force
 	elif player:
 		var away: Vector3 = (global_position - player.global_position).normalized()
 		away.y = 0.0

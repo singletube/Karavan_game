@@ -8,15 +8,20 @@ extends Control
 @onready var panel             : Control  = $Panel
 
 func _ready() -> void:
-	# Меню открыто на старте, мышь видна
-	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	panel.show()
-
 	host_button.pressed.connect(_on_host_pressed)
 	join_button.pressed.connect(_on_join_pressed)
 	single_button.pressed.connect(_on_single_pressed)
 
 	NetworkManager.connection_status_changed.connect(_on_status_changed)
+
+	# Автоматически запускаем одиночную игру на старте, чтобы герой всегда был в мире
+	if not multiplayer.has_multiplayer_peer():
+		NetworkManager.start_singleplayer()
+		panel.hide()
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	else:
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		panel.show()
 
 func _on_status_changed(text: String) -> void:
 	status_label.text = text
@@ -41,6 +46,9 @@ func _on_join_pressed() -> void:
 func _close_menu() -> void:
 	panel.hide()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	var players := get_tree().get_nodes_in_group("player")
+	if players.is_empty():
+		NetworkManager.start_singleplayer()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:

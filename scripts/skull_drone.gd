@@ -244,7 +244,7 @@ func take_damage(amount: int, hit_direction: Vector3 = Vector3.ZERO, hit_positio
 		hit_audio.play()
 
 	if hit_direction.length_squared() > 0.01:
-		velocity += hit_direction.normalized() * 3.5
+		velocity += hit_direction.normalized() * 0.45
 
 	if health <= 0:
 		_die(hit_direction)
