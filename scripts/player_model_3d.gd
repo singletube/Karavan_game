@@ -16,6 +16,7 @@ const MODEL_SMG      = preload("res://models/weapons/SMG.glb")
 
 # Экземпляр персонажа и скелетной анимации
 var char_instance  : Node3D = null
+var skeleton       : Skeleton3D = null
 var anim_player    : AnimationPlayer = null
 var weapon_holder  : Node3D = null
 var active_gun     : Node3D = null
@@ -109,7 +110,8 @@ func _build_model() -> void:
 	if sword and sword is VisualInstance3D:
 		(sword as VisualInstance3D).visible = false
 
-	# Находим контроллер скелетных анимаций
+	# Находим контроллер скелетных анимаций и скелет
+	skeleton = char_instance.find_child("Skeleton3D", true, false) as Skeleton3D
 	anim_player = char_instance.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	if anim_player:
 		anim_player.playback_default_blend_time = 0.15
@@ -169,6 +171,10 @@ func _play_anim(anim_name: String, speed: float = 1.0) -> void:
 		anim_player.speed_scale = speed
 
 func update_animation(delta: float, moving: bool, velocity_length: float, _is_crouching: bool = false) -> void:
+	# Удерживаем скрытие головы/рук в 1-м лице при воспроизведении анимаций
+	if is_first_person:
+		_apply_first_person_bone_hiding()
+
 	# 1. Анимация пинка ногой имеет наивысший приоритет
 	if is_kicking:
 		kick_timer -= delta
@@ -295,15 +301,28 @@ func set_first_person_mode(enabled: bool) -> void:
 	is_first_person = enabled
 	if char_instance:
 		char_instance.visible = true
-		_update_shadow_modes(char_instance, enabled)
+		_ensure_mesh_visible(char_instance)
+	_apply_first_person_bone_hiding()
 	if chest_light:
 		chest_light.visible = false if enabled else chest_light.visible
 
-func _update_shadow_modes(node: Node, shadow_only: bool) -> void:
+func _ensure_mesh_visible(node: Node) -> void:
 	if node is GeometryInstance3D:
-		(node as GeometryInstance3D).cast_shadow = (
-			GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY if shadow_only
-			else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		)
+		(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		(node as VisualInstance3D).visible = true
 	for child in node.get_children():
-		_update_shadow_modes(child, shadow_only)
+		if child.name == "Sword":
+			continue
+		_ensure_mesh_visible(child)
+
+func _apply_first_person_bone_hiding() -> void:
+	if not skeleton:
+		return
+	var scale_val: Vector3 = Vector3(0.001, 0.001, 0.001) if is_first_person else Vector3.ONE
+	var bones := ["Head", "Neck", "UpperArm.L", "UpperArm.R", "LowerArm.L", "LowerArm.R", "Hand.L", "Hand.R"]
+	for b_name in bones:
+		var idx: int = skeleton.find_bone(b_name)
+		if idx != -1:
+			skeleton.set_bone_pose_scale(idx, scale_val)
+	if active_gun:
+		active_gun.visible = not is_first_person

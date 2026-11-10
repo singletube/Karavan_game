@@ -24,6 +24,7 @@ var attack_reach    : float = 2.2
 var avoidance_dir          : Vector3 = Vector3.ZERO
 var avoidance_timer        : float   = 0.0
 var stuck_detect_timer     : float   = 0.0
+var stuck_accum_time       : float   = 0.0
 var last_check_pos         : Vector3 = Vector3.ZERO
 var preferred_detour_sign  : float   = 1.0
 
@@ -239,14 +240,15 @@ func _physics_process(delta: float) -> void:
 				avoidance_timer = 0.75
 				break
 
-	# Детекция застревания на месте: если зомби в погоне, но за 0.4с сдвинулся меньше 15см
-	if state == EnemyState.CHASE:
+	# Детекция застревания на месте: если зомби в погоне, но за 0.4с сдвинулся меньше 18см
+	if state == EnemyState.CHASE and not is_dead:
 		stuck_detect_timer += delta
 		if stuck_detect_timer >= 0.4:
 			stuck_detect_timer = 0.0
 			var dist_moved := global_position.distance_to(last_check_pos)
 			last_check_pos = global_position
-			if dist_moved < 0.15:
+			if dist_moved < 0.18:
+				stuck_accum_time += 0.4
 				preferred_detour_sign = -preferred_detour_sign
 				if player:
 					var direct := (player.global_position - global_position)
@@ -254,6 +256,13 @@ func _physics_process(delta: float) -> void:
 					if direct.length_squared() > 0.01:
 						avoidance_dir = direct.normalized().rotated(Vector3.UP, deg_to_rad(75.0 * preferred_detour_sign))
 				avoidance_timer = 0.95
+
+				# Если зомби застрял суммарно на 2.4с — респавнимся вдалеке и идем к игроку
+				if stuck_accum_time >= 2.4:
+					stuck_accum_time = 0.0
+					respawn_in_distance()
+			else:
+				stuck_accum_time = maxf(0.0, stuck_accum_time - 0.4)
 
 func _apply_gravity(delta: float) -> void:
 	if not is_on_floor():
@@ -655,6 +664,62 @@ func sync_die(hit_direction: Vector3) -> void:
 func sync_hurt(hit_direction: Vector3, hit_position: Vector3, is_headshot: bool = false) -> void:
 	if not is_dead:
 		_play_hit_flinch(hit_direction, hit_position, is_headshot)
+
+## Респавн вдалеке при застревании или отставании: переносит зомби на 32–48м от цели и отправляет в атаку
+func respawn_in_distance() -> void:
+	if is_dead:
+		return
+	if is_inside_tree() and multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+		return
+
+	var target_node: Node3D = player
+	if not target_node or not is_instance_valid(target_node):
+		var players := get_tree().get_nodes_in_group("player")
+		for p in players:
+			if p is Node3D and is_instance_valid(p) and not (p.get("is_dead") == true):
+				target_node = p as Node3D
+				break
+	if not target_node or not is_instance_valid(target_node):
+		var caravans := get_tree().get_nodes_in_group("caravan")
+		if not caravans.is_empty() and is_instance_valid(caravans[0]):
+			target_node = caravans[0] as Node3D
+
+	if not target_node or not is_instance_valid(target_node):
+		return
+
+	var t_pos: Vector3 = target_node.global_position
+	var spawn_dist: float = randf_range(32.0, 48.0)
+	var angle: float = randf() * TAU
+
+	var caravan := get_tree().get_first_node_in_group("caravan") as Node3D
+	if caravan and is_instance_valid(caravan):
+		# Сектор спереди каравана по пути (-Z)
+		angle = randf_range(-PI * 0.85, -PI * 0.15) if randf() < 0.65 else randf() * TAU
+
+	var rx: float = t_pos.x + cos(angle) * spawn_dist
+	var rz: float = t_pos.z + sin(angle) * spawn_dist
+	var ry: float = DesertGenerator.get_height(rx, rz) + 0.8
+	var new_pos := Vector3(rx, ry, rz)
+
+	_teleport_respawn(new_pos)
+	if is_inside_tree() and multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		rpc("sync_teleport_respawn", new_pos)
+
+func _teleport_respawn(new_pos: Vector3) -> void:
+	global_position = new_pos
+	velocity = Vector3.ZERO
+	stuck_accum_time = 0.0
+	stuck_detect_timer = 0.0
+	avoidance_timer = 0.0
+	last_check_pos = new_pos
+	state = EnemyState.CHASE
+	is_winding_up = false
+	if cyborg_model_3d and cyborg_model_3d.visible:
+		cyborg_model_3d.update_animation(0.0, true, move_speed, false, false, false)
+
+@rpc("authority", "reliable")
+func sync_teleport_respawn(new_pos: Vector3) -> void:
+	_teleport_respawn(new_pos)
 
 func _play_hit_flinch(hit_direction: Vector3, hit_position: Vector3, is_headshot: bool = false) -> void:
 	hurt_timer = 0.25 if is_headshot else 0.16

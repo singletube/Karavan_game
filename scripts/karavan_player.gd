@@ -102,7 +102,7 @@ func _ready() -> void:
 func _build_third_person_model() -> void:
 	third_person_model = PlayerModel3D.new()
 	third_person_model.name = "ThirdPersonModel"
-	third_person_model.position = Vector3(0.0, -1.0, 0.0)
+	third_person_model.position = Vector3(0.0, -1.0, 0.04)
 	add_child(third_person_model)
 
 	var default_model: Node = get_node_or_null("Model")
@@ -148,7 +148,7 @@ func _physics_process(delta: float) -> void:
 		fwd.y = 0.0
 		if fwd.length_squared() > 0.001:
 			fwd = fwd.normalized()
-			var look_yaw: float = atan2(fwd.x, fwd.z)
+			var look_yaw: float = atan2(-fwd.x, -fwd.z)
 			third_person_model.global_rotation.y = lerp_angle(third_person_model.global_rotation.y, look_yaw, minf(delta * 24.0, 1.0))
 
 		var h_vel := Vector2(velocity.x, velocity.z)
@@ -159,7 +159,7 @@ func _physics_process(delta: float) -> void:
 		var fwd := -cam.global_transform.basis.z if cam else -global_transform.basis.z
 		fwd.y = 0.0
 		fwd = fwd.normalized()
-		var look_yaw: float = atan2(fwd.x, fwd.z)
+		var look_yaw: float = atan2(-fwd.x, -fwd.z)
 		rpc("sync_state", global_position, look_yaw, velocity.length(), is_crouching)
 
 func _process_player_footsteps(delta: float) -> void:

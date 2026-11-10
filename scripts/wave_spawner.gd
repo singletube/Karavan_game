@@ -298,8 +298,11 @@ func _cleanup_stragglers(caravan: Node3D) -> void:
 							near_player = true
 							break
 				if not near_player:
-					child.queue_free()
-					enemies_alive = maxi(0, enemies_alive - 1)
+					if child.has_method("respawn_in_distance") and not child.get("is_dead"):
+						child.respawn_in_distance()
+					else:
+						child.queue_free()
+						enemies_alive = maxi(0, enemies_alive - 1)
 
 # Одиночный разведчик на барханах (Scout) - появляется далеко в поле видимости
 func _spawn_scout_ambush() -> void:
